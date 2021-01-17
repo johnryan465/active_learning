@@ -1,10 +1,17 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import List
 import torch
 from torch.utils.data import sampler
-
+import numpy as np
 Indexes = List[int]
 
+class DatasetName(str,Enum):
+    cifar10='cifar10'
+    mnist='mnist'
+
+
+# Datasets which we want to be able to work with should implment this interface
 
 class ActiveLearningDataset(ABC):
     @abstractmethod
@@ -27,27 +34,27 @@ class ActiveLearningDataset(ABC):
     def get_classes(self):
         pass
 
+    @abstractmethod
+    def get_name(self) -> DatasetName:
+        pass
+
+
+
+
+# This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
 class DatasetWrapper(ABC):
-    def __init__(self, train_dataset, test_dataset, batch_size: int) -> None:
+    def __init__(self, train_dataset: torch.utils.data.Dataset, test_dataset: torch.utils.data.Dataset, batch_size: int) -> None:
         super().__init__()
         self.bs = batch_size
-
-        self.trainset = torch.utils.data.Subset(
-            train_dataset, list(range(0, 40000)))
-        # self.trainset = train_dataset
-
-        self.testset = torch.utils.data.Subset(
-            test_dataset, list(range(0, 10000)))
-        # self.testset = test_dataset
+        self.trainset = train_dataset
+        self.testset = test_dataset
 
         self.test_loader = torch.utils.data.DataLoader(
             self.testset, batch_size=self.bs, shuffle=False,
             drop_last=True, num_workers=1)
 
-        self.classes = (
-            'plane', 'car', 'bird', 'cat',
-            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+        self.classes = train_dataset.classes
 
         self.mask = torch.zeros((len(self.trainset)))
 
@@ -55,7 +62,7 @@ class DatasetWrapper(ABC):
         return torch.utils.data.DataLoader(
             self.trainset, batch_size=self.bs, num_workers=1 ,drop_last=True,
             sampler=sampler.SubsetRandomSampler(
-                torch.nonzero(self.mask))
+                torch.nonzero(self.mask).squeeze())
         )
 
     def get_test(self):
@@ -65,7 +72,7 @@ class DatasetWrapper(ABC):
         return torch.utils.data.DataLoader(
             self.trainset, batch_size=self.bs, num_workers=1,
             sampler=sampler.SubsetRandomSampler(
-                torch.nonzero(self.mask == 0)
+                torch.nonzero(self.mask == 0, as_tuple=True)
             )
         )
 

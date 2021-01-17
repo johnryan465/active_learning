@@ -1,71 +1,46 @@
+from typing import Callable, Dict
 from gpytorch.lazy.lazy_tensor import delazify
-from params.params import GPParams, NNParams, TrainingParams
-from datasets.activelearningdataset import ActiveLearningDataset
+from params.model_params import GPParams, NNParams, TrainingParams, vDUQParams
+from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.model import UncertainModel, ModelWrapper
-from params.params import ModelParams
+from params.model_params import ModelParams
 from vduq.dkl import GP, DKL_GP
 from vduq.wide_resnet import WideResNet
-from vduq.small_resnet import MnistResNet
+from vduq.small_resnet import MNISTResNet, PTMNISTResNet, CIFARResNet
 from vduq.dkl import initial_values_for_GP
 from gpytorch.mlls import VariationalELBO
 from gpytorch.likelihoods import SoftmaxLikelihood
+from marshmallow_dataclass import dataclass
+
+
 import gpytorch
 import torch
 
 
-class vDUQParams(ModelParams):
-    def __init__(self, training_params: TrainingParams,
-                 fe_params: NNParams, gp_params: GPParams) -> None:
-        super().__init__()
-        self.training_params = training_params
-        self.fe_params = fe_params
-        self.gp_params = gp_params
-
-    def toDict(self) -> str:
-        pass
-
 
 class vDUQ(UncertainModel):
+    fe_config = {
+        DatasetName.mnist : [MNISTResNet, PTMNISTResNet],
+        DatasetName.cifar10 : [CIFARResNet]
+    }
     def __init__(self, params: vDUQParams, dataset: ActiveLearningDataset) -> None:
         # We pass the dataset so the model can properly initialise
         super().__init__()
         self.params = params
-        train_dataset = dataset.get_train()
 
         params = self.params
         gp_params = params.gp_params
         fe_params = params.fe_params
+        training_params = params.training_params
+
+        train_dataset = dataset.get_train()
+        self.num_data = len(train_dataset)
 
         # Initialise different feature extractors based on the dataset
-        if self.params.training_params.dataset == "MNIST":
-            self.feature_extractor = MnistResNet(
-                spectral_normalization=fe_params.spectral_normalization,
-                coeff=0.9,
-                batchnorm_momentum=0.9,
-                n_power_iterations=1,
-                dropout_rate=0.3
-            )
-            """ WideResNet(
-                spectral_normalization=fe_params.spectral_normalization,
-                dropout_rate=fe_params.dropout_rate,
-                coeff=fe_params.coeff,
-                channels=1,
-                image_size=28,
-                depth=10,
-                n_power_iterations=fe_params.n_power_iterations,
-                batchnorm_momentum=fe_params.batchnorm_momentum,
-            ) """
-            
-        elif self.params.training_params.dataset == "CIFAR10":
-            self.feature_extractor = WideResNet(
-                spectral_normalization=fe_params.spectral_normalization,
-                dropout_rate=fe_params.dropout_rate,
-                coeff=fe_params.coeff,
-                channels=3,
-                image_size=32,
-                n_power_iterations=fe_params.n_power_iterations,
-                batchnorm_momentum=fe_params.batchnorm_momentum,
-            )
+        # We can have multiple configs per dataset
+        # This allows us to compare various completely different architectures in a controlled way
+        self.feature_extractor = vDUQ.fe_config[training_params.dataset][training_params.model_index](fe_params)
+
         init_inducing_points, init_lengthscale = initial_values_for_GP(
             train_dataset.dataset, self.feature_extractor,
             gp_params.n_inducing_points
@@ -76,36 +51,46 @@ class vDUQ(UncertainModel):
               initial_lengthscale=init_lengthscale,
               initial_inducing_points=init_inducing_points,
               separate_inducing_points=gp_params.separate_inducing_points,
-              kernel=gp_params.kernel,
-              ard=gp_params.ard,
-              lengthscale_prior=gp_params.lengthscale_prior,
-              )
+              #kernel=gp_params.kernel,
+              #ard=gp_params.ard,
+              #lengthscale_prior=gp_params.lengthscale_prior,
+        )
 
         self.model = DKL_GP(self.feature_extractor, gp)
-
-        if self.params.training_params.cuda:
-            self.model = self.model.cuda()
 
         self.likelihood = SoftmaxLikelihood(
             num_classes=gp_params.num_classes, mixing_weights=False)
 
+        # Move to GPU if we can
         if self.params.training_params.cuda:
+            self.model = self.model.cuda()
             self.likelihood = self.likelihood.cuda()
-
-        if self.params.training_params.cuda:
             init_inducing_points = init_inducing_points.cuda()
+
 
         self.model_parameters = [
             {"params": self.model.feature_extractor.parameters(),
-                "lr": fe_params.learning_rate},
+                "lr": training_params.optimizers.optimizer},
             {"params": self.likelihood.parameters(
-            ), "lr": fe_params.learning_rate},
+            ), "lr": training_params.optimizers.optimizer},
+            #{"params": self.model.gp.parameters(
+            #    ), "lr": training_params.optimizers.optimizer}
         ]
 
-        self.ngd_parameters = [
-            {"params": self.model.gp.parameters(
-            ), "lr": fe_params.learning_rate},
-        ]
+        # The ability to use split optimizers in vDUQ for the variational parameters 
+        self.seperate_optimizers = (params.training_params.optimizers.var_optimizer is not None)
+        if self.seperate_optimizers:
+            self.ngd_parameters = [{
+                "params": self.model.gp.parameters(),
+                "lr": training_params.optimizers.optimizer}
+            ]
+            self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data=self.num_data)
+
+        else:
+            self.model_parameters.append(
+                 {"params": self.model.gp.parameters(
+                ), "lr": training_params.optimizers.optimizer}
+            )
 
         self.optimizer = torch.optim.SGD(
             self.model_parameters, momentum=0.9, weight_decay=fe_params.weight_decay
@@ -116,19 +101,19 @@ class vDUQ(UncertainModel):
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
             self.optimizer, milestones=milestones, gamma=0.2
         )
-        self.num_data = len(train_dataset)
-        self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data= self.num_data, lr=0.1)
 
         
         self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp,
                                        num_data=self.num_data)
 
 
-
-
+    # To prepare for a new batch we need to update the size of the dataset and update the
+    # classes who depend on the size of the training set
     def prepare(self, batch_size : int):
         self.num_data += batch_size
-        self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data= self.num_data, lr=0.1)
+        if self.seperate_optimizers:
+            self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data= self.num_data,)
+        
         self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp,
                                        num_data=self.num_data)
 
@@ -149,23 +134,27 @@ class vDUQ(UncertainModel):
 
     def get_train_step(self):
         optimizer = self.optimizer
-        ngd_optimizer = self.variational_ngd_optimizer
+        if self.seperate_optimizers:
+            ngd_optimizer = self.variational_ngd_optimizer
+
         def step(engine, batch):
             self.model.train()
             self.likelihood.train()
 
             optimizer.zero_grad()
-            ngd_optimizer.zero_grad()
+            if self.seperate_optimizers:
+                ngd_optimizer.zero_grad()
             x, y = batch
             if self.params.training_params.cuda:
                 x, y = x.cuda(), y.cuda()
 
             y_pred = self.model(x)
             elbo = -self.elbo_fn(y_pred, y)
-
             elbo.backward()
             optimizer.step()
-            ngd_optimizer.step()
+            if self.seperate_optimizers:
+                ngd_optimizer.step()
+            
             eig = torch.symeig(delazify(self.model.gp.covar_module(self.model.gp.inducing_points))).eigenvalues
             cond = eig.max() / eig.min()
             return {'loss': elbo.item(), 'cond': cond, 'min': eig.min()}
@@ -208,3 +197,17 @@ class vDUQ(UncertainModel):
 
     def sample(self):
         return None
+
+    def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+        return {
+            'cond': lambda x : x['cond'],
+            'min' : lambda x : x['min'],
+            'loss' : lambda x : x['loss'] 
+        }
+    
+    def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+        return {
+            'accuracy' : self.get_output_transform(),
+            'loss' : lambda x : x
+        }
+

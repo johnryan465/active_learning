@@ -1,78 +1,95 @@
+import json
+from typing import Dict
+from params.dataset_params import DatasetParams
+from params.method_params import MethodParams
+from experimental.experiment import Experiment
 from models.driver import Driver
 from models.bnn import BayesianMNIST
 from models.dnn import DNN
 from models.dnn import DNNParams
 from models.vduq import vDUQ
 from models.vduq import vDUQParams
-from params.params import GPParams, NNParams, TrainingParams
-
-from datasets.mnist import MNIST
-from methods.random import Random
+from params.model_params import GPParams, ModelParams, NNParams, OptimizerParams, TrainingParams
+from params.experiment_params import ExperimentParams
+from methods.random import RandomParams
 from methods.BALD import BALD
+from datasets.activelearningdataset import DatasetName
+from utils.config import IO
 
 # from methods.BatchBALD import BatchBALD
 import torch
 
+import argparse
+
 use_cuda = torch.cuda.is_available()
 
 flag = False
-bs = 512
+bs = 256
 epochs = 60
 
-training_params = TrainingParams({
-    'dataset': 'MNIST',
-    'batch_size': bs,
-    'epochs': epochs,
-    'cuda': use_cuda
-})
-
-gp_params = GPParams({
-    'kernel': 'RBF',
-    'num_classes': 10,
-    'ard': None,
-    'n_inducing_points': 10,
-    'lengthscale_prior': False,
-    'separate_inducing_points': False
-})
-
-nn_params = NNParams({
-    'spectral_normalization': True,
-    'dropout_rate': 0.5,
-    'coeff': 0.9,
-    'n_power_iterations': 1,
-    'batchnorm_momentum': 0.01,
-    'weight_decay': 5e-4,
-    'learning_rate': 0.01
-})
 
 
-dataset = MNIST(bs)
-method = Random(bs,1,bs*60)
-method.initialise(dataset)
+gp_params = GPParams(
+    kernel = 'RBF',
+    num_classes = 10,
+    ard = None,
+    n_inducing_points = 10,
+    lengthscale_prior= False,
+    separate_inducing_points = False
+)
 
-if flag:
-    # model = BayesianMNIST(nn_params, training_params)
-    model = DNN(
-        DNNParams(training_params, nn_params)
+nn_params = NNParams(
+    spectral_normalization = False,
+    dropout_rate = 0.0,
+    coeff = 0.9,
+    n_power_iterations = 1,
+    batchnorm_momentum = 0.01,
+    weight_decay = 5e-4,
+)
+
+opt_params = OptimizerParams(
+    optimizer = 0.01,
+    var_optimizer = 0.01
+)
+
+training_params = TrainingParams(
+    dataset = DatasetName.mnist,
+    model_index = 0,
+    batch_size = bs,
+    epochs = epochs,
+    cuda = use_cuda,
+    optimizers = opt_params
+)
+
+
+
+def init_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s [experiment_name]",
+        description="Run experiments for active learning"
     )
-else:
-    params = vDUQParams(
-        training_params,
-        nn_params,
-        gp_params
-    )
-    model = vDUQ(params, dataset)
-
-
-
-
-
+    parser.add_argument('--name', required=True)
+    return parser
 
 if __name__ == "__main__":
-    method.initialise(dataset)
-    while(not method.complete()):
-        # model.reset()
-        Driver.train(model, dataset)
-        # Driver.test(model, dataset)
-        method.acquire(model, dataset)
-        model.prepare(bs)
+    expr_config = ExperimentParams(
+            model_params =  vDUQParams(
+                training_params = training_params,
+                fe_params = nn_params,
+                gp_params = gp_params
+            ),
+            method_params = RandomParams(
+                batch_size = bs
+            ),
+            dataset_params = DatasetParams(
+                batch_size = bs
+            )
+    )
+    s = expr_config.export()
+    e = IO.parseParams(ExperimentParams, s)
+    expr = Experiment(
+        "Rerun",
+        "Testing Experimental Framework",
+        expr_config
+    )
+    # expr.run()

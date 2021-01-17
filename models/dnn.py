@@ -1,15 +1,15 @@
 from types import FunctionType
 
-from params.params import NNParams, TrainingParams
+from params.model_params import NNParams, TrainingParams
 from datasets.activelearningdataset import ActiveLearningDataset
 from .model import ModelWrapper
-from params.params import ModelParams
+from params.model_params import ModelParams
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
+from marshmallow_dataclass import dataclass
 
 
 class DNNParams(ModelParams):
@@ -20,7 +20,7 @@ class DNNParams(ModelParams):
         self.nn_params = nn_params
 
     def toDict(self) -> str:
-        pass
+        return self.__dict__
 
 
 class DNN(ModelWrapper):

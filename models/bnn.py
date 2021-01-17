@@ -1,5 +1,5 @@
 from types import FunctionType
-from params.params import NNParams, TrainingParams, ModelParams
+from params.model_params import NNParams, TrainingParams, ModelParams
 from datasets.activelearningdataset import ActiveLearningDataset
 from models.model import UncertainModel
 from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout2d
@@ -11,7 +11,17 @@ from torch.nn import functional as F
 from ignite.engine import Events, Engine
 from ignite.metrics import Accuracy, Average, Loss
 from ignite.contrib.handlers import ProgressBar
+from marshmallow_dataclass import dataclass
 
+
+class BNNParams(ModelParams):
+    def toDict(self) -> str:
+        return self.__dict__
+        
+class BNN(UncertainModel):
+    def __init__(self, bnn_params : BNNParams) -> None:
+        super().__init__()
+    pass
 
 class BayesianCNN(BayesianModule):
     def __init__(self, num_classes=10):

@@ -1,8 +1,15 @@
+from marshmallow_dataclass import dataclass
+
+from params.method_params import MethodParams
 from .method import Method
 
 from models.model import ModelWrapper
 from datasets.activelearningdataset import ActiveLearningDataset
 
+
+@dataclass
+class RandomParams(MethodParams):
+    batch_size : int
 
 class Random(Method):
     def __init__(self, batch_size: int, max_num_batches: int,

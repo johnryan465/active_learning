@@ -117,8 +117,7 @@ class WideResNet(nn.Module):
 
         self.conv1 = wrapped_conv(
             input_sizes[0], channels, nStages[0], 3, strides[0])
-        print(self.conv1)
-        print(image_size)
+
         self.layer1 = self._wide_layer(nStages[0:2], n,
                                        strides[1], input_sizes[1])
         self.layer2 = self._wide_layer(nStages[1:3], n,

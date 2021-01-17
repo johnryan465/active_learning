@@ -9,32 +9,37 @@ import time
 
 class Driver:
     @staticmethod
-    def train(model_wrapper: ModelWrapper, dataset: ActiveLearningDataset):
+    def train(exp_name: str, iteration: int, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset):
         training_params = model_wrapper.get_training_params()
 
         optimizer = model_wrapper.get_optimizer()
         scheduler = model_wrapper.get_scheduler(optimizer)
+
         train_step = model_wrapper.get_train_step()
         eval_step = model_wrapper.get_eval_step()
 
         trainer = Engine(train_step)
         evaluator = Engine(eval_step)
-        def output_transform_loss(output):
-            return output['loss']
-        def output_transform_cond(output):
-            return output['cond']
-        def output_transform_min(output):
-            return output['min']
-        metric = Average(output_transform=output_transform_loss)
-        metric.attach(trainer, "loss")
+        
+        metrics = {
+            "training" : model_wrapper.get_training_log_hooks(),
+            "validation" :  model_wrapper.get_test_log_hooks()
+        }
 
-        metric = Average(output_transform=output_transform_cond)
-        metric.attach(trainer, "cond")
+        engines = {
+            "training" : trainer,
+            "validation" : evaluator
+        }
 
-        metric = Average(output_transform=output_transform_min)
-        metric.attach(trainer, "min")
+        for stage, engine in engines.items():
+            for name, transform in metrics[stage].items():
+                if stage == "validation" and (name == "loss" or name == "accuracy"):
+                    continue
+                metric = Average(output_transform=transform)
+                metric.attach(engine, name)
 
-        output_transform = model_wrapper.get_output_transform()
+        
+        output_transform = metrics['validation']['accuracy']
 
         metric = Accuracy(output_transform=output_transform)
         metric.attach(evaluator, "accuracy")
@@ -43,18 +48,19 @@ class Driver:
         metric = Loss(loss_fn)
         metric.attach(evaluator, "loss")
 
+
         test_loader = dataset.get_test()
         train_loader = dataset.get_train()
 
         ts = time.time()
-        tb_logger = TensorboardLogger(log_dir="logs/" +str(ts))
+        tb_logger = TensorboardLogger(log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
 
-        for tag, evaluator in [("training", trainer), ("validation", evaluator)]:
+        for stage, engine in engines.items():
             tb_logger.attach_output_handler(
-                evaluator,
+                engine,
                 event_name=Events.EPOCH_COMPLETED,
-                tag=tag,
-                metric_names=["loss", "accuracy", "cond", "min"],
+                tag=stage,
+                metric_names=list(metrics[stage].keys()),
                 global_step_transform=global_step_from_engine(trainer),
             )
 
@@ -67,8 +73,7 @@ class Driver:
         pbar = ProgressBar(dynamic_ncols=True)
         pbar.attach(trainer)
 
-        trainer.run(train_loader,
-                   max_epochs=training_params.epochs)
+        trainer.run(train_loader, max_epochs=training_params.epochs)
 
         tb_logger.close()
 

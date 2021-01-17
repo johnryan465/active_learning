@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from types import FunctionType
+from typing import Callable, Dict, List, Tuple, TypedDict
 
 import torch
 
@@ -64,6 +65,13 @@ class ModelWrapper(ABC):
     def get_loss_fn(self):
         pass
 
+    @abstractmethod
+    def get_training_log_hooks(self) -> Dict[str, Callable[ [Dict[str, float]], float] ]:
+        pass
+
+    @abstractmethod
+    def get_test_log_hooks(self) -> Dict[str, Callable[ [Dict[str, float]], float] ]:
+        pass 
 # This is a model which we can sample from
 class UncertainModel(ModelWrapper):
     @abstractmethod

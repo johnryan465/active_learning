@@ -1,11 +1,8 @@
+from params.model_params import NNParams
 from numpy.core import overrides
-from vduq.wide_resnet import WideBasic
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.spectral_norm import spectral_norm
-from torchvision.models.resnet import ResNet, BasicBlock
-
-from vduq.layers import spectral_norm_fc
 
 import torch
 import torch.nn as nn
@@ -13,27 +10,50 @@ import torch.nn.functional as F
 
 from vduq.layers import spectral_norm_conv, spectral_norm_fc
 from vduq.layers import SpectralBatchNorm2d
+from vduq.wide_resnet import WideBasic, WideResNet
+from torchvision.models.resnet import ResNet, BasicBlock
+
+import numpy as np
 
 
+class CIFARResNet(WideResNet):
+    def __init__(self, params : NNParams):
+        super(CIFARResNet, self).__init__(
+            spectral_normalization=params.spectral_normalization,
+            dropout_rate=params.dropout_rate,
+            coeff=params.coeff,
+            channels=3,
+            image_size=32,
+            n_power_iterations=params.n_power_iterations,
+            batchnorm_momentum=params.batchnorm_momentum,
+        )
+
+# A resnet for MNIST as a sanity check comparison to the custom one below
+class PTMNISTResNet(ResNet):
+    def __init__(self, params : NNParams):
+        super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=512)
+        self.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.fc = nn.Identity()
+    def forward(self, x):
+        return torch.softmax(super(PTMNISTResNet, self).forward(x), dim=-1)
 
 class MNISTResNet(nn.Module):
     def __init__(
-        self,
-        spectral_normalization,
-        channels=3,
-        image_size=32,
-        depth=28,
-        widen_factor=10,
-        num_classes=None,
-        dropout_rate=0.3,
-        coeff=3,
-        n_power_iterations=1,
-        batchnorm_momentum=0.1,
-    ):
+            self, params : NNParams):
         super().__init__()
 
-        self.dropout_rate = dropout_rate
+        spectral_normalization=True,
+        channels=1
+        image_size=28
+        num_classes=None
+
+        self.dropout_rate = params.dropout_rate
         self.image_size = image_size
+
+        coeff = params.coeff
+        batchnorm_momentum = params.batchnorm_momentum
+        n_power_iterations = params.n_power_iterations
+        spectral_normalization = params.spectral_normalization
 
         def wrapped_bn(num_features):
             if spectral_normalization:
@@ -47,8 +67,9 @@ class MNISTResNet(nn.Module):
 
         self.wrapped_bn = wrapped_bn
 
-        def wrapped_conv(input_size, in_c, out_c, kernel_size, stride):
-            padding = 1 if kernel_size == 3 else 0
+        def wrapped_conv(input_size, in_c, out_c, kernel_size, stride, padding=None):
+            if padding is None:
+                padding = 1 if kernel_size == 3 else 0
 
             conv = nn.Conv2d(in_c, out_c, kernel_size,
                              stride, padding, bias=False)
@@ -71,29 +92,31 @@ class MNISTResNet(nn.Module):
 
         self.wrapped_conv = wrapped_conv
 
-        n = (depth - 4) // 6
-        k = widen_factor
 
-        nStages = [16, 16 * k, 32 * k, 64 * k]
+        nStages = [64, 64, 128, 256]
         strides = [1, 1, 2, 2]
         input_sizes = 32 // np.cumprod(strides)
 
-        self.conv1 = wrapped_conv(
-            input_sizes[0], channels, nStages[0], 3, strides[0])
-        print(self.conv1)
-        print(image_size)
-        self.layer1 = self._wide_layer(nStages[0:2], n,
-                                       strides[1], input_sizes[1])
-        self.layer2 = self._wide_layer(nStages[1:3], n,
-                                       strides[2], input_sizes[2])
-        self.layer3 = self._wide_layer(nStages[2:4], n, strides[3],
-                                       input_sizes[3])
+        n = 2 # layer_size
+        num_blocks = len(nStages)
+        self.conv1 = self.wrapped_conv(
+            input_sizes[0], channels, nStages[0], 7, strides[0], padding=3)
 
-        self.bn1 = self.wrapped_bn(nStages[3])
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+
+        # "layers" are layers in the resnet sense, collections of blocks
+        # Layers are connected together with convolutions which reduce the spatial dimensions
+        self.layers = nn.ModuleList()
+
+        for i in range(0, num_blocks - 1):
+            self.layers.append(self._layer(nStages[i : i+2], n, strides[i+1], input_sizes[i+1]))
+
+        self.bn1 = self.wrapped_bn(nStages[num_blocks - 1])
 
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(nStages[3], num_classes)
+            self.linear = nn.Linear(nStages[num_blocks - 1], num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -104,12 +127,14 @@ class MNISTResNet(nn.Module):
                                         nonlinearity="relu")
                 nn.init.constant_(m.bias, 0)
 
-    def _wide_layer(self, channels, num_blocks, stride, input_size):
+    def _layer(self, channels, num_blocks, stride, input_size):
+        # We have a possibly different stride as the first one
+        # as we could be at the beginning of a resnet layer where we are projecting
+        # down the number of spatial dimesions
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
 
         in_c, out_c = channels
-        print(in_c, out_c)
 
         for stride in strides:
             layers.append(
@@ -130,15 +155,14 @@ class MNISTResNet(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
+        for layer in self.layers:
+            out = layer(out)
         out = F.relu(self.bn1(out))
-        out = F.avg_pool2d(out, int(self.image_size / 4))
+        out = F.avg_pool2d(out, 7)
         out = out.flatten(1)
 
         if self.num_classes is not None:
             out = self.linear(out)
-            out = F.log_softmax(out, dim=1)
+            out = F.softmax(out, dim=1)
 
         return out

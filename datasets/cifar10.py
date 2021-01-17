@@ -1,6 +1,6 @@
 import torchvision
 import torchvision.transforms as transforms
-from .activelearningdataset import DatasetWrapper
+from .activelearningdataset import DatasetName, DatasetWrapper
 
 
 class CIFAR10(DatasetWrapper):
@@ -18,3 +18,6 @@ class CIFAR10(DatasetWrapper):
             transform=transform)
 
         super().__init__(train_dataset, test_dataset, batch_size)
+
+    def get_name(self) -> DatasetName:
+        return DatasetName.cifar10
