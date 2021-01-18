@@ -1,10 +1,9 @@
-from abc import ABC, abstractclassmethod, abstractmethod, abstractstaticmethod
+from abc import ABC
 from typing import List
-import json
-from dataclasses import fields, asdict
+from dataclasses import fields
 
 class Params(ABC):
-    def export(self) -> 'cls':
+    def export(self) -> dict:
         kwds = {"__name__": self.name()}
         cls = self.__class__
         dic = self.__dict__

@@ -1,22 +1,16 @@
 import json
 from typing import Dict
-from params.dataset_params import DatasetParams
-from params.method_params import MethodParams
+from datasets.dataset_params import DatasetParams
+from methods.method_params import MethodParams
 from experimental.experiment import Experiment
-from models.driver import Driver
-from models.bnn import BayesianMNIST
-from models.dnn import DNN
-from models.dnn import DNNParams
-from models.vduq import vDUQ
+
 from models.vduq import vDUQParams
-from params.model_params import GPParams, ModelParams, NNParams, OptimizerParams, TrainingParams
-from params.experiment_params import ExperimentParams
+from models.model_params import GPParams, NNParams, OptimizerParams, TrainingParams
+from experimental.experiment_params import ExperimentParams
 from methods.random import RandomParams
-from methods.BALD import BALD
 from datasets.activelearningdataset import DatasetName
 from utils.config import IO
 
-# from methods.BatchBALD import BatchBALD
 import torch
 
 import argparse
@@ -49,7 +43,7 @@ nn_params = NNParams(
 
 opt_params = OptimizerParams(
     optimizer = 0.01,
-    var_optimizer = 0.01
+    var_optimizer = None
 )
 
 training_params = TrainingParams(
@@ -72,24 +66,34 @@ def init_parser() -> argparse.ArgumentParser:
     return parser
 
 if __name__ == "__main__":
-    expr_config = ExperimentParams(
-            model_params =  vDUQParams(
-                training_params = training_params,
-                fe_params = nn_params,
-                gp_params = gp_params
-            ),
-            method_params = RandomParams(
-                batch_size = bs
-            ),
-            dataset_params = DatasetParams(
-                batch_size = bs
-            )
-    )
-    s = expr_config.export()
-    e = IO.parseParams(ExperimentParams, s)
+    parser = init_parser()
+    args = parser.parse_args()
+    file_name = "experiments/" + args.name + "/model.json"
+    if IO.file_exists(file_name):
+        json_str = IO.load_dict_from_file(file_name)
+        expr_config = IO.parseParams(ExperimentParams, json_str)
+    else:
+        expr_config = ExperimentParams(
+                model_params =  vDUQParams(
+                    training_params = training_params,
+                    fe_params = nn_params,
+                    gp_params = gp_params
+                ),
+                method_params = RandomParams(
+                    batch_size = 0,
+                    max_num_batches = 5,
+                    initial_size = 60*bs
+                ),
+                dataset_params = DatasetParams(
+                    batch_size = bs
+                )
+        )
+        log = expr_config.export()
+        IO.dict_to_file(log, file_name)
+
     expr = Experiment(
-        "Rerun",
+        args.name,
         "Testing Experimental Framework",
         expr_config
     )
-    # expr.run()
+    expr.run()

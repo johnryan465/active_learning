@@ -1,9 +1,8 @@
 from types import FunctionType
 
-from params.model_params import NNParams, TrainingParams
+from models.model_params import NNParams, TrainingParams, ModelParams
 from datasets.activelearningdataset import ActiveLearningDataset
 from .model import ModelWrapper
-from params.model_params import ModelParams
 
 import torch
 import torch.nn as nn

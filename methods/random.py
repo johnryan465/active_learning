@@ -1,6 +1,6 @@
 from marshmallow_dataclass import dataclass
 
-from params.method_params import MethodParams
+from methods.method_params import MethodParams
 from .method import Method
 
 from models.model import ModelWrapper
@@ -10,14 +10,16 @@ from datasets.activelearningdataset import ActiveLearningDataset
 @dataclass
 class RandomParams(MethodParams):
     batch_size : int
+    max_num_batches : int
+    initial_size : int
+
 
 class Random(Method):
-    def __init__(self, batch_size: int, max_num_batches: int,
-                 initial_size: int) -> None:
+    def __init__(self, params : RandomParams) -> None:
         super().__init__()
-        self.batch_size = batch_size
-        self.initial_size = initial_size
-        self.max_num_batches = max_num_batches
+        self.batch_size = params.batch_size
+        self.initial_size = params.initial_size
+        self.max_num_batches = params.max_num_batches
         self.current_batch = 0
         self.last_index = 0
 

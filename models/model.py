@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datasets.activelearningdataset import ActiveLearningDataset
 from types import FunctionType
 from typing import Callable, Dict, List, Tuple, TypedDict
 
@@ -7,7 +8,7 @@ import torch
 
 class ModelWrapper(ABC):
     @abstractmethod
-    def reset(self) -> None:
+    def reset(self, dataset : ActiveLearningDataset) -> None:
         """
         Resets the model to an untrained state
         """
@@ -72,6 +73,7 @@ class ModelWrapper(ABC):
     @abstractmethod
     def get_test_log_hooks(self) -> Dict[str, Callable[ [Dict[str, float]], float] ]:
         pass 
+
 # This is a model which we can sample from
 class UncertainModel(ModelWrapper):
     @abstractmethod

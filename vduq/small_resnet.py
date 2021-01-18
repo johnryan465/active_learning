@@ -1,4 +1,4 @@
-from params.model_params import NNParams
+from models.model_params import NNParams
 from numpy.core import overrides
 import torch.nn as nn
 import torch.nn.functional as F

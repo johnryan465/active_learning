@@ -1,7 +1,6 @@
-from abc import ABC, abstractmethod
-from params.model_params import ModelParams
-from params.dataset_params import DatasetParams
-from params.method_params import MethodParams
+from models.model_params import ModelParams
+from datasets.dataset_params import DatasetParams
+from methods.method_params import MethodParams
 from params.params import Params
 
 from dataclasses import dataclass

@@ -1,9 +1,9 @@
 from typing import Callable, Dict
 from gpytorch.lazy.lazy_tensor import delazify
-from params.model_params import GPParams, NNParams, TrainingParams, vDUQParams
+from models.model_params import GPParams, NNParams, TrainingParams
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.model import UncertainModel, ModelWrapper
-from params.model_params import ModelParams
+from models.model_params import ModelParams
 from vduq.dkl import GP, DKL_GP
 from vduq.wide_resnet import WideResNet
 from vduq.small_resnet import MNISTResNet, PTMNISTResNet, CIFARResNet
@@ -17,6 +17,12 @@ import gpytorch
 import torch
 
 
+@dataclass
+class vDUQParams(ModelParams):
+    training_params: TrainingParams
+    fe_params: NNParams
+    gp_params: GPParams
+
 
 class vDUQ(UncertainModel):
     fe_config = {
@@ -27,84 +33,9 @@ class vDUQ(UncertainModel):
         # We pass the dataset so the model can properly initialise
         super().__init__()
         self.params = params
-
-        params = self.params
-        gp_params = params.gp_params
-        fe_params = params.fe_params
-        training_params = params.training_params
-
-        train_dataset = dataset.get_train()
-        self.num_data = len(train_dataset)
-
-        # Initialise different feature extractors based on the dataset
-        # We can have multiple configs per dataset
-        # This allows us to compare various completely different architectures in a controlled way
-        self.feature_extractor = vDUQ.fe_config[training_params.dataset][training_params.model_index](fe_params)
-
-        init_inducing_points, init_lengthscale = initial_values_for_GP(
-            train_dataset.dataset, self.feature_extractor,
-            gp_params.n_inducing_points
-        )
-
-        gp = GP(
-              num_outputs=gp_params.num_classes,
-              initial_lengthscale=init_lengthscale,
-              initial_inducing_points=init_inducing_points,
-              separate_inducing_points=gp_params.separate_inducing_points,
-              #kernel=gp_params.kernel,
-              #ard=gp_params.ard,
-              #lengthscale_prior=gp_params.lengthscale_prior,
-        )
-
-        self.model = DKL_GP(self.feature_extractor, gp)
-
-        self.likelihood = SoftmaxLikelihood(
-            num_classes=gp_params.num_classes, mixing_weights=False)
-
-        # Move to GPU if we can
-        if self.params.training_params.cuda:
-            self.model = self.model.cuda()
-            self.likelihood = self.likelihood.cuda()
-            init_inducing_points = init_inducing_points.cuda()
-
-
-        self.model_parameters = [
-            {"params": self.model.feature_extractor.parameters(),
-                "lr": training_params.optimizers.optimizer},
-            {"params": self.likelihood.parameters(
-            ), "lr": training_params.optimizers.optimizer},
-            #{"params": self.model.gp.parameters(
-            #    ), "lr": training_params.optimizers.optimizer}
-        ]
-
-        # The ability to use split optimizers in vDUQ for the variational parameters 
-        self.seperate_optimizers = (params.training_params.optimizers.var_optimizer is not None)
-        if self.seperate_optimizers:
-            self.ngd_parameters = [{
-                "params": self.model.gp.parameters(),
-                "lr": training_params.optimizers.optimizer}
-            ]
-            self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data=self.num_data)
-
-        else:
-            self.model_parameters.append(
-                 {"params": self.model.gp.parameters(
-                ), "lr": training_params.optimizers.optimizer}
-            )
-
-        self.optimizer = torch.optim.SGD(
-            self.model_parameters, momentum=0.9, weight_decay=fe_params.weight_decay
-        )
-
-        milestones = [60, 120, 160]
-
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=milestones, gamma=0.2
-        )
+        self.reset(dataset)
 
         
-        self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp,
-                                       num_data=self.num_data)
 
 
     # To prepare for a new batch we need to update the size of the dataset and update the
@@ -186,8 +117,82 @@ class vDUQ(UncertainModel):
     def get_model(self):
         return self.model
 
-    def reset(self):
-        self.__init__(self, self.params)
+    def reset(self, dataset : ActiveLearningDataset):
+        params = self.params
+        gp_params = params.gp_params
+        fe_params = params.fe_params
+        training_params = params.training_params
+
+        train_dataset = dataset.get_train()
+        self.num_data = len(train_dataset)
+
+        # Initialise different feature extractors based on the dataset
+        # We can have multiple configs per dataset
+        # This allows us to compare various completely different architectures in a controlled way
+        self.feature_extractor = vDUQ.fe_config[training_params.dataset][training_params.model_index](fe_params)
+
+        init_inducing_points, init_lengthscale = initial_values_for_GP(
+            train_dataset.dataset, self.feature_extractor,
+            gp_params.n_inducing_points
+        )
+
+        gp = GP(
+              num_outputs=gp_params.num_classes,
+              initial_lengthscale=init_lengthscale,
+              initial_inducing_points=init_inducing_points,
+              separate_inducing_points=gp_params.separate_inducing_points,
+              kernel=gp_params.kernel,
+              ard=gp_params.ard,
+              lengthscale_prior=gp_params.lengthscale_prior,
+        )
+
+        self.model = DKL_GP(self.feature_extractor, gp)
+
+        self.likelihood = SoftmaxLikelihood(
+            num_classes=gp_params.num_classes, mixing_weights=False)
+
+        # Move to GPU if we can
+        if self.params.training_params.cuda:
+            self.model = self.model.cuda()
+            self.likelihood = self.likelihood.cuda()
+            init_inducing_points = init_inducing_points.cuda()
+
+
+        self.model_parameters = [
+            {"params": self.model.feature_extractor.parameters(),
+                "lr": training_params.optimizers.optimizer},
+            {"params": self.likelihood.parameters(
+            ), "lr": training_params.optimizers.optimizer},
+        ]
+
+        # The ability to use split optimizers in vDUQ for the variational parameters 
+        self.seperate_optimizers = (params.training_params.optimizers.var_optimizer is not None)
+        if self.seperate_optimizers:
+            self.ngd_parameters = [{
+                "params": self.model.gp.parameters(),
+                "lr": training_params.optimizers.optimizer}
+            ]
+            self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data=self.num_data)
+
+        else:
+            self.model_parameters.append(
+                 {"params": self.model.gp.parameters(
+                ), "lr": training_params.optimizers.optimizer}
+            )
+
+        self.optimizer = torch.optim.SGD(
+            self.model_parameters, momentum=0.9, weight_decay=fe_params.weight_decay
+        )
+
+        milestones = [60, 120, 160]
+
+        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            self.optimizer, milestones=milestones, gamma=0.2
+        )
+
+        
+        self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp,
+                                       num_data=self.num_data)
 
     def get_loss_fn(self):
         return lambda x,y : -self.elbo_fn(x,y)

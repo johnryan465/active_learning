@@ -1,7 +1,8 @@
 
-from params.dataset_params import DatasetParams
+from datasets.dataset_params import DatasetParams
 from methods.random import RandomParams
-from params.model_params import GPParams, NNParams, OptimizerParams, TrainingParams, vDUQParams
+from models.model_params import GPParams, NNParams, OptimizerParams, TrainingParams
+from models.vduq import vDUQParams
 
 
 class Registered:

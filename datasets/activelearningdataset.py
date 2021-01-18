@@ -60,7 +60,7 @@ class DatasetWrapper(ABC):
 
     def get_train(self):
         return torch.utils.data.DataLoader(
-            self.trainset, batch_size=self.bs, num_workers=1 ,drop_last=True,
+            self.trainset, batch_size=self.bs, num_workers=2 ,drop_last=False,
             sampler=sampler.SubsetRandomSampler(
                 torch.nonzero(self.mask).squeeze())
         )
@@ -70,7 +70,7 @@ class DatasetWrapper(ABC):
 
     def get_pool(self) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
-            self.trainset, batch_size=self.bs, num_workers=1,
+            self.trainset, batch_size=self.bs, num_workers=2,
             sampler=sampler.SubsetRandomSampler(
                 torch.nonzero(self.mask == 0, as_tuple=True)
             )
