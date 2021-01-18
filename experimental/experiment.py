@@ -17,7 +17,6 @@ from .driver import Driver
 
 class Experiment:
     def __init__(self, name : str, objective : str, experiment_params : ExperimentParams):
-        self.bs = 256
         self.dataset = Experiment.create_dataset(experiment_params.dataset_params)
         self.method = Experiment.create_method(experiment_params.method_params)
         self.method.initialise(self.dataset)
@@ -30,10 +29,10 @@ class Experiment:
         if isinstance(model_config, vDUQParams):
             model = vDUQ(model_config, dataset)
         elif isinstance(model_config, DNNParams):
-            model = DNN(model_config)
+            model = DNN(model_config, dataset)
         # elif isinstance(model_config, BNNParams):
         else:
-            model = DNN(model_config)
+            model = DNN(model_config, dataset)
         return model
 
     @staticmethod

@@ -17,7 +17,6 @@ import argparse
 
 use_cuda = torch.cuda.is_available()
 
-flag = False
 bs = 256
 epochs = 60
 
@@ -88,6 +87,7 @@ if __name__ == "__main__":
                     batch_size = bs
                 )
         )
+
         log = expr_config.export()
         IO.dict_to_file(log, file_name)
 
