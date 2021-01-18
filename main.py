@@ -1,4 +1,7 @@
 import json
+from methods.BatchBALD import BatchBALDParams
+from methods.BALD import BALDParams
+from models.bnn import BNNParams
 from typing import Dict
 from datasets.dataset_params import DatasetParams
 from methods.method_params import MethodParams
@@ -17,10 +20,8 @@ import argparse
 
 use_cuda = torch.cuda.is_available()
 
-bs = 256
-epochs = 60
-
-
+bs = 32
+epochs = 8
 
 gp_params = GPParams(
     kernel = 'RBF',
@@ -42,7 +43,7 @@ nn_params = NNParams(
 
 opt_params = OptimizerParams(
     optimizer = 0.01,
-    var_optimizer = None
+    var_optimizer = 0.01
 )
 
 training_params = TrainingParams(
@@ -74,14 +75,16 @@ if __name__ == "__main__":
     else:
         expr_config = ExperimentParams(
                 model_params =  vDUQParams(
-                    training_params = training_params,
-                    fe_params = nn_params,
-                    gp_params = gp_params
+                    training_params=training_params,
+                    gp_params= gp_params,
+                    fe_params=nn_params
                 ),
-                method_params = RandomParams(
-                    batch_size = 0,
+                method_params = BatchBALDParams(
+                    batch_size = bs,
                     max_num_batches = 5,
-                    initial_size = 60*bs
+                    initial_size = bs*3,
+                    samples = 15,
+                    use_cuda = True
                 ),
                 dataset_params = DatasetParams(
                     batch_size = bs

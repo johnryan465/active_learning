@@ -29,6 +29,7 @@ class CIFARResNet(WideResNet):
         )
 
 # A resnet for MNIST as a sanity check comparison to the custom one below
+
 class PTMNISTResNet(ResNet):
     def __init__(self, params : NNParams):
         super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=512)
@@ -41,8 +42,6 @@ class MNISTResNet(nn.Module):
     def __init__(
             self, params : NNParams):
         super().__init__()
-
-        spectral_normalization=True,
         channels=1
         image_size=28
         num_classes=None

@@ -8,7 +8,7 @@ class Method(ABC):
     @abstractmethod
     def acquire(self, model: ModelWrapper, dataset: ActiveLearningDataset) -> None:
         """
-        returns a pytorch training dataset
+        Moves data from the pool to training
         """
         pass
 
@@ -22,10 +22,12 @@ class Method(ABC):
     @abstractmethod
     def initialise(self, dataset: ActiveLearningDataset) -> None:
         """
-        returns a pytorch training dataset
+        Initialise the dataset to have some training data
         """
         pass
 
 
+# A type of method which requires a model which can output 
+# with uncertainty
 class UncertainMethod(Method):
     pass

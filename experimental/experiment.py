@@ -1,5 +1,8 @@
-from models.bnn import BNNParams
+from methods.BatchBALD import BatchBALD, BatchBALDParams
+from methods.BALD import BALD, BALDParams
+from models.bnn import BNN, BNNParams
 from methods.random import Random, RandomParams
+from methods.BALD import BALD, BALDParams
 from datasets.mnist import MNIST
 from models.dnn import DNN, DNNParams
 from models.vduq import vDUQ, vDUQParams
@@ -17,6 +20,8 @@ from .driver import Driver
 
 class Experiment:
     def __init__(self, name : str, objective : str, experiment_params : ExperimentParams):
+        self.bs = experiment_params.dataset_params.batch_size
+
         self.dataset = Experiment.create_dataset(experiment_params.dataset_params)
         self.method = Experiment.create_method(experiment_params.method_params)
         self.method.initialise(self.dataset)
@@ -30,7 +35,8 @@ class Experiment:
             model = vDUQ(model_config, dataset)
         elif isinstance(model_config, DNNParams):
             model = DNN(model_config, dataset)
-        # elif isinstance(model_config, BNNParams):
+        elif isinstance(model_config, BNNParams):
+            model = BNN(model_config, dataset)
         else:
             model = DNN(model_config, dataset)
         return model
@@ -39,6 +45,10 @@ class Experiment:
     def create_method(method_config : MethodParams) -> Method:
         if isinstance(method_config, RandomParams):
             method = Random(method_config)
+        elif isinstance(method_config, BALDParams):
+            method = BALD(method_config)
+        elif isinstance(method_config, BatchBALDParams):
+            method = BatchBALD(method_config)
         else:
             method = Random(method_config)
         return method

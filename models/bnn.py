@@ -1,6 +1,7 @@
 from types import FunctionType
+from typing import Callable, Dict
 from models.model_params import NNParams, TrainingParams, ModelParams
-from datasets.activelearningdataset import ActiveLearningDataset
+from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.model import UncertainModel
 from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout2d
 from uncertainty.fixed_dropout import ConsistentMCDropout
@@ -8,33 +9,20 @@ from uncertainty.fixed_dropout import ConsistentMCDropout
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from ignite.engine import Events, Engine
-from ignite.metrics import Accuracy, Average, Loss
-from ignite.contrib.handlers import ProgressBar
-from marshmallow_dataclass import dataclass
+from dataclasses import dataclass
 
 
-@dataclass
-class BNNParams(ModelParams):
-    training_params: TrainingParams
-    fe_params: NNParams
-        
-class BNN(UncertainModel):
-    def __init__(self, bnn_params : BNNParams) -> None:
+
+class BayesianMNIST(BayesianModule):
+    def __init__(self, params:NNParams):
         super().__init__()
-    pass
-
-class BayesianCNN(BayesianModule):
-    def __init__(self, num_classes=10):
-        super().__init__()
-
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
         self.conv1_drop = ConsistentMCDropout2d()
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5)
         self.conv2_drop = ConsistentMCDropout2d()
         self.fc1 = nn.Linear(1024, 128)
         self.fc1_drop = ConsistentMCDropout()
-        self.fc2 = nn.Linear(128, num_classes)
+        self.fc2 = nn.Linear(128, 10)
 
     def mc_forward_impl(self, input: torch.Tensor):
         input = F.relu(F.max_pool2d(self.conv1_drop(self.conv1(input)), 2))
@@ -43,38 +31,25 @@ class BayesianCNN(BayesianModule):
         input = F.relu(self.fc1_drop(self.fc1(input)))
         input = self.fc2(input)
         input = F.log_softmax(input, dim=1)
-
         return input
 
 
-class BayesianMNIST(UncertainModel):
-    def __init__(self, nn_params: NNParams, training_params: TrainingParams) -> None:
+
+@dataclass
+class BNNParams(ModelParams):
+    training_params: TrainingParams
+    fe_params: NNParams
+
+class BNN(UncertainModel):
+    model_config = {
+        DatasetName.mnist : [BayesianMNIST],
+        DatasetName.cifar10 : []
+    }
+    def __init__(self, params: BNNParams, dataset : ActiveLearningDataset) -> None:
         super().__init__()
-        self.model = BayesianCNN()
-        self.nn_params = nn_params
-        self.training_params = training_params
-
-        params = self.nn_params
-
-        self.parameters = [
-            {"params": self.model.parameters(),
-             "lr": params.learning_rate}]
-
-        milestones = [60, 120, 160]
-        self.optimizer = torch.optim.SGD(
-            self.parameters, momentum=0.9, weight_decay=params.weight_decay
-        )
-        if self.training_params.cuda:
-            self.model = self.model.cuda()
-
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=milestones, gamma=0.2
-        )
-
-        
-    def prepare(self, batch_size: int) -> None:
-        pass
-        
+        self.nn_params = params.fe_params
+        self.training_params = params.training_params
+        self.reset(dataset)
 
     def get_eval_step(self) -> FunctionType:
         def eval_step(engine, batch):
@@ -90,11 +65,11 @@ class BayesianMNIST(UncertainModel):
             return y_pred.squeeze(), y
         return eval_step
 
-    def get_train_step(self, optimizer: torch.optim.Optimizer) -> FunctionType:
+    def get_train_step(self) -> FunctionType:
         def step(engine, batch):
             self.model.train()
 
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
             x, y = batch
             if self.training_params.cuda:
                 x, y = x.cuda(), y.cuda()
@@ -102,7 +77,7 @@ class BayesianMNIST(UncertainModel):
             y_pred = y_pred.squeeze()
             loss = self.get_loss_fn()(y_pred, y)
             loss.backward()
-            optimizer.step()
+            self.optimizer.step()
 
             return loss.item()
         return step
@@ -124,8 +99,23 @@ class BayesianMNIST(UncertainModel):
             res.append(d)
         return torch.cat(res, 0)
 
-    def reset(self):
-        return super().reset()
+    def reset(self, dataset : ActiveLearningDataset) -> None:
+        self.model = BNN.model_config[self.training_params.dataset][self.training_params.model_index](self.nn_params)
+
+        self.parameters = [
+            {"params": self.model.parameters(),
+             "lr": self.training_params.optimizers.optimizer}]
+
+        milestones = [60, 120, 160]
+        self.optimizer = torch.optim.SGD(
+            self.parameters, momentum=0.9, weight_decay=self.nn_params.weight_decay
+        )
+        if self.training_params.cuda:
+            self.model = self.model.cuda()
+
+        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            self.optimizer, milestones=milestones, gamma=0.2
+        )
 
     def get_output_transform(self):
         return lambda x: x
@@ -144,3 +134,18 @@ class BayesianMNIST(UncertainModel):
 
     def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
         return self.scheduler
+
+
+    def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+        return {
+            'loss' : lambda x : x
+        }
+    
+    def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+        return {
+            'accuracy' : self.get_output_transform(),
+            'loss' : lambda x : x
+        }
+
+    def prepare(self, batch_size: int) -> None:
+        return super().prepare(batch_size)

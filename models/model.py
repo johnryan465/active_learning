@@ -77,8 +77,8 @@ class ModelWrapper(ABC):
 # This is a model which we can sample from
 class UncertainModel(ModelWrapper):
     @abstractmethod
-    def sample(self, input: torch.tensor, samples: int):
+    def sample(self, input: torch.Tensor, samples: int) -> torch.Tensor:
         """
-        returns a pytorch test dataset
+        returns tensor with the number of samples requested from the model
         """
         pass

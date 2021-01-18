@@ -1,4 +1,7 @@
 from typing import Callable, Dict
+
+from numpy.core.numeric import flatnonzero
+from uncertainty.fixed_dropout import BayesianModule
 from gpytorch.lazy.lazy_tensor import delazify
 from models.model_params import GPParams, NNParams, TrainingParams
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
@@ -35,11 +38,9 @@ class vDUQ(UncertainModel):
         self.params = params
         self.reset(dataset)
 
-        
-
-
     # To prepare for a new batch we need to update the size of the dataset and update the
     # classes who depend on the size of the training set
+
     def prepare(self, batch_size : int):
         self.num_data += batch_size
         if self.seperate_optimizers:
@@ -200,8 +201,32 @@ class vDUQ(UncertainModel):
     def get_training_params(self):
         return self.params.training_params
 
-    def sample(self):
-        return None
+    # Depending on whether or not the feature extractor can be sampled from
+    # we need to sample from the feature extractor and the GP
+    # or just the GP
+    def sample(self, input : torch.Tensor, samples : int) -> torch.Tensor:
+        if isinstance(self.feature_extractor, BayesianModule):
+            # We need to sample the feature extractor and the GP
+            # We can either independently sample both
+            # Or sample the fe k times
+            # For each sample of the fe we sample the GP samples/k times
+            # Requires sample which is a composite and a ratio
+            fe_sampled = self.feature_extractor.forward(input, samples)
+            flat = BayesianModule.flatten_tensor(fe_sampled)
+            out = self.gp(flat)
+            flat = self.feature_extractor.forward(input)
+            out = self.model.gp(flat)
+            out = out.sample(torch.Size((1,)))
+            print(out)
+            out = out.permute(1,0,2)
+            return self.likelihood(out).probs
+        else:
+            flat = self.feature_extractor.forward(input)
+            out = self.model.gp(flat)
+            out = out.sample(torch.Size((samples,)))
+            out = out.permute(1,0,2)
+            return self.likelihood(out).probs
+
 
     def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
         return {

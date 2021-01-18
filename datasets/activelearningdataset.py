@@ -38,6 +38,10 @@ class ActiveLearningDataset(ABC):
     def get_name(self) -> DatasetName:
         pass
 
+    @abstractmethod
+    def get_pool_size(self) -> int:
+        pass
+
 
 
 
@@ -55,8 +59,8 @@ class DatasetWrapper(ABC):
             drop_last=True, num_workers=1)
 
         self.classes = train_dataset.classes
-
-        self.mask = torch.zeros((len(self.trainset)))
+        self.pool_size = len(self.trainset)
+        self.mask = torch.zeros(self.pool_size)
 
     def get_train(self):
         return torch.utils.data.DataLoader(
@@ -72,13 +76,20 @@ class DatasetWrapper(ABC):
         return torch.utils.data.DataLoader(
             self.trainset, batch_size=self.bs, num_workers=2,
             sampler=sampler.SubsetRandomSampler(
-                torch.nonzero(self.mask == 0, as_tuple=True)
+                torch.nonzero(self.mask == 0).squeeze()
             )
         )
 
+    # This method and related ones should take inputs in the range
+    # 0 - poolsize instead of 0 - dataset size
     def move(self, idxs: Indexes) -> None:
+        pool_idxs = torch.nonzero(self.mask == 0)
         for i in idxs:
-            self.mask[i] = 1
+            self.mask[pool_idxs[i]] = 1
+        self.pool_size -= len(idxs)
 
     def get_classes(self):
         return self.classes
+    
+    def get_pool_size(self):
+        return self.pool_size

@@ -44,8 +44,3 @@ class TrainingParams(ModelParams):
     batch_size : int
     model_index : int = 0
 
-@dataclass
-class vDUQParams(ModelParams):
-    training_params: TrainingParams
-    fe_params: NNParams
-    gp_params: GPParams
