@@ -20,8 +20,8 @@ import argparse
 
 use_cuda = torch.cuda.is_available()
 
-bs = 32
-epochs = 8
+bs = 512
+epochs = 500
 
 gp_params = GPParams(
     kernel = 'RBF',
@@ -74,16 +74,16 @@ if __name__ == "__main__":
         expr_config = IO.parseParams(ExperimentParams, json_str)
     else:
         expr_config = ExperimentParams(
-                model_params =  vDUQParams(
+                model_params =  BNNParams(
                     training_params=training_params,
-                    gp_params= gp_params,
+                    #gp_params= gp_params,
                     fe_params=nn_params
                 ),
                 method_params = BatchBALDParams(
-                    batch_size = bs,
-                    max_num_batches = 5,
-                    initial_size = bs*3,
-                    samples = 15,
+                    batch_size = 5,
+                    max_num_batches = 30,
+                    initial_size = 2,
+                    samples = 50,
                     use_cuda = True
                 ),
                 dataset_params = DatasetParams(

@@ -64,7 +64,7 @@ class DatasetWrapper(ABC):
 
     def get_train(self):
         return torch.utils.data.DataLoader(
-            self.trainset, batch_size=self.bs, num_workers=2 ,drop_last=False,
+            self.trainset, batch_size=self.bs, num_workers=1 ,drop_last=False,
             sampler=sampler.SubsetRandomSampler(
                 torch.nonzero(self.mask).squeeze())
         )
@@ -74,7 +74,7 @@ class DatasetWrapper(ABC):
 
     def get_pool(self) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
-            self.trainset, batch_size=self.bs, num_workers=2,
+            self.trainset, batch_size=self.bs, num_workers=1,
             sampler=sampler.SubsetRandomSampler(
                 torch.nonzero(self.mask == 0).squeeze()
             )
@@ -93,3 +93,29 @@ class DatasetWrapper(ABC):
     
     def get_pool_size(self):
         return self.pool_size
+
+class DatasetUtils:
+    @staticmethod
+    def balanced_init(dataset : ActiveLearningDataset, per_class : int):
+        num_classes = len(dataset.get_classes())
+        current_sample_idx = 0
+        collected_indexes = {}
+        indexes = []
+        completed_classes = 0
+        for i in range(0, num_classes):
+            collected_indexes[i] = 0
+
+        for _, y in dataset.get_pool():
+            for i in range(len(y)):
+                yi = y[i].item()
+                if collected_indexes[yi] < per_class:
+                    collected_indexes[yi] += 1
+                    if collected_indexes[yi] == per_class:
+                        completed_classes += 1
+
+                    indexes.append(current_sample_idx)
+
+                current_sample_idx += 1
+            if completed_classes == num_classes:
+                break
+        dataset.move(indexes)

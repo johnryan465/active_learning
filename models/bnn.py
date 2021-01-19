@@ -89,15 +89,8 @@ class BNN(UncertainModel):
             return s(x, y)
         return loss_fn
 
-    def sample(self, pool: torch.tensor, samples: int):
-        res = []
-        print(len(pool))
-        for (x, _) in pool:
-            if self.training_params.cuda:
-                x = x.cuda()
-            d = self.model(x, samples)
-            res.append(d)
-        return torch.cat(res, 0)
+    def sample(self, input: torch.tensor, samples: int):
+        return self.model(input, samples)
 
     def reset(self, dataset : ActiveLearningDataset) -> None:
         self.model = BNN.model_config[self.training_params.dataset][self.training_params.model_index](self.nn_params)

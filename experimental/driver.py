@@ -1,6 +1,7 @@
 from models.model import ModelWrapper
 from ignite.engine import Events, Engine
 from ignite.metrics import Accuracy, Average, Loss
+from ignite.handlers import EarlyStopping
 from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import *
 from ignite.utils import setup_logger
@@ -54,6 +55,14 @@ class Driver:
         test_loader = dataset.get_test()
         train_loader = dataset.get_train()
 
+        def score_fn(engine):
+            score = engine.state.metrics['accuracy']
+            return score
+
+        es_handler = EarlyStopping(patience=3, score_function=score_fn, trainer=trainer)
+        
+        evaluator.add_event_handler(Events.COMPLETED, es_handler)
+
         ts = time.time()
         tb_logger = TensorboardLogger(log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
 
@@ -73,15 +82,21 @@ class Driver:
             line = dict(trainer.state.metrics)
             line['epoch'] = trainer.state.epoch
             train_log_lines.append(line)
+
+            if scheduler is not None:
+                scheduler.step()
+
+
+        @trainer.on(Events.EPOCH_STARTED(every=3))
+        def eval_results(trainer):
             evaluator.run(test_loader)
             line = dict(evaluator.state.metrics)
             line['epoch'] = trainer.state.epoch
             test_log_lines.append(line)
-            if scheduler is not None:
-                scheduler.step()
 
         pbar = ProgressBar(dynamic_ncols=True)
         pbar.attach(trainer)
+        pbar.attach(evaluator)
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
 
