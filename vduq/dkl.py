@@ -1,4 +1,5 @@
 import math
+from uncertainty.fixed_dropout import BayesianModule
 import torch
 
 import gpytorch
@@ -21,19 +22,27 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
     # Following Bradshaw 2017
     # https://gist.github.com/john-bradshaw/e6784db56f8ae2cf13bb51eec51e9057
 
-    steps = 10
+    steps = 5
     idx = torch.randperm(len(train_dataset))[:1000].chunk(steps)
+    print(len(train_dataset))
+    print(idx)
     f_X_samples = []
+    uncertain_fe = isinstance(feature_extractor, BayesianModule)
 
     with torch.no_grad():
         for i in range(steps):
+            #print(train_dataset[0])
+            # print(i)
             X_sample = torch.stack([train_dataset[j][0] for j in idx[i]])
 
             if torch.cuda.is_available():
                 X_sample = X_sample.cuda()
                 feature_extractor = feature_extractor.cuda()
 
-            f_X_samples.append(feature_extractor(X_sample).cpu())
+            if uncertain_fe:
+                f_X_samples.append(feature_extractor(X_sample, 1).squeeze().cpu())
+            else:
+                f_X_samples.append(feature_extractor(X_sample).cpu())
 
     f_X_samples = torch.cat(f_X_samples)
 
@@ -46,12 +55,12 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
 
 
 def _get_initial_inducing_points(f_X_sample, n_inducing_points):
+    print(f_X_sample.shape)
     kmeans = cluster.MiniBatchKMeans(
         n_clusters=n_inducing_points, batch_size=n_inducing_points * 10
     )
     kmeans.fit(f_X_sample)
     initial_inducing_points = torch.from_numpy(kmeans.cluster_centers_)
-
     return initial_inducing_points
 
 
@@ -86,7 +95,7 @@ class GP(ApproximateGP):
         else:
             batch_shape = torch.Size([])
 
-        variational_distribution = gpytorch.variational.TrilNaturalVariationalDistribution(
+        variational_distribution = gpytorch.variational.NaturalVariationalDistribution(
             n_inducing_points, batch_shape=batch_shape
         )
 
@@ -156,8 +165,12 @@ class DKL_GP(gpytorch.Module):
         super().__init__()
 
         self.feature_extractor = feature_extractor
+        self.uncertain_fe = isinstance(feature_extractor, BayesianModule)
         self.gp = gp
 
     def forward(self, x):
-        features = self.feature_extractor(x)
+        if self.uncertain_fe:
+            features = self.feature_extractor(x, 1).squeeze()
+        else:
+            features = self.feature_extractor(x)
         return self.gp(features)

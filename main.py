@@ -20,8 +20,8 @@ import argparse
 
 use_cuda = torch.cuda.is_available()
 
-bs = 512
-epochs = 500
+bs = 64
+epochs = 3000
 
 gp_params = GPParams(
     kernel = 'RBF',
@@ -33,7 +33,7 @@ gp_params = GPParams(
 )
 
 nn_params = NNParams(
-    spectral_normalization = False,
+    spectral_normalization = True,
     dropout_rate = 0.0,
     coeff = 0.9,
     n_power_iterations = 1,
@@ -42,13 +42,13 @@ nn_params = NNParams(
 )
 
 opt_params = OptimizerParams(
-    optimizer = 0.01,
-    var_optimizer = 0.01
+    optimizer = 0.001,
+    var_optimizer = 0.001
 )
 
 training_params = TrainingParams(
     dataset = DatasetName.mnist,
-    model_index = 0,
+    model_index = 1,
     batch_size = bs,
     epochs = epochs,
     cuda = use_cuda,
@@ -74,9 +74,9 @@ if __name__ == "__main__":
         expr_config = IO.parseParams(ExperimentParams, json_str)
     else:
         expr_config = ExperimentParams(
-                model_params =  BNNParams(
+                model_params =  vDUQParams(
                     training_params=training_params,
-                    #gp_params= gp_params,
+                    gp_params= gp_params,
                     fe_params=nn_params
                 ),
                 method_params = BatchBALDParams(

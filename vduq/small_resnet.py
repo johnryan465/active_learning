@@ -1,3 +1,4 @@
+from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout, ConsistentMCDropout2d
 from models.model_params import NNParams
 from numpy.core import overrides
 import torch.nn as nn
@@ -37,6 +38,29 @@ class PTMNISTResNet(ResNet):
         self.fc = nn.Identity()
     def forward(self, x):
         return torch.softmax(super(PTMNISTResNet, self).forward(x), dim=-1)
+
+
+
+class BNNMNISTResNet(BayesianModule):
+    def __init__(self, params: NNParams):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
+        self.conv1_drop = ConsistentMCDropout2d()
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=5)
+        self.conv2_drop = ConsistentMCDropout2d()
+        self.fc1 = nn.Linear(1024, 128)
+        self.fc1_drop = ConsistentMCDropout()
+        self.fc2 = nn.Linear(128, 128)
+
+    def mc_forward_impl(self, input: torch.Tensor):
+        input = F.relu(F.max_pool2d(self.conv1_drop(self.conv1(input)), 2))
+        input = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(input)), 2))
+        input = input.view(-1, 1024)
+        input = F.relu(self.fc1_drop(self.fc1(input)))
+        input = self.fc2(input)
+        # input = F.log_softmax(input, dim=1)
+        return input
+
 
 class MNISTResNet(nn.Module):
     def __init__(
@@ -92,11 +116,11 @@ class MNISTResNet(nn.Module):
         self.wrapped_conv = wrapped_conv
 
 
-        nStages = [64, 64, 128, 256]
-        strides = [1, 1, 2, 2]
+        nStages = [64, 64, 128, 256, 512]
+        strides = [1, 2, 2, 2, 2]
         input_sizes = 32 // np.cumprod(strides)
 
-        n = 2 # layer_size
+        n = 1 # layer_size
         num_blocks = len(nStages)
         self.conv1 = self.wrapped_conv(
             input_sizes[0], channels, nStages[0], 7, strides[0], padding=3)
@@ -111,8 +135,9 @@ class MNISTResNet(nn.Module):
         for i in range(0, num_blocks - 1):
             self.layers.append(self._layer(nStages[i : i+2], n, strides[i+1], input_sizes[i+1]))
 
+        # print(self.layers)
         self.bn1 = self.wrapped_bn(nStages[num_blocks - 1])
-
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.num_classes = num_classes
         if num_classes is not None:
             self.linear = nn.Linear(nStages[num_blocks - 1], num_classes)
@@ -157,7 +182,7 @@ class MNISTResNet(nn.Module):
         for layer in self.layers:
             out = layer(out)
         out = F.relu(self.bn1(out))
-        out = F.avg_pool2d(out, 7)
+        out = self.avgpool(out)
         out = out.flatten(1)
 
         if self.num_classes is not None:

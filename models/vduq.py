@@ -9,7 +9,7 @@ from models.model import UncertainModel, ModelWrapper
 from models.model_params import ModelParams
 from vduq.dkl import GP, DKL_GP
 from vduq.wide_resnet import WideResNet
-from vduq.small_resnet import MNISTResNet, PTMNISTResNet, CIFARResNet
+from vduq.small_resnet import BNNMNISTResNet, MNISTResNet, PTMNISTResNet, CIFARResNet
 from vduq.dkl import initial_values_for_GP
 from gpytorch.mlls import VariationalELBO
 from gpytorch.likelihoods import SoftmaxLikelihood
@@ -18,6 +18,7 @@ from marshmallow_dataclass import dataclass
 
 import gpytorch
 import torch
+from torch.utils.data import TensorDataset
 
 
 @dataclass
@@ -29,7 +30,7 @@ class vDUQParams(ModelParams):
 
 class vDUQ(UncertainModel):
     fe_config = {
-        DatasetName.mnist : [MNISTResNet, PTMNISTResNet],
+        DatasetName.mnist: [MNISTResNet, PTMNISTResNet, BNNMNISTResNet],
         DatasetName.cifar10 : [CIFARResNet]
     }
     def __init__(self, params: vDUQParams, dataset: ActiveLearningDataset) -> None:
@@ -87,9 +88,9 @@ class vDUQ(UncertainModel):
             if self.seperate_optimizers:
                 ngd_optimizer.step()
             
-            #eig = torch.symeig(delazify(self.model.gp.covar_module(self.model.gp.inducing_points))).eigenvalues
-            # cond = eig.max() / eig.min()
-            return {'loss': elbo.item()} #, 'cond': cond, 'min': eig.min()}
+            eig = torch.symeig(delazify(self.model.gp.covar_module(self.model.gp.inducing_points))).eigenvalues
+            cond = eig.max() / eig.min()
+            return {'loss': elbo.item(), 'cond': cond, 'min': eig.min()}
         return step
 
     def get_output_transform(self):
@@ -132,8 +133,13 @@ class vDUQ(UncertainModel):
         # This allows us to compare various completely different architectures in a controlled way
         self.feature_extractor = vDUQ.fe_config[training_params.dataset][training_params.model_index](fe_params)
 
+        dataset_list = list(iter(train_dataset))
+
+        x_ = torch.cat([x[0] for x in dataset_list])
+        y_ = torch.cat([x[1] for x in dataset_list])
+        # print(dataset_list)
         init_inducing_points, init_lengthscale = initial_values_for_GP(
-            train_dataset.dataset, self.feature_extractor,
+            TensorDataset(x_, y_), self.feature_extractor,
             gp_params.n_inducing_points
         )
 
@@ -188,7 +194,7 @@ class vDUQ(UncertainModel):
         milestones = [60, 120, 160]
 
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=milestones, gamma=0.2
+            self.optimizer, milestones=milestones, gamma=1
         )
 
         
@@ -213,11 +219,11 @@ class vDUQ(UncertainModel):
             # Requires sample which is a composite and a ratio
             fe_sampled = self.feature_extractor.forward(input, samples)
             flat = BayesianModule.flatten_tensor(fe_sampled)
-            out = self.gp(flat)
-            flat = self.feature_extractor.forward(input)
             out = self.model.gp(flat)
+            #flat = self.feature_extractor.forward(input)
+            #out = self.model.gp(flat)
             out = out.sample(torch.Size((1,)))
-            print(out)
+            # print(out)
             out = out.permute(1,0,2)
             return self.likelihood(out).probs
         else:
@@ -230,8 +236,8 @@ class vDUQ(UncertainModel):
 
     def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
         return {
-            #'cond': lambda x : x['cond'],
-            #'min' : lambda x : x['min'],
+            'cond': lambda x : x['cond'],
+            'min' : lambda x : x['min'],
             'loss' : lambda x : x['loss'] 
         }
     

@@ -59,12 +59,12 @@ class Driver:
             score = engine.state.metrics['accuracy']
             return score
 
-        es_handler = EarlyStopping(patience=3, score_function=score_fn, trainer=trainer)
+        es_handler = EarlyStopping(patience=500, score_function=score_fn, trainer=trainer)
         
         evaluator.add_event_handler(Events.COMPLETED, es_handler)
 
         ts = time.time()
-        tb_logger = TensorboardLogger(log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
+        tb_logger = TensorboardLogger(flush_secs = 1, log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
 
         for stage, engine in engines.items():
             tb_logger.attach_output_handler(
@@ -87,7 +87,7 @@ class Driver:
                 scheduler.step()
 
 
-        @trainer.on(Events.EPOCH_STARTED(every=3))
+        @trainer.on(Events.EPOCH_STARTED(every=10))
         def eval_results(trainer):
             evaluator.run(test_loader)
             line = dict(evaluator.state.metrics)

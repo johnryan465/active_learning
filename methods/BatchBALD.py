@@ -36,6 +36,7 @@ class BatchBALD(UncertainMethod):
             probs.append(probs_)
         
         probs = torch.cat(probs, dim=0)
+        print(probs.shape)
         batch = get_batchbald_batch(probs, self.params.batch_size, self.params.samples)
         dataset.move(batch.indices)
         self.current_batch += 1
