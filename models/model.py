@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datasets.activelearningdataset import ActiveLearningDataset
 from types import FunctionType
 from typing import Callable, Dict
-
+from enum import Enum
 import torch
 
 
@@ -83,3 +83,9 @@ class UncertainModel(ModelWrapper):
         returns tensor with the number of samples requested from the model
         """
         pass
+
+
+class ModelName(str, Enum):
+    bnn = 'bnn'
+    vduq = 'vduq'
+    dnn = 'dnn'

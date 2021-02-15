@@ -1,7 +1,14 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 
-from models.model import ModelWrapper
+from models.model import ModelWrapper, UncertainModel
 from datasets.activelearningdataset import ActiveLearningDataset
+
+
+class MethodName(str, Enum):
+    batchbald = 'batchbald'
+    bald = 'bald'
+    random = 'random'
 
 
 class Method(ABC):
@@ -30,4 +37,6 @@ class Method(ABC):
 # A type of method which requires a model which can output
 # with uncertainty
 class UncertainMethod(Method):
-    pass
+    @abstractmethod
+    def acquire(self, model: UncertainModel, dataset: ActiveLearningDataset) -> None:
+        pass

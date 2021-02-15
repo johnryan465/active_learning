@@ -5,6 +5,12 @@ from params.params import Params
 import os.path
 import json
 import csv
+from ignite.metrics.loss import Loss
+from typing import Callable, Dict, Sequence, Tuple, Union, cast
+
+import torch
+
+from ignite.metrics.metric import reinit__is_reduced
 
 
 class IO:
@@ -53,3 +59,32 @@ class IO:
             dict_writer = csv.DictWriter(output_file, keys)
             dict_writer.writeheader()
             dict_writer.writerows(dic)
+
+
+# We now cant use the default loss in ignite as it attempts to detach within the the update
+# function, meaning we can't simply pass in a Distribuiton as our prediction.
+class VariationalLoss(Loss):
+    def __init__(
+        self,
+        loss_fn: Callable,
+        output_transform: Callable = lambda x: x,
+        batch_size: Callable = lambda x: len(x),
+        device: Union[str, torch.device] = torch.device("cpu"),
+    ):
+        super(VariationalLoss, self).__init__(loss_fn, output_transform, batch_size, device)
+
+    @reinit__is_reduced
+    def update(self, output: Sequence[Union[torch.Tensor, Dict]]) -> None:
+        if len(output) == 2:
+            y_pred, y = cast(Tuple[torch.Tensor, torch.Tensor], output)
+            kwargs = {}  # type: Dict
+        else:
+            y_pred, y, kwargs = cast(Tuple[torch.Tensor, torch.Tensor, Dict], output)
+        average_loss = self._loss_fn(y_pred, y.detach(), **kwargs)
+
+        if len(average_loss.shape) != 0:
+            raise ValueError("loss_fn did not return the average loss.")
+
+        n = self._batch_size(y)
+        self._sum += average_loss.to(self._device) * n
+        self._num_examples += n

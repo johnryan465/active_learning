@@ -1,6 +1,8 @@
 from types import FunctionType
 
-from models.model_params import NNParams, TrainingParams, ModelParams
+from models.model_params import NNParams, ModelWrapperParams
+from datasets.activelearningdataset import DatasetName
+from models.training import TrainingParams
 from .model import ModelWrapper
 
 import torch
@@ -11,23 +13,23 @@ from marshmallow_dataclass import dataclass
 
 
 @dataclass
-class DNNParams(ModelParams):
-    training_params: TrainingParams
+class DNNParams(ModelWrapperParams):
     nn_params: NNParams
 
 
 class DNN(ModelWrapper):
-    def __init__(self, params: DNNParams) -> None:
+    def __init__(self, params: DNNParams, training_params: TrainingParams) -> None:
         super().__init__()
         self.params = params
-        if params.training_params.dataset == "MNIST":
+        self.training_params = training_params
+        if training_params.dataset == DatasetName.mnist:
             self.model = MNISTNet()
-        elif params.training_params.dataset == "CIFAR10":
+        elif training_params.dataset == DatasetName.cifar10:
             self.model = CIFAR10Net()
         else:
             raise ValueError('Unsupported Dataset')
 
-        if self.params.training_params.cuda:
+        if training_params.cuda:
             self.model = self.model.cuda()
 
         self.paramaters = [{"params": self.model.parameters(), "lr": 0.001}]
@@ -53,7 +55,7 @@ class DNN(ModelWrapper):
         pass
 
     def get_training_params(self) -> TrainingParams:
-        return self.params.training_params
+        return self.training_params
 
     def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
         return None
@@ -63,7 +65,7 @@ class DNN(ModelWrapper):
             self.model.eval()
 
             x, y = batch
-            if self.params.training_params.cuda:
+            if self.training_params.cuda:
                 x, y = x.cuda(), y.cuda()
 
             with torch.no_grad():
@@ -80,7 +82,7 @@ class DNN(ModelWrapper):
 
             optimizer.zero_grad()
             x, y = batch
-            if self.params.training_params.cuda:
+            if self.training_params.cuda:
                 x, y = x.cuda(), y.cuda()
 
             y_pred = self.model(x)

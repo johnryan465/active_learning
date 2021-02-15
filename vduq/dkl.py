@@ -10,7 +10,6 @@ from gpytorch.models import ApproximateGP
 from gpytorch.priors import SmoothedBoxPrior
 
 from gpytorch.variational import (
-    CholeskyVariationalDistribution,
     IndependentMultitaskVariationalStrategy,
     VariationalStrategy,
 )
@@ -24,15 +23,11 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
 
     steps = 5
     idx = torch.randperm(len(train_dataset))[:1000].chunk(steps)
-    print(len(train_dataset))
-    print(idx)
     f_X_samples = []
     uncertain_fe = isinstance(feature_extractor, BayesianModule)
 
     with torch.no_grad():
         for i in range(steps):
-            #print(train_dataset[0])
-            # print(i)
             X_sample = torch.stack([train_dataset[j][0] for j in idx[i]])
 
             if torch.cuda.is_available():
@@ -55,7 +50,7 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
 
 
 def _get_initial_inducing_points(f_X_sample, n_inducing_points):
-    print(f_X_sample.shape)
+    # print(f_X_sample.shape)
     kmeans = cluster.MiniBatchKMeans(
         n_clusters=n_inducing_points, batch_size=n_inducing_points * 10
     )
@@ -95,7 +90,7 @@ class GP(ApproximateGP):
             batch_shape = torch.Size([num_outputs])
         else:
             batch_shape = torch.Size([])
-        
+
         if var_dist == "default":
             variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
                 n_inducing_points, batch_shape=batch_shape

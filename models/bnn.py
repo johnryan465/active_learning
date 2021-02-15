@@ -1,10 +1,12 @@
 from types import FunctionType
 from typing import Callable, Dict
-from models.model_params import NNParams, TrainingParams, ModelParams
+from models.model_params import NNParams, ModelWrapperParams
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.model import UncertainModel
 from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout2d
 from uncertainty.fixed_dropout import ConsistentMCDropout
+from models.training import TrainingParams
+
 
 import torch
 from torch import nn as nn
@@ -34,8 +36,7 @@ class BayesianMNIST(BayesianModule):
 
 
 @dataclass
-class BNNParams(ModelParams):
-    training_params: TrainingParams
+class BNNParams(ModelWrapperParams):
     fe_params: NNParams
 
 
@@ -45,10 +46,10 @@ class BNN(UncertainModel):
         DatasetName.cifar10: []
     }
 
-    def __init__(self, params: BNNParams, dataset: ActiveLearningDataset) -> None:
+    def __init__(self, params: BNNParams, training_params: TrainingParams, dataset: ActiveLearningDataset) -> None:
         super().__init__()
         self.nn_params = params.fe_params
-        self.training_params = params.training_params
+        self.training_params = training_params
         self.reset(dataset)
 
     def get_eval_step(self) -> FunctionType:
@@ -95,9 +96,9 @@ class BNN(UncertainModel):
     def reset(self, dataset: ActiveLearningDataset) -> None:
         self.model = BNN.model_config[self.training_params.dataset][self.training_params.model_index](self.nn_params)
 
-        self.parameters = [
-            {"params": self.model.parameters(),
-             "lr": self.training_params.optimizers.optimizer}]
+        self.parameters = [{
+            "params": self.model.parameters(),
+            "lr": self.training_params.optimizers.optimizer}]
 
         milestones = [60, 120, 160]
         self.optimizer = torch.optim.SGD(

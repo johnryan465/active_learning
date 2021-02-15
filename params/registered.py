@@ -4,7 +4,8 @@ from models.bnn import BNNParams
 from methods.BALD import BALDParams
 from datasets.dataset_params import DatasetParams
 from methods.random import RandomParams
-from models.model_params import GPParams, NNParams, OptimizerParams, TrainingParams
+from models.model_params import GPParams, NNParams
+from models.training import OptimizerParams, TrainingParams
 from models.vduq import vDUQParams
 
 

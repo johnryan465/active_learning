@@ -1,5 +1,4 @@
 from params.params import Params
-from datasets.activelearningdataset import DatasetName
 from marshmallow_dataclass import dataclass
 
 
@@ -10,6 +9,11 @@ class ModelParams(Params):
 
 
 @dataclass
+class ModelWrapperParams(ModelParams):
+    model_index: int
+
+
+@dataclass
 class GPParams(ModelParams):
     n_inducing_points: int
     num_classes: int
@@ -17,6 +21,7 @@ class GPParams(ModelParams):
     kernel: str
     ard: int
     lengthscale_prior: bool
+    distribution: str
 
 
 @dataclass
@@ -27,19 +32,3 @@ class NNParams(ModelParams):
     n_power_iterations: int
     batchnorm_momentum: float
     weight_decay: float
-
-
-@dataclass
-class OptimizerParams(ModelParams):
-    optimizer: float
-    var_optimizer: float = None
-
-
-@dataclass
-class TrainingParams(ModelParams):
-    epochs: int
-    dataset: DatasetName
-    cuda: bool
-    optimizers: OptimizerParams
-    batch_size: int
-    model_index: int = 0

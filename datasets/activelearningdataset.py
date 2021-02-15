@@ -56,7 +56,8 @@ class DatasetWrapper(ABC):
 
         self.test_loader = torch.utils.data.DataLoader(
             self.testset, batch_size=self.bs, shuffle=False,
-            drop_last=True, num_workers=1)
+            pin_memory=True,
+            drop_last=True, num_workers=0)
 
         self.classes = train_dataset.classes
         self.pool_size = len(self.trainset)
@@ -66,7 +67,8 @@ class DatasetWrapper(ABC):
         ts = torch.utils.data.Subset(
             self.trainset, torch.nonzero(self.mask != 0).squeeze())
         return torch.utils.data.DataLoader(
-            ts, batch_size=self.bs, num_workers=1, drop_last=False,
+            ts, batch_size=self.bs, num_workers=0, drop_last=False,
+            pin_memory=True,
             sampler=RandomFixedLengthSampler(ts, 40000)
         )
 
@@ -77,7 +79,7 @@ class DatasetWrapper(ABC):
         ts = torch.utils.data.Subset(
             self.trainset, torch.nonzero(self.mask == 0).squeeze())
         return torch.utils.data.DataLoader(
-            ts, batch_size=self.bs, num_workers=1, shuffle=True
+            ts, batch_size=self.bs, num_workers=0, shuffle=True, pin_memory=True
         )
 
     # This method and related ones should take inputs in the range

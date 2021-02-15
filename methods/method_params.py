@@ -4,4 +4,6 @@ from dataclasses import dataclass
 
 @dataclass
 class MethodParams(Params):
-    pass
+    aquisition_size: int
+    max_num_aquisitions: int
+    initial_size: int

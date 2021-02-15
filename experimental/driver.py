@@ -1,10 +1,10 @@
 from models.model import ModelWrapper
 from ignite.engine import Events, Engine
-from ignite.metrics import Accuracy, Average, Loss
+from ignite.metrics import Accuracy, Average
 from ignite.handlers import EarlyStopping
 from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import global_step_from_engine, TensorboardLogger
-from utils.config import IO
+from utils.config import IO, VariationalLoss
 
 from datasets.activelearningdataset import ActiveLearningDataset
 import time
@@ -41,13 +41,13 @@ class Driver:
                 metric = Average(output_transform=transform)
                 metric.attach(engine, name)
 
-        output_transform = metrics['validation']['accuracy']
+        output_transform = model_wrapper.get_output_transform()  # metrics['validation']['accuracy']
 
         metric = Accuracy(output_transform=output_transform)
         metric.attach(evaluator, "accuracy")
 
         loss_fn = model_wrapper.get_loss_fn()
-        metric = Loss(loss_fn)
+        metric = VariationalLoss(loss_fn)
         metric.attach(evaluator, "loss")
 
         test_loader = dataset.get_test()
@@ -57,17 +57,12 @@ class Driver:
             score = engine.state.metrics['accuracy']
             return score
 
-        es_handler = EarlyStopping(patience=3, score_function=score_fn, trainer=trainer)
-
-        evaluator.add_event_handler(Events.COMPLETED, es_handler)
+        if training_params.patience > 0:
+            es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
+            evaluator.add_event_handler(Events.COMPLETED, es_handler)
 
         ts = time.time()
         tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
-
-        images, labels = next(iter(dataset.get_train()))
-
-        for i in range(0, images.shape[0]):
-            tb_logger.writer.add_image("dataset_" + str(i), images[i])
 
         for stage, engine in engines.items():
             tb_logger.attach_output_handler(
