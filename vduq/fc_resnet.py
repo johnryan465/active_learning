@@ -20,7 +20,7 @@ class FCResNet(nn.Module):
         super().__init__()
         """
         ResFNN architecture
-  
+
         Introduced in SNGP: https://arxiv.org/abs/2006.10108
         """
         self.first = nn.Linear(input_dim, features)

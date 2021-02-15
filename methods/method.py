@@ -27,7 +27,7 @@ class Method(ABC):
         pass
 
 
-# A type of method which requires a model which can output 
+# A type of method which requires a model which can output
 # with uncertainty
 class UncertainMethod(Method):
     pass

@@ -3,12 +3,12 @@ from ignite.engine import Events, Engine
 from ignite.metrics import Accuracy, Average, Loss
 from ignite.handlers import EarlyStopping
 from ignite.contrib.handlers import ProgressBar
-from ignite.contrib.handlers.tensorboard_logger import *
-from ignite.utils import setup_logger
+from ignite.contrib.handlers.tensorboard_logger import global_step_from_engine, TensorboardLogger
 from utils.config import IO
 
 from datasets.activelearningdataset import ActiveLearningDataset
 import time
+
 
 class Driver:
     @staticmethod
@@ -23,15 +23,15 @@ class Driver:
 
         trainer = Engine(train_step)
         evaluator = Engine(eval_step)
-        
+
         metrics = {
-            "training" : model_wrapper.get_training_log_hooks(),
-            "validation" :  model_wrapper.get_test_log_hooks()
+            "training": model_wrapper.get_training_log_hooks(),
+            "validation":  model_wrapper.get_test_log_hooks()
         }
 
         engines = {
-            "training" : trainer,
-            "validation" : evaluator
+            "training": trainer,
+            "validation": evaluator
         }
 
         for stage, engine in engines.items():
@@ -41,7 +41,6 @@ class Driver:
                 metric = Average(output_transform=transform)
                 metric.attach(engine, name)
 
-        
         output_transform = metrics['validation']['accuracy']
 
         metric = Accuracy(output_transform=output_transform)
@@ -51,7 +50,6 @@ class Driver:
         metric = Loss(loss_fn)
         metric.attach(evaluator, "loss")
 
-
         test_loader = dataset.get_test()
         train_loader = dataset.get_train()
 
@@ -59,12 +57,17 @@ class Driver:
             score = engine.state.metrics['accuracy']
             return score
 
-        es_handler = EarlyStopping(patience=500, score_function=score_fn, trainer=trainer)
-        
+        es_handler = EarlyStopping(patience=3, score_function=score_fn, trainer=trainer)
+
         evaluator.add_event_handler(Events.COMPLETED, es_handler)
 
         ts = time.time()
-        tb_logger = TensorboardLogger(flush_secs = 1, log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
+        tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
+
+        images, labels = next(iter(dataset.get_train()))
+
+        for i in range(0, images.shape[0]):
+            tb_logger.writer.add_image("dataset_" + str(i), images[i])
 
         for stage, engine in engines.items():
             tb_logger.attach_output_handler(
@@ -77,6 +80,7 @@ class Driver:
 
         train_log_lines = []
         test_log_lines = []
+
         @trainer.on(Events.EPOCH_COMPLETED)
         def log_results(trainer):
             line = dict(trainer.state.metrics)
@@ -86,8 +90,7 @@ class Driver:
             if scheduler is not None:
                 scheduler.step()
 
-
-        @trainer.on(Events.EPOCH_STARTED(every=10))
+        @trainer.on(Events.EPOCH_COMPLETED)
         def eval_results(trainer):
             evaluator.run(test_loader)
             line = dict(evaluator.state.metrics)

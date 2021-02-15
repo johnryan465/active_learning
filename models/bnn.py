@@ -12,9 +12,8 @@ from torch.nn import functional as F
 from dataclasses import dataclass
 
 
-
 class BayesianMNIST(BayesianModule):
-    def __init__(self, params:NNParams):
+    def __init__(self, params: NNParams):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
         self.conv1_drop = ConsistentMCDropout2d()
@@ -34,18 +33,19 @@ class BayesianMNIST(BayesianModule):
         return input
 
 
-
 @dataclass
 class BNNParams(ModelParams):
     training_params: TrainingParams
     fe_params: NNParams
 
+
 class BNN(UncertainModel):
     model_config = {
-        DatasetName.mnist : [BayesianMNIST],
-        DatasetName.cifar10 : []
+        DatasetName.mnist: [BayesianMNIST],
+        DatasetName.cifar10: []
     }
-    def __init__(self, params: BNNParams, dataset : ActiveLearningDataset) -> None:
+
+    def __init__(self, params: BNNParams, dataset: ActiveLearningDataset) -> None:
         super().__init__()
         self.nn_params = params.fe_params
         self.training_params = params.training_params
@@ -92,7 +92,7 @@ class BNN(UncertainModel):
     def sample(self, input: torch.tensor, samples: int):
         return self.model(input, samples)
 
-    def reset(self, dataset : ActiveLearningDataset) -> None:
+    def reset(self, dataset: ActiveLearningDataset) -> None:
         self.model = BNN.model_config[self.training_params.dataset][self.training_params.model_index](self.nn_params)
 
         self.parameters = [
@@ -128,16 +128,15 @@ class BNN(UncertainModel):
     def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
         return self.scheduler
 
-
     def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
         return {
-            'loss' : lambda x : x
+            'loss': lambda x: x
         }
-    
+
     def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
         return {
-            'accuracy' : self.get_output_transform(),
-            'loss' : lambda x : x
+            'accuracy': self.get_output_transform(),
+            'loss': lambda x: x
         }
 
     def prepare(self, batch_size: int) -> None:

@@ -1,6 +1,6 @@
 from typing import Callable, Dict
 
-from numpy.core.numeric import flatnonzero
+
 from uncertainty.fixed_dropout import BayesianModule
 from gpytorch.lazy.lazy_tensor import delazify
 from models.model_params import GPParams, NNParams, TrainingParams
@@ -81,7 +81,8 @@ class vDUQ(UncertainModel):
             if self.params.training_params.cuda:
                 x, y = x.cuda(), y.cuda()
 
-            y_pred = self.model(x)
+            with gpytorch.settings.num_likelihood_samples(32):
+                y_pred = self.model(x)
             elbo = -self.elbo_fn(y_pred, y)
             elbo.backward()
             optimizer.step()
@@ -143,6 +144,10 @@ class vDUQ(UncertainModel):
             gp_params.n_inducing_points
         )
 
+        # The ability to use split optimizers in vDUQ for the variational parameters
+        self.seperate_optimizers = (
+            params.training_params.optimizers.var_optimizer is not None)
+
         gp = GP(
               num_outputs=gp_params.num_classes,
               initial_lengthscale=init_lengthscale,
@@ -151,6 +156,7 @@ class vDUQ(UncertainModel):
               kernel=gp_params.kernel,
               ard=gp_params.ard,
               lengthscale_prior=gp_params.lengthscale_prior,
+              var_dist="triangular" if self.seperate_optimizers else "default"
         )
 
         self.model = DKL_GP(self.feature_extractor, gp)
@@ -172,8 +178,7 @@ class vDUQ(UncertainModel):
             ), "lr": training_params.optimizers.optimizer},
         ]
 
-        # The ability to use split optimizers in vDUQ for the variational parameters 
-        self.seperate_optimizers = (params.training_params.optimizers.var_optimizer is not None)
+       
         if self.seperate_optimizers:
             self.ngd_parameters = [{
                 "params": self.model.gp.parameters(),

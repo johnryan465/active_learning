@@ -1,13 +1,10 @@
 from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout, ConsistentMCDropout2d
 from models.model_params import NNParams
-from numpy.core import overrides
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.spectral_norm import spectral_norm
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+
 
 from vduq.layers import spectral_norm_conv, spectral_norm_fc
 from vduq.layers import SpectralBatchNorm2d
@@ -18,7 +15,7 @@ import numpy as np
 
 
 class CIFARResNet(WideResNet):
-    def __init__(self, params : NNParams):
+    def __init__(self, params: NNParams):
         super(CIFARResNet, self).__init__(
             spectral_normalization=params.spectral_normalization,
             dropout_rate=params.dropout_rate,
@@ -31,14 +28,15 @@ class CIFARResNet(WideResNet):
 
 # A resnet for MNIST as a sanity check comparison to the custom one below
 
+
 class PTMNISTResNet(ResNet):
-    def __init__(self, params : NNParams):
+    def __init__(self, params: NNParams):
         super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=512)
         self.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.fc = nn.Identity()
+
     def forward(self, x):
         return torch.softmax(super(PTMNISTResNet, self).forward(x), dim=-1)
-
 
 
 class BNNMNISTResNet(BayesianModule):
@@ -63,12 +61,11 @@ class BNNMNISTResNet(BayesianModule):
 
 
 class MNISTResNet(nn.Module):
-    def __init__(
-            self, params : NNParams):
+    def __init__(self, params: NNParams):
         super().__init__()
-        channels=1
-        image_size=28
-        num_classes=None
+        channels = 1
+        image_size = 28
+        num_classes = None
 
         self.dropout_rate = params.dropout_rate
         self.image_size = image_size
@@ -115,25 +112,23 @@ class MNISTResNet(nn.Module):
 
         self.wrapped_conv = wrapped_conv
 
-
         nStages = [64, 64, 128, 256, 512]
         strides = [1, 2, 2, 2, 2]
         input_sizes = 32 // np.cumprod(strides)
 
-        n = 1 # layer_size
+        n = 1  # layer_size
         num_blocks = len(nStages)
         self.conv1 = self.wrapped_conv(
             input_sizes[0], channels, nStages[0], 7, strides[0], padding=3)
 
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-
         # "layers" are layers in the resnet sense, collections of blocks
         # Layers are connected together with convolutions which reduce the spatial dimensions
         self.layers = nn.ModuleList()
 
         for i in range(0, num_blocks - 1):
-            self.layers.append(self._layer(nStages[i : i+2], n, strides[i+1], input_sizes[i+1]))
+            self.layers.append(self._layer(nStages[i: i+2], n, strides[i+1], input_sizes[i+1]))
 
         # print(self.layers)
         self.bn1 = self.wrapped_bn(nStages[num_blocks - 1])

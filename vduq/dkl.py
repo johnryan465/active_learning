@@ -83,6 +83,7 @@ class GP(ApproximateGP):
         kernel="RBF",
         ard=None,
         lengthscale_prior=False,
+        var_dist="default"
     ):
         n_inducing_points = initial_inducing_points.shape[0]
         if separate_inducing_points:
@@ -94,10 +95,15 @@ class GP(ApproximateGP):
             batch_shape = torch.Size([num_outputs])
         else:
             batch_shape = torch.Size([])
-
-        variational_distribution = gpytorch.variational.NaturalVariationalDistribution(
-            n_inducing_points, batch_shape=batch_shape
-        )
+        
+        if var_dist == "default":
+            variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
+                n_inducing_points, batch_shape=batch_shape
+            )
+        else:
+            variational_distribution = gpytorch.variational.NaturalVariationalDistribution(
+                n_inducing_points, batch_shape=batch_shape
+            )
 
         variational_strategy = VariationalStrategy(
             self, initial_inducing_points, variational_distribution

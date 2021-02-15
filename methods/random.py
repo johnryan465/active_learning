@@ -7,15 +7,17 @@ from models.model import ModelWrapper
 from datasets.activelearningdataset import ActiveLearningDataset
 import random
 
+
 @dataclass
 class RandomParams(MethodParams):
-    batch_size : int
-    max_num_batches : int
-    initial_size : int
+    batch_size: int
+    max_num_batches: int
+    initial_size: int
+
 
 # This method simply aquires in a random order
 class Random(Method):
-    def __init__(self, params : RandomParams) -> None:
+    def __init__(self, params: RandomParams) -> None:
         super().__init__()
         self.batch_size = params.batch_size
         self.initial_size = params.initial_size

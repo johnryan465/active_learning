@@ -8,6 +8,6 @@ from dataclasses import dataclass
 
 @dataclass
 class ExperimentParams(Params):
-    model_params : ModelParams
-    method_params : MethodParams
-    dataset_params : DatasetParams
+    model_params: ModelParams
+    method_params: MethodParams
+    dataset_params: DatasetParams

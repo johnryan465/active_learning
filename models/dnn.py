@@ -1,7 +1,6 @@
 from types import FunctionType
 
 from models.model_params import NNParams, TrainingParams, ModelParams
-from datasets.activelearningdataset import ActiveLearningDataset
 from .model import ModelWrapper
 
 import torch
@@ -11,15 +10,10 @@ import torch.optim as optim
 from marshmallow_dataclass import dataclass
 
 
+@dataclass
 class DNNParams(ModelParams):
-    def __init__(self, training_params: TrainingParams,
-                 nn_params: NNParams) -> None:
-        super().__init__()
-        self.training_params = training_params
-        self.nn_params = nn_params
-
-    def toDict(self) -> str:
-        return self.__dict__
+    training_params: TrainingParams
+    nn_params: NNParams
 
 
 class DNN(ModelWrapper):
@@ -35,31 +29,30 @@ class DNN(ModelWrapper):
 
         if self.params.training_params.cuda:
             self.model = self.model.cuda()
-        
-        self.paramaters = [{"params":self.model.parameters(), "lr":0.001}]
+
+        self.paramaters = [{"params": self.model.parameters(), "lr": 0.001}]
         self.optimizer = optim.SGD(self.paramaters, momentum=0.9)
         self.loss_fn = nn.CrossEntropyLoss()
 
-
     def reset(self) -> None:
         self.net = CIFAR10Net()
-    
+
     def get_loss_fn(self):
         return self.loss_fn
 
     def get_optimizer(self) -> torch.optim.Optimizer:
         return self.optimizer
-    
+
     def get_model(self) -> torch.nn.Module:
         return self.model
 
     def get_model_params(self) -> dict:
         return self.params
-    
+
     def prepare(self, batch_size: int) -> None:
         pass
 
-    def get_training_params(self) ->  TrainingParams:
+    def get_training_params(self) -> TrainingParams:
         return self.params.training_params
 
     def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
@@ -81,6 +74,7 @@ class DNN(ModelWrapper):
 
     def get_train_step(self):
         optimizer = self.optimizer
+
         def step(engine, batch):
             self.model.train()
 
@@ -96,9 +90,9 @@ class DNN(ModelWrapper):
 
             return loss.item()
         return step
-    
+
     def get_output_transform(self):
-        return lambda x : x
+        return lambda x: x
 
 
 class CIFAR10Net(nn.Module):

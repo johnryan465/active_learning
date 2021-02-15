@@ -10,11 +10,11 @@ from models.vduq import vDUQParams
 
 class Registered:
     types = {
-        'ModelParams' : [vDUQParams, NNParams, GPParams, BNNParams],
-        'TrainingParams' : [TrainingParams],
-        'OptimizerParams' : [OptimizerParams],
-        'NNParams' : [NNParams],
-        'GPParams' : [GPParams],
-        'MethodParams' : [RandomParams, BALDParams, BatchBALDParams],
-        'DatasetParams' : [DatasetParams]
+        'ModelParams': [vDUQParams, NNParams, GPParams, BNNParams],
+        'TrainingParams': [TrainingParams],
+        'OptimizerParams': [OptimizerParams],
+        'NNParams': [NNParams],
+        'GPParams': [GPParams],
+        'MethodParams': [RandomParams, BALDParams, BatchBALDParams],
+        'DatasetParams': [DatasetParams]
     }

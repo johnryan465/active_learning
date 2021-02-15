@@ -8,21 +8,20 @@ from batchbald_redux.batchbald import get_batchbald_batch
 
 import torch
 from tqdm import tqdm
-from typing import List
 from dataclasses import dataclass
 
 
 @dataclass
 class BatchBALDParams(MethodParams):
-    batch_size : int
-    samples : int
-    max_num_batches : int
-    initial_size : int
-    use_cuda : bool
+    batch_size: int
+    samples: int
+    max_num_batches: int
+    initial_size: int
+    use_cuda: bool
 
 
 class BatchBALD(UncertainMethod):
-    def __init__(self, params : BatchBALDParams) -> None:
+    def __init__(self, params: BatchBALDParams) -> None:
         super().__init__()
         self.params = params
         self.current_batch = 0
@@ -34,7 +33,7 @@ class BatchBALD(UncertainMethod):
                 x = x.cuda()
             probs_ = model.sample(x, self.params.samples).detach().clone()
             probs.append(probs_)
-        
+
         probs = torch.cat(probs, dim=0)
         print(probs.shape)
         batch = get_batchbald_batch(probs, self.params.batch_size, self.params.samples)

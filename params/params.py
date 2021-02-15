@@ -2,6 +2,7 @@ from abc import ABC
 from typing import List
 from dataclasses import fields
 
+
 class Params(ABC):
     def export(self) -> dict:
         kwds = {"__name__": self.name()}
@@ -13,15 +14,13 @@ class Params(ABC):
                 a = a.export()
 
             kwds[field.name] = a
-        
+
         return kwds
 
     @classmethod
-    def options(cls : type) -> List[type]:
+    def options(cls: type) -> List[type]:
         return [cls]
-    
-    @classmethod
-    def name(cls : type) -> str:
-        return cls.__name__
 
-    
+    @classmethod
+    def name(cls: type) -> str:
+        return cls.__name__

@@ -2,13 +2,13 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import List
 import torch
-from torch.utils.data import sampler
-import numpy as np
+from batchbald_redux.active_learning import RandomFixedLengthSampler
 Indexes = List[int]
 
-class DatasetName(str,Enum):
-    cifar10='cifar10'
-    mnist='mnist'
+
+class DatasetName(str, Enum):
+    cifar10 = 'cifar10'
+    mnist = 'mnist'
 
 
 # Datasets which we want to be able to work with should implment this interface
@@ -43,12 +43,12 @@ class ActiveLearningDataset(ABC):
         pass
 
 
-
-
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
+
 class DatasetWrapper(ABC):
-    def __init__(self, train_dataset: torch.utils.data.Dataset, test_dataset: torch.utils.data.Dataset, batch_size: int) -> None:
+    def __init__(self, train_dataset: torch.utils.data.Dataset,
+                 test_dataset: torch.utils.data.Dataset, batch_size: int) -> None:
         super().__init__()
         self.bs = batch_size
         self.trainset = train_dataset
@@ -63,21 +63,21 @@ class DatasetWrapper(ABC):
         self.mask = torch.zeros(self.pool_size)
 
     def get_train(self):
+        ts = torch.utils.data.Subset(
+            self.trainset, torch.nonzero(self.mask != 0).squeeze())
         return torch.utils.data.DataLoader(
-            self.trainset, batch_size=self.bs, num_workers=1 ,drop_last=False,
-            sampler=sampler.SubsetRandomSampler(
-                torch.nonzero(self.mask).squeeze())
+            ts, batch_size=self.bs, num_workers=1, drop_last=False,
+            sampler=RandomFixedLengthSampler(ts, 40000)
         )
 
     def get_test(self):
         return self.test_loader
 
     def get_pool(self) -> torch.utils.data.DataLoader:
+        ts = torch.utils.data.Subset(
+            self.trainset, torch.nonzero(self.mask == 0).squeeze())
         return torch.utils.data.DataLoader(
-            self.trainset, batch_size=self.bs, num_workers=1,
-            sampler=sampler.SubsetRandomSampler(
-                torch.nonzero(self.mask == 0).squeeze()
-            )
+            ts, batch_size=self.bs, num_workers=1, shuffle=True
         )
 
     # This method and related ones should take inputs in the range
@@ -90,13 +90,14 @@ class DatasetWrapper(ABC):
 
     def get_classes(self):
         return self.classes
-    
+
     def get_pool_size(self):
         return self.pool_size
 
+
 class DatasetUtils:
     @staticmethod
-    def balanced_init(dataset : ActiveLearningDataset, per_class : int):
+    def balanced_init(dataset: ActiveLearningDataset, per_class: int):
         num_classes = len(dataset.get_classes())
         current_sample_idx = 0
         collected_indexes = {}

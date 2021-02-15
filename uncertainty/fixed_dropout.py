@@ -47,7 +47,6 @@ class _ConsistentMCDropout(Module):
         if p < 0 or p > 1:
             raise ValueError("dropout probability has to be between 0 and 1, "
                              + "but got {}".format(p))
-            
         self.p = p
         self.mask = None
 
