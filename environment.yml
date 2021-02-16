@@ -13,6 +13,7 @@ dependencies:
   - marshmallow-dataclass
   - scikit-learn
   - ignite
+  - requests
   - pip
   - pip:
     - toma
