@@ -12,6 +12,7 @@ dependencies:
   - torchvision
   - marshmallow-dataclass
   - scikit-learn
+  - ignite
   - pip
   - pip:
     - toma
