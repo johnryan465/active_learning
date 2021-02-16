@@ -13,7 +13,7 @@ def training_function(config):
     lr, dropout = config["lr"], config["dropout"]
     args = Namespace(
         aquisition_size=5, batch_size=64, dataset=DatasetName.mnist, description='BatchBALD vDUQ', dropout=dropout,
-        epochs=100, initial_per_class=2, lr=lr, method='batchbald', model='vduq', model_index=0, name='vduq_bb_0.001',
+        epochs=100, initial_per_class=2, lr=lr, method='batchbald', model='vduq', model_index=0, name='vduq_bb_tuning',
         num_aquisitions=1, power_iter=1, spectral_norm=True)
 
     dataset_params = parse_dataset(args)
