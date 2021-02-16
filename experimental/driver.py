@@ -91,7 +91,6 @@ class Driver:
             evaluator.run(test_loader)
             line = dict(evaluator.state.metrics)
             line['epoch'] = trainer.state.epoch
-            tune.report(iteration=line['epoch'], mean_loss=line['loss'], accuracy=line['accuracy'])
             test_log_lines.append(line)
 
         pbar = ProgressBar(dynamic_ncols=True)
@@ -99,6 +98,7 @@ class Driver:
         pbar.attach(evaluator)
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
+        tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
 
         IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
         IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')

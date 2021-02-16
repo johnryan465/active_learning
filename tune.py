@@ -11,10 +11,11 @@ from argparse import Namespace
 def training_function(config):
     # Hyperparameters
     lr, dropout = config["lr"], config["dropout"]
+    method = config["method"]
     args = Namespace(
         aquisition_size=5, batch_size=64, dataset=DatasetName.mnist, description='BatchBALD vDUQ', dropout=dropout,
-        epochs=100, initial_per_class=2, lr=lr, method='batchbald', model='vduq', model_index=0, name='vduq_bb_tuning',
-        num_aquisitions=1, power_iter=1, spectral_norm=True)
+        epochs=500, initial_per_class=2, lr=lr, method=method, model='vduq', model_index=0, name='vduq_bb_tuning',
+        num_aquisitions=10, power_iter=1, spectral_norm=True)
 
     dataset_params = parse_dataset(args)
     method_params = parse_method(args)
@@ -43,7 +44,8 @@ if __name__ == "__main__":
         resources_per_trial={'gpu': 1},
         config={
             "lr": tune.grid_search([0.001, 0.01, 0.1]),
-            "dropout": tune.grid_search([0.1, 0.3, 0.5, 0.7])
+            "dropout": tune.grid_search([0.1, 0.3, 0.5, 0.7]),
+            "method": tune.choice(["random", "batchbald", "bald"])
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
