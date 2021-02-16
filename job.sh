@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --cpus-per-task=10
+#SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --job-name="active-learning"
 #SBATCH --partition=msc
