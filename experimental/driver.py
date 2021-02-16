@@ -8,6 +8,7 @@ from utils.config import IO, VariationalLoss
 
 from datasets.activelearningdataset import ActiveLearningDataset
 import time
+from ray import tune
 
 
 class Driver:
@@ -90,6 +91,7 @@ class Driver:
             evaluator.run(test_loader)
             line = dict(evaluator.state.metrics)
             line['epoch'] = trainer.state.epoch
+            tune.report(iteration=line['epoch'], mean_loss=line['loss'], accuracy=line['accuracy'])
             test_log_lines.append(line)
 
         pbar = ProgressBar(dynamic_ncols=True)

@@ -20,8 +20,8 @@ for i in range(0, 10):
     y2.append(csv["accuracy"].max())
 
 fig, ax = plt.subplots()
-ax.plot(x1, y1, label = "BB")
-ax.plot(x2, y2, label = "Random")
+ax.plot(x1, y1, label="BB")
+ax.plot(x2, y2, label="Random")
 ax.set_title('Dataset size vs accuracy')
 
 plt.savefig('comparision.png')

@@ -60,6 +60,13 @@ def init_parser() -> argparse.ArgumentParser:
     return parser
 
 
+"""
+These functions take an Argparser namespace and parse it into the internal configs we use
+
+This level of abstraction lets us keep the command line interface seperate from the configs
+"""
+
+
 def parse_dataset(args: dict) -> DatasetParams:
     # Setup the dataset config
     if args.dataset == DatasetName.mnist:
