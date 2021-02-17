@@ -30,6 +30,7 @@ class Experiment:
             experiment_params.training_params, self.dataset)
         self.name = name
         self.objective = objective
+        self.training_params = experiment_params.training_params
 
     @staticmethod
     def create_model(model_config: ModelParams, training_config: TrainingParams, dataset: ActiveLearningDataset) -> ModelWrapper:
@@ -64,7 +65,7 @@ class Experiment:
         iteration = 0
         while(not self.method.complete()):
             self.model.reset(self.dataset)
-            Driver.train(self.name, iteration, self.model, self.dataset)
+            Driver.train(self.name, iteration, self.training_params, self.model, self.dataset)
             self.method.acquire(self.model, self.dataset)
             self.model.prepare(self.bs)
             iteration = iteration + 1

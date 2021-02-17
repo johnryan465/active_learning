@@ -17,3 +17,4 @@ class TrainingParams(ModelParams):
     optimizers: OptimizerParams
     batch_size: int
     patience: int
+    progress_bar: bool

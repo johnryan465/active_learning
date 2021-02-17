@@ -33,6 +33,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument('--aquisition_size', default=5, type=int, required=True)
     parser.add_argument('--num_aquisitions', default=10, type=int)
     parser.add_argument('--initial_per_class', default=2, type=int)
+    parser.add_argument('--use_progress', default=True, type=bool)
 
     methods = ["batchbald", "bald", "random"]
     models = ["vduq", "bnn"]
@@ -53,6 +54,7 @@ def init_parser() -> argparse.ArgumentParser:
                 q.add_argument('--power_iter', default=1, type=int)
                 q.add_argument('--dropout', default=0.0, type=float)
                 q.add_argument('--lr', default=0.01, type=float)
+                q.add_argument('--coeff', default=3, type=float)
             else:
                 q.add_argument('--dropout', default=0, type=float)
         method_parsers[method] = p
@@ -95,8 +97,7 @@ def parse_method(args: dict) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=50,
-            use_cuda=use_cuda
+            samples=50
         )
     else:
         method_params = RandomParams(
@@ -122,8 +123,8 @@ def parse_model(args: dict) -> ModelParams:
 
         nn_params = NNParams(
             spectral_normalization=True,
-            dropout_rate=0.0,
-            coeff=3,
+            dropout_rate=args.dropout,
+            coeff=args.coeff,
             n_power_iterations=1,
             batchnorm_momentum=0.01,
             weight_decay=5e-4,
@@ -138,7 +139,7 @@ def parse_model(args: dict) -> ModelParams:
         nn_params = NNParams(
             spectral_normalization=args.spectral_norm,
             dropout_rate=args.dropout,
-            coeff=3,
+            coeff=args.coeff,
             n_power_iterations=args.power_iter,
             batchnorm_momentum=0.01,
             weight_decay=5e-4,
@@ -164,6 +165,7 @@ def parse_training(args: dict) -> TrainingParams:
         epochs=args.epochs,
         cuda=use_cuda,
         optimizers=opt_params,
-        patience=3
+        patience=3,
+        progress_bar=args.use_progress
     )
     return training_params

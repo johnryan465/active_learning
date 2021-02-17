@@ -5,6 +5,7 @@ from ignite.handlers import EarlyStopping
 from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import global_step_from_engine, TensorboardLogger
 from utils.config import IO, VariationalLoss
+from models.training import TrainingParams
 
 from datasets.activelearningdataset import ActiveLearningDataset
 import time
@@ -13,7 +14,7 @@ from ray import tune
 
 class Driver:
     @staticmethod
-    def train(exp_name: str, iteration: int, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset):
+    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset):
         training_params = model_wrapper.get_training_params()
 
         optimizer = model_wrapper.get_optimizer()
@@ -93,9 +94,10 @@ class Driver:
             line['epoch'] = trainer.state.epoch
             test_log_lines.append(line)
 
-        pbar = ProgressBar(dynamic_ncols=True)
-        pbar.attach(trainer)
-        pbar.attach(evaluator)
+        if training_params.progress_bar:
+            pbar = ProgressBar(dynamic_ncols=True)
+            pbar.attach(trainer)
+            pbar.attach(evaluator)
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
         tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])

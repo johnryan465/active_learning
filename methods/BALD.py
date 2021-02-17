@@ -5,6 +5,7 @@ from datasets.activelearningdataset import ActiveLearningDataset
 from methods.method import UncertainMethod
 from methods.method_params import MethodParams
 from batchbald_redux.batchbald import get_bald_batch
+from datasets.activelearningdataset import DatasetUtils
 import torch
 
 
@@ -28,12 +29,12 @@ class BALD(UncertainMethod):
             probs.append(probs_)
 
         probs = torch.cat(probs, dim=0)
-        idxs = get_bald_batch(probs, self.params.batch_size)
+        idxs = get_bald_batch(probs, self.params.aquisition_size)
         dataset.move(idxs)
         self.current_aquisition += 1
 
     def initialise(self, dataset: ActiveLearningDataset) -> None:
-        dataset.move([i for i in range(0, self.params.initial_size)])
+        DatasetUtils.balanced_init(dataset, self.params.initial_size)
 
     def complete(self) -> bool:
         return self.current_aquisition >= self.params.max_num_aquisitions
