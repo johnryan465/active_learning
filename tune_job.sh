@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --job-name="active-learning-tunning"
 #SBATCH --partition=msc_preemptable
 export CONDA_ENVS_PATH=/scratch/$USER/conda_envs

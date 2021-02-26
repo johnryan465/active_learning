@@ -29,8 +29,8 @@ class BALD(UncertainMethod):
             probs.append(probs_)
 
         probs = torch.cat(probs, dim=0)
-        idxs = get_bald_batch(probs, self.params.aquisition_size)
-        dataset.move(idxs)
+        batch = get_bald_batch(probs, self.params.aquisition_size)
+        dataset.move(batch.indices)
         self.current_aquisition += 1
 
     def initialise(self, dataset: ActiveLearningDataset) -> None:
