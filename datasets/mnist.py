@@ -11,11 +11,11 @@ class MNIST(DatasetWrapper):
                     transforms.Normalize((0.5), (0.5))])
 
         train_dataset = torchvision.datasets.MNIST(
-            root='./data', train=True, download=True,
+            root=config.path, train=True, download=True,
             transform=transform)
 
         test_dataset = torchvision.datasets.MNIST(
-            root='./data', train=False, download=True,
+            root=config.path, train=False, download=True,
             transform=transform)
         super().__init__(train_dataset, test_dataset, config.batch_size)
 

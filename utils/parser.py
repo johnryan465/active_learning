@@ -34,6 +34,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument('--num_aquisitions', default=10, type=int)
     parser.add_argument('--initial_per_class', default=2, type=int)
     parser.add_argument('--use_progress', default=True, type=bool)
+    parser.add_argument('--data_path', default="./data", type=str)
 
     methods = ["batchbald", "bald", "random"]
     models = ["vduq", "bnn"]
@@ -73,10 +74,12 @@ def parse_dataset(args: dict) -> DatasetParams:
     # Setup the dataset config
     if args.dataset == DatasetName.mnist:
         dataset_params = DatasetParams(
+            path=args.data_path,
             batch_size=args.batch_size
         )
     else:
         dataset_params = DatasetParams(
+            path=args.data_path,
             batch_size=args.batch_size
         )
     return dataset_params
