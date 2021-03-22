@@ -1,0 +1,202 @@
+\documentclass[12pt, a4paper]{report}
+\input{Packages.tex}
+\hypersetup{pdftitle = Thesis, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\pagestyle{fancy}
+\rhead{Christ Church}
+\chead{}
+\lhead{University of Oxford}
+\lfoot{\date{}}
+\cfoot{}
+\rfoot{\thepage}
+% Top and Bottom Line Rules
+\renewcommand{\headrulewidth}{0.4pt} %0.4pt
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyheadoffset{9pt}
+\fancyfootoffset{9pt}
+% Line spacing
+\renewcommand{\baselinestretch}{1.5} %1.5
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\date{}
+
+\title{Active Learning}
+\author{\\ \Large{John Ryan}
+\\ Christ Church
+\\
+\\
+\\
+\\ University of Oxford
+\\
+\\ \\
+Trinity 2021
+}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+% Adjust logo positions here
+\AddToShipoutPicture*{\BackgroundPicturea{Logos/logo2.png}{0.7in}{5.8in}}
+
+\thispagestyle{headings}
+	\maketitle
+\FloatBarrier
+\pagenumbering{roman}
+
+
+
+\thispagestyle{empty}
+\begin{abstract}
+
+Active Learning is an use
+
+\keywords{Keyword1 - Keyword2 - Keyword3}
+% \vspace{-10mm} %To remove added white space after
+\end{abstract}
+\tableofcontents
+\thispagestyle{plain}
+\listoffigures
+\listoftables
+
+\chapter*{List of Abbreviations}
+\begin{abbreviations}
+    \item[GP] Gaussian Process
+    \item[GPC] Gaussian Process Classification
+    \item[BALD] Bayesian Active Learning by Disagreement
+    \item[ELBO] Evidence Lower Bound
+    \item[ML] Machine Learning
+\end{abbreviations}
+
+\chapter{Introduction}
+\pagenumbering{arabic}
+\section{Motivation}
+
+Active Learning is an active area of Machine Learning where we are trying to select (unlabelled) data points in an attempt to maximise some objective.
+\section{Aim and Objectives}
+
+The aims of this report is to
+
+\begin{itemize}
+    \item Give an outline of the various methods for Active Learning which have been published
+    \item Compare these methods in a reproducible and standardised fashion
+    \item Extend and combine some of these approaches with other ML research to improve Active Learning performance in certain situations.
+\end{itemize}
+\section{Thesis Outline}
+The remainder of this report is organised as follows:
+\begin{itemize}
+    \item[] \textbf{Chapter} \hyperref[Chap2]{\textbf{2}} --- Defines active learning, and introduces the different active learning methods from the literature.
+    \item[] \textbf{Chapter} \hyperref[Chap3]{\textbf{3}} --- contains the performance of these methods compared
+    \item[] \textbf{Chapter} \hyperref[Chap4]{\textbf{4}} --- introduces Gaussian Process based models
+    \item[] \textbf{Chapter} \hyperref[Chap5]{\textbf{5}} --- Combines BatchBALD and GPC
+\end{itemize}
+
+
+\chapter{Active Learning Methods}
+\label{Chap2}
+
+In a common active learning formulation we have the following setup.
+
+\begin{itemize}
+    \item $X_{pool}$ this is the distribution of the dataset which we have to work with in our data pool.
+    \item $X_{true}$ this is the true real world distribution.
+\end{itemize}
+
+A common (and sensible) assumption is to assume that these distributions are the same.
+
+Our machine learning models which we use to model a problem constrain the set of possible functions which we can represent and learn, this is how we imbue the problem with our prior beliefs about the nature of the problem.
+
+- There are hard constraints (eg clipping the output of the model), which even given an unlimited amount of data our model can not possibly "learn around"
+- There are softer constraints (priors over weights in a layer), which our model should be able to learn correctly given sufficient new data even if our prior is poor*.
+
+This paramaterisaton of our models is very important, this is an assumption we are making about our problem.
+
+An important observation is that the dataset we are using for training is (unless performing very simple active learning approaches eg random acquisition) not going to be the same as the true dataset which we are working with. 
+
+This violates a very common assumption that we assume for convergence in many ML methods, and is something worth keeping in mind. This statistical bias is looked at in the following paper \cite{farquhar2021statistical}.
+
+
+When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over paramatised to begin with become even more so, this can lead to training issues.
+
+\section{}
+\subsection{Random}
+\subsection{}
+\section{Uncertainty}
+\subsection{Entropy}
+\subsection{BALD}
+Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian}.
+
+$${\arg\,\max}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
+
+$${\arg\,\max}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
+
+However when using BALD to select multiple datapoints, (acquiring a batch of new datapoints before retraining the model has some issues as the amount of information we are obtaining is sub-optimal due to overlap in information content.).
+\subsection{BatchBALD}
+BatchBALD \cite{kirsch2019batchbald}, is a modification of BALD in which we are able to take the 
+
+\chapter{Performance}
+\label{Chap3}
+We can cite an article as an example \cite{kirsch2019batchbald}. 
+
+
+\chapter{Gaussian Process Based Models}
+\label{Chap4}
+
+Gaussian Processes are a powerful statistical model which 
+
+
+\section{Gaussian Process Classification}
+
+The link function between the latent function (our GP) and the output of our classifier is again another parameter of the model.
+
+\subsection{Logit}
+
+The logit is the standard link function for the vast majority of GPC use cases. The use of the logit implicitly makes our GPC model obey the independence of irrelevant alternatives axiom from decision theory. 
+
+
+\subsection{Probit}
+
+
+
+\section{vDUQ / DUE}
+
+\cite{vanamersfoort2020uncertainty}
+
+\chapter{Combination}
+\label{Chap5}
+
+If we use Probit as our link function the joint entropy can be computed exactly (unlike in the general case), however the complexity of this exact computation is very high.
+
+To perform exact inference of the probit of a Gaussian Classifier we must perform integration of a Gaussian.
+
+We wish to find the probability that a certain element of a MVN is the largest element. This corresponds to integrating the Gaussian over the subset of the space where this coordinate is the largest.
+
+$$P(X_C > X_1 \land \ldots \land X_C > X_n) = \int_{x_c \in \{ -\infty, \infty \} } \ldots \int_{x_n \in \{ -\infty , x_c \}} p(x) dx$$
+
+This can be interpreted as integrating on one side of several hyperplanes.
+
+These planes are of the form $x_c = x_i$
+
+With the linear transformation of $T = I - e_c 1^T$ we get to transform this integral.
+
+$Z = TX$.
+
+$Z \sim N(T \mu, T \Sigma T^T)$
+
+We drop the original index (as we are marginalising over it) and it is degenerate. We could alternatively make T a projection into a c-1 dimensional subspace.
+
+If we are doing this over multiple datapoints, we can transform each of the subsets of variables via the method above.
+
+After performing this transformation we have a standard orthant integral which we can compute. Algorithms exist for computing this exactly in $O(p^2 2^p)$ using recursive integration and subspace projection. \cite{orthant}
+
+
+However the number of dimensions which we are performing this integration over is (number of variables) * (number of categories - 1). With the exponential complexity this an infeasible method of computation.
+
+\chapter{Methodology}
+\label{Chap6}
+
+\renewcommand{\bibname}{Bibliography}
+\bibliographystyle{apacite}
+\bibliography{Bibliography.bib}
+
+\begin{appendices}
+\chapter{Appendix Example}
+\end{appendices}
+
+\end{document}
