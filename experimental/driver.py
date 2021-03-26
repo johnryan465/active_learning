@@ -100,7 +100,7 @@ class Driver:
             pbar.attach(evaluator)
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
-        tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
+        # tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
 
         IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
         IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')

@@ -100,7 +100,7 @@ def parse_method(args: dict) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=50
+            samples=1
         )
     else:
         method_params = RandomParams(
@@ -112,7 +112,7 @@ def parse_method(args: dict) -> MethodParams:
 
 
 def parse_model(args: dict) -> ModelParams:
-    print(args)
+    # print(args)
     if args.model == ModelName.vduq:
         gp_params = GPParams(
             kernel='RBF',

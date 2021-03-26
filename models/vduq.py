@@ -231,6 +231,15 @@ class vDUQ(UncertainModel):
             out = out.permute(1, 0, 2)
             return self.likelihood(out).probs
 
+    def sample_gp(self, input: torch.Tensor, samples: int) -> torch.Tensor:
+        print(input.size())
+        print(self.model.gp.covar_module(input))
+        out = self.model.gp(input)
+        print(out)
+        #out = out.sample(torch.Size((samples,)))
+        #out = out.permute(1, 0, 2)
+        return self.likelihood(out).probs
+
     def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
         return {
             'cond': lambda x: x['cond'],

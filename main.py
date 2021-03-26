@@ -29,7 +29,7 @@ if __name__ == "__main__":
         )
 
         log = expr_config.export()
-        IO.dict_to_file(log, file_name)
+        # IO.dict_to_file(log, file_name)
 
     expr = Experiment(
         args.name,
