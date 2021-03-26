@@ -17,7 +17,7 @@ def create_training_function(path):
         dropout = config["dropout"]
         method = config["method"]
         coeff = config["coeff"]
-        aquisition
+        # aquisition
         args = Namespace(
             data_path=path,
             aquisition_size=3, batch_size=64, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
