@@ -21,9 +21,7 @@ class BatchBALDParams(MethodParams):
     samples: int
     use_cuda: bool
 
-
 # \sigma_{BatchBALD} ( {x_1, ..., x_n}, p(w)) = H(y_1, ..., y_n) - E_{p(w)} H(y | x, w)
-
 
 def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs) -> torch.tensor:
     # We need to compute
@@ -80,8 +78,8 @@ class BatchBALD(UncertainMethod):
                     x = x.cuda()
                 pool.append(model.feature_extractor.forward(x).detach().clone())
                 count = count + 1
-                if count > 5:
-                   break
+                # if count > 5:
+                #   break
 
             pool = torch.cat(pool, dim=0)
             # print(pool.shape)
@@ -100,7 +98,7 @@ class BatchBALD(UncertainMethod):
             dists = []
             for j in range(0, N):
                 x = (pool[j])[None, :,]
-                #mu_x = model.model.gp.mean_module(x)
+                # mu_x = model.model.gp.mean_module(x)
                 # k_xz = model.model.gp.covar_module(x, z).evaluate()
                 # k_xx = model.model.gp.covar_module(x, x).evaluate()
                 # a = torch.cat([k_zz, k_xz], dim=1)
@@ -123,8 +121,8 @@ class BatchBALD(UncertainMethod):
 
                 if i > 0:
                     z = pool[candidate_indices]
-                    #mu_z = model.model.gp.mean_module(z)
-                    #k_zz = model.model.gp.covar_module(z, z).evaluate()
+                    # mu_z = model.model.gp.mean_module(z)
+                    # k_zz = model.model.gp.covar_module(z, z).evaluate()
                     for j in range(0, N):
                         if(j % 50 == 0):
                             print(j)
