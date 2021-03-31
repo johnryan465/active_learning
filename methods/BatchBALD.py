@@ -33,17 +33,13 @@ def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples
         g = torch.einsum(s, *torch.unbind(l))
         g = torch.mean(g, dim=0)
         return -torch.sum(g * torch.log(g))
-    
     else:
         return torch.tensor(0)
 
 def compute_conditional_entropy_mvn(distributions: List[MultivariateNormal], likelihood, num_samples : int) -> torch.Tensor:
     log_probs_N_K_C = torch.stack([likelihood(distribution.sample(sample_shape=torch.Size([num_samples]))).logits for distribution in distributions], dim=0).squeeze()
-    # print(log_probs_N_K_C.shape)
     N, K, C = log_probs_N_K_C.shape
-
     entropies_N = torch.empty(N, dtype=torch.double)
-
     pbar = tqdm(total=N, desc="Conditional Entropy", leave=False)
 
     @toma.execute.chunked(log_probs_N_K_C, 1024)
@@ -70,7 +66,9 @@ class BatchBALD(UncertainMethod):
 
             # We instead need to repeatedly compute the updated probabilties for each aquisition
             pool = []
-            samples = 500
+
+            # From the 
+            samples = 100
             num_configs = 10
             count = 0
             for x, i in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
@@ -104,9 +102,10 @@ class BatchBALD(UncertainMethod):
                 # a = torch.cat([k_zz, k_xz], dim=1)
                 # b = torch.cat([torch.transpose(k_xz,1,2),k_xx], dim=1)
                 # k = torch.cat([a,b], dim=2)
-                k = model.model.gp.covar_module(x, x)
-                mu = model.model.gp.mean_module(x)
-                dists.append(MultivariateNormal(mu, k))
+                # k = model.model.gp.covar_module(x, x)
+                # mu = model.model.gp.mean_module(x)
+                # dists.append(MultivariateNormal(mu, k))
+                dists.append(model.model.gp(x))
 
 
             conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples)
@@ -137,15 +136,12 @@ class BatchBALD(UncertainMethod):
                             # a = torch.cat([k_zz, k_xz], dim=1)
                             # b = torch.cat([torch.transpose(k_xz,1,2),k_xx], dim=1)
                             # k = torch.cat([a,b], dim=2)
-                            k = model.model.gp.covar_module(r, r)
-                            mu = model.model.gp.mean_module(r)
-                            dist = MultivariateNormal(mu, k)
+                            # k = model.model.gp.covar_module(r, r)
+                            # mu = model.model.gp.mean_module(r)
+                            # dist = MultivariateNormal(mu, k)
+                            dist = model.model.gp(r)
                             joint_entropy_result[j] = joint_entropy_mvn(dist, model.likelihood, samples, num_configs)
                             
-
-                    # We have the descriptions of the joint gaussians which represents all the possible candidate batches
-                    # of the next size
-                    # candidate_indices.append(i)
                 else:
                     # @toma.execute.chunked(pool, 1024)
                     # def compute(pool, start: int, end: int):
@@ -160,7 +156,8 @@ class BatchBALD(UncertainMethod):
                         x = (pool[j])[None, :,]
                         mu_x = model.model.gp.mean_module(x)
                         k_xx = model.model.gp.covar_module(x, x)
-                        dist = MultivariateNormal(mu_x, k_xx)
+                        # dist = MultivariateNormal(mu_x, k_xx)
+                        dist = model.model.gp(x)
                         if(j % 50 == 0):
                             print(j)
                         joint_entropy_result[j] = joint_entropy_mvn(dist, model.likelihood, samples, num_configs)
