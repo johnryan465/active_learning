@@ -146,6 +146,8 @@ class BatchBALD(UncertainMethod):
             @toma.execute.chunked(pool, 256)
             def compute(pool, start: int, end: int):
                 with torch.no_grad():
+                    if torch.cuda.is_available():
+                        pool = pool.cuda()
                     d = model.model.gp(pool).to_data_independent_dist()
                     dists.append(d)
                 pbar.update(end - start)
@@ -175,6 +177,8 @@ class BatchBALD(UncertainMethod):
                     @toma.execute.chunked(grouped_pool, 256)
                     def compute(grouped_pool, start: int, end: int):
                         with torch.no_grad():
+                            if torch.cuda.is_available():
+                                grouped_pool = grouped_pool.cuda()
                             d = model.model.gp(grouped_pool)
                             dists.append(d)
                         pbar.update(end - start)
