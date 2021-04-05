@@ -154,7 +154,7 @@ class BatchBALD(UncertainMethod):
             pbar.close()
             
             dists = combine_mvns(dists).to_data_independent_dist()
-            conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples)
+            conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples).cpu()
             
             for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                 # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -208,7 +208,7 @@ class BatchBALD(UncertainMethod):
 
                 shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
-                scores_N = joint_entropy_result
+                scores_N = joint_entropy_result.cpu()
 
                 scores_N -= conditional_entropies_N + shared_conditinal_entropies
                 scores_N[candidate_indices] = -float("inf")
