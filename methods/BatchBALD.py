@@ -119,6 +119,8 @@ class BatchBALD(UncertainMethod):
             @toma.execute.chunked(inputs, 1024)
             def compute(inputs, start: int, end: int):
                 with torch.no_grad():
+                    if torch.cuda.is_available():
+                        inputs = inputs.cuda()
                     tmp = model.feature_extractor.forward(inputs).detach()
                     pool[start:end].copy_(tmp)
                 pbar.update(end - start)

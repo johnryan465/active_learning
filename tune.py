@@ -12,16 +12,18 @@ import uuid
 
 def create_training_function(path):
     def training_function(config):
+
         # Hyperparameters
         lr = config["lr"]
         dropout = config["dropout"]
         method = config["method"]
         coeff = config["coeff"]
+
         # aquisition
         args = Namespace(
             data_path=path,
             aquisition_size=3, batch_size=64, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
-            epochs=500, initial_per_class=2, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, name='vduq_bb_tuning',
+            epochs=1, initial_per_class=2, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, name='vduq_bb_tuning',
             num_aquisitions=100, power_iter=1, spectral_norm=True, coeff=coeff)
 
         dataset_params = parse_dataset(args)
@@ -48,7 +50,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run experiments for active learning")
     parser.add_argument('--data_path', default="./data", type=str)
     args = parser.parse_args()
-    ray.init(include_dashboard=False)
+    ray.init(include_dashboard=True)
     analysis = tune.run(
         create_training_function(args.data_path),
         resources_per_trial={'gpu': 1},
