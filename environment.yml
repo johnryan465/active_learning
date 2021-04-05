@@ -20,4 +20,4 @@ dependencies:
   - pip
   - pip:
     - toma
-    - batchbald_redux
+    - batchbald_redux==2.0.2
