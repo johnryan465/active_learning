@@ -45,8 +45,8 @@ class ActiveLearningDataset(ABC):
 
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
-
 class DatasetWrapper(ABC):
+    num_workers = 4
     def __init__(self, train_dataset: torch.utils.data.Dataset,
                  test_dataset: torch.utils.data.Dataset, batch_size: int) -> None:
         super().__init__()
@@ -57,7 +57,7 @@ class DatasetWrapper(ABC):
         self.test_loader = torch.utils.data.DataLoader(
             self.testset, batch_size=self.bs, shuffle=False,
             pin_memory=True,
-            drop_last=True, num_workers=0)
+            drop_last=True, num_workers=DatasetWrapper.num_workers)
 
         self.classes = train_dataset.classes
         self.pool_size = len(self.trainset)
@@ -67,7 +67,7 @@ class DatasetWrapper(ABC):
         ts = torch.utils.data.Subset(
             self.trainset, torch.nonzero(self.mask != 0).squeeze())
         return torch.utils.data.DataLoader(
-            ts, batch_size=self.bs, num_workers=0, drop_last=False,
+            ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, drop_last=False,
             pin_memory=True,
             sampler=RandomFixedLengthSampler(ts, 40000)
         )
@@ -79,7 +79,7 @@ class DatasetWrapper(ABC):
         ts = torch.utils.data.Subset(
             self.trainset, torch.nonzero(self.mask == 0).squeeze())
         return torch.utils.data.DataLoader(
-            ts, batch_size=self.bs, num_workers=0, shuffle=True, pin_memory=True
+            ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, shuffle=True, pin_memory=True
         )
 
     # This method and related ones should take inputs in the range

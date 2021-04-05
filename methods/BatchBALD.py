@@ -7,7 +7,8 @@ from methods.method_params import MethodParams
 from batchbald_redux.batchbald import get_batchbald_batch, CandidateBatch
 from batchbald_redux import joint_entropy
 
-from gpytorch.distributions import MultivariateNormal
+from gpytorch.distributions import MultivariateNormal, MultitaskMultivariateNormal
+from gpytorch.lazy import CatLazyTensor, BlockDiagLazyTensor
 from typing import List
 
 import torch
@@ -21,23 +22,58 @@ class BatchBALDParams(MethodParams):
     samples: int
     use_cuda: bool
 
+def combine_mtmvns(mvns):
+    if len(mvns) < 2:
+        raise ValueError("Must provide at least 2 MVNs to form a MultitaskMultivariateNormal")
+
+    if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
+        raise ValueError("All MultivariateNormals must have the same event shape")
+    mean = torch.cat([mvn.mean for mvn in mvns], 0)
+
+    covar_blocks_lazy = CatLazyTensor(
+        *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
+    )
+    covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
+    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
+
+
+def combine_mvns(mvns):
+    if len(mvns) < 2:
+        raise ValueError("Must provide at least 2 MVNs to form a MultitaskMultivariateNormal")
+    if any(isinstance(mvn, MultitaskMultivariateNormal) for mvn in mvns):
+        raise ValueError("Cannot accept MultitaskMultivariateNormals")
+    if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
+        raise ValueError("All MultivariateNormals must have the same event shape")
+    mean = torch.cat([mvn.mean for mvn in mvns], 0)
+
+    covar_blocks_lazy = CatLazyTensor(
+        *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
+    )
+    covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
+    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_lazy, interleaved=False)
+
 # \sigma_{BatchBALD} ( {x_1, ..., x_n}, p(w)) = H(y_1, ..., y_n) - E_{p(w)} H(y | x, w)
 
-def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs) -> torch.tensor:
-    # We need to compute
-    if distribution.event_shape[0] < 5:
+
+def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs : int) -> torch.Tensor:
+    # We wish to find the indexs which we are sampling from
+    D = distribution.event_shape[1]
+    if D < 5:
         l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
         l = torch.transpose(l, 0, 1)
-        t = string.ascii_lowercase[:distribution.event_shape[0]]
-        s =  ','.join(['z' + c for c in list(t)]) + '->' + 'z' + t
-        g = torch.einsum(s, *torch.unbind(l))
-        g = torch.mean(g, dim=0)
-        return -torch.sum(g * torch.log(g))
+        t = string.ascii_lowercase[:D]
+        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
+        g = torch.einsum(s, *torch.unbind(l, dim=2))
+        g = g * torch.log(g)
+        g = -torch.sum(g, dim=tuple(range(2,2+D)))
+        g = torch.mean(g, dim=1)
+        return g
     else:
-        return torch.tensor(0)
+        return torch.zeros(distribution.batch_shape)
 
-def compute_conditional_entropy_mvn(distributions: List[MultivariateNormal], likelihood, num_samples : int) -> torch.Tensor:
-    log_probs_N_K_C = torch.stack([likelihood(distribution.sample(sample_shape=torch.Size([num_samples]))).logits for distribution in distributions], dim=0).squeeze()
+def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihood, num_samples : int) -> torch.Tensor:
+    # The distribution input is a batch of MVNS
+    log_probs_N_K_C = (likelihood(distributions.sample(sample_shape=torch.Size([num_samples]))).logits).permute(1, 0, 2)
     N, K, C = log_probs_N_K_C.shape
     entropies_N = torch.empty(N, dtype=torch.double)
     pbar = tqdm(total=N, desc="Conditional Entropy", leave=False)
@@ -65,23 +101,31 @@ class BatchBALD(UncertainMethod):
             # which is computationaly prohibative (has complexity related to the pool size)
 
             # We instead need to repeatedly compute the updated probabilties for each aquisition
-            pool = []
 
-            # From the 
             samples = 100
-            num_configs = 10
-            count = 0
-            for x, i in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
-                if self.params.use_cuda:
-                    x = x.cuda()
-                pool.append(model.feature_extractor.forward(x).detach().clone())
-                count = count + 1
-                # if count > 5:
-                #   break
+            num_cat = 10
+            feature_size = 512
 
-            pool = torch.cat(pool, dim=0)
-            # print(pool.shape)
-            N = pool.shape[0]
+            inputs = []
+
+            for x, i in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
+                inputs.append(x)
+            inputs = torch.cat(inputs, dim=0)
+
+            N = inputs.shape[0]
+            pool = torch.empty((N, feature_size))
+            pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
+
+            @toma.execute.chunked(inputs, 1024)
+            def compute(inputs, start: int, end: int):
+                with torch.no_grad():
+                    tmp = model.feature_extractor.forward(inputs).detach()
+                    pool[start:end].copy_(tmp)
+                pbar.update(end - start)
+
+            pbar.close()
+
+            model.model.eval()
             batch_size = self.params.aquisition_size
             batch_size = min(batch_size, N)
 
@@ -93,83 +137,71 @@ class BatchBALD(UncertainMethod):
             candidate_scores = []
 
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
+
             dists = []
-            for j in range(0, N):
-                x = (pool[j])[None, :,]
-                # mu_x = model.model.gp.mean_module(x)
-                # k_xz = model.model.gp.covar_module(x, z).evaluate()
-                # k_xx = model.model.gp.covar_module(x, x).evaluate()
-                # a = torch.cat([k_zz, k_xz], dim=1)
-                # b = torch.cat([torch.transpose(k_xz,1,2),k_xx], dim=1)
-                # k = torch.cat([a,b], dim=2)
-                # k = model.model.gp.covar_module(x, x)
-                # mu = model.model.gp.mean_module(x)
-                # dists.append(MultivariateNormal(mu, k))
-                dists.append(model.model.gp(x))
 
-
+            pbar = tqdm(total=N, desc="Conditional Distributions", leave=False)
+            @toma.execute.chunked(pool, 256)
+            def compute(pool, start: int, end: int):
+                with torch.no_grad():
+                    d = model.model.gp(pool).to_data_independent_dist()
+                    dists.append(d)
+                pbar.update(end - start)
+            pbar.close()
+            
+            dists = combine_mvns(dists).to_data_independent_dist()
             conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples)
             
-            for i in tqdm(range(batch_size), desc="vDUQ BatchBALD", leave=False):
+            for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                 # First we compute the joint distribution of each of the datapoints with the current aquisition
                 # We first calculate the aquisition by itself first.
                 joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
                 scores_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
                 # dists = torch.empty(N, dtype=torch.distributions, pin_memory=torch.cuda.is_available())
-                dists = []
 
                 if i > 0:
                     z = pool[candidate_indices]
-                    # mu_z = model.model.gp.mean_module(z)
-                    # k_zz = model.model.gp.covar_module(z, z).evaluate()
-                    for j in range(0, N):
-                        if(j % 50 == 0):
-                            print(j)
-                        if j in candidate_indices:
-                            pass
-                        else:
-                            x = (pool[j])[None, :,]
-                            #mu_x = model.model.gp.mean_module(x)
-                            r = torch.cat( [z, x], dim=0)
-                            # k_xz = model.model.gp.covar_module(x, z).evaluate()
-                            # k_xx = model.model.gp.covar_module(x, x).evaluate()
-                            # a = torch.cat([k_zz, k_xz], dim=1)
-                            # b = torch.cat([torch.transpose(k_xz,1,2),k_xx], dim=1)
-                            # k = torch.cat([a,b], dim=2)
-                            # k = model.model.gp.covar_module(r, r)
-                            # mu = model.model.gp.mean_module(r)
-                            # dist = MultivariateNormal(mu, k)
-                            dist = model.model.gp(r)
-                            joint_entropy_result[j] = joint_entropy_mvn(dist, model.likelihood, samples, num_configs)
+                    z = z[None,:,:]
+                    z = z.expand(N, -1, -1)
+
+                    dists = []
+                    pbar = tqdm(total=N, desc="Joint", leave=False)
+                    t = pool[:,None,:]
+                    grouped_pool = torch.cat([z,t], dim=1)
+                    grouped_pool = grouped_pool[:,None,:,:]
+
+                    @toma.execute.chunked(grouped_pool, 256)
+                    def compute(grouped_pool, start: int, end: int):
+                        with torch.no_grad():
+                            d = model.model.gp(grouped_pool)
+                            dists.append(d)
+                        pbar.update(end - start)
+                    pbar.close()
+
+                    dists_ = combine_mtmvns(dists)
+                    joint_entropy_result = joint_entropy_mvn(dists_, model.likelihood, samples, num_cat)
                             
                 else:
-                    # @toma.execute.chunked(pool, 1024)
-                    # def compute(pool, start: int, end: int):
-                    #     x = pool[start:end][None,:,:]
-                    #     mu_x = model.model.gp.mean_module(x)
-                    #     k_xx = model.model.gp.covar_module(x, x)
-                    #     print(x)
-                    #     # entropies_N[start:end].copy_(-torch.sum(nats_n_C, dim=1))
-                    #     joint_entropy_result[start:end].copy_(joint_entropy_mvn(dists, model.likelihood, samples))
-                    #     pbar.update(end - start)
-                    for j in range(0, N):
-                        x = (pool[j])[None, :,]
-                        mu_x = model.model.gp.mean_module(x)
-                        k_xx = model.model.gp.covar_module(x, x)
-                        # dist = MultivariateNormal(mu_x, k_xx)
-                        dist = model.model.gp(x)
-                        if(j % 50 == 0):
-                            print(j)
-                        joint_entropy_result[j] = joint_entropy_mvn(dist, model.likelihood, samples, num_configs)
+                    dists = []
+                    pbar = tqdm(total=N, desc="Joint", leave=False)
+                    @toma.execute.chunked(pool, 256)
+                    def compute(pool, start: int, end: int):
+                        with torch.no_grad():
+                            d = model.model.gp(pool).to_data_independent_dist()
+                            dists.append(d)
+                        pbar.update(end - start)
+                    pbar.close()
+                    dists = combine_mvns(dists)
+                    dists_ind = dists.to_data_independent_dist()
+                    dists_ind_ = MultitaskMultivariateNormal.from_repeated_mvn(dists_ind, 1)
+                    joint_entropy_result = joint_entropy_mvn(dists_ind_, model.likelihood, samples, num_cat)
 
                 # Then we compute the batchbald objective
 
                 shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
                 scores_N = joint_entropy_result
-                print(N)
-                print(candidate_indices)
-                print(scores_N.shape, conditional_entropies_N.shape, shared_conditinal_entropies)
+
                 scores_N -= conditional_entropies_N + shared_conditinal_entropies
                 scores_N[candidate_indices] = -float("inf")
 
