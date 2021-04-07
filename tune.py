@@ -23,7 +23,7 @@ def create_training_function(path):
         args = Namespace(
             data_path=path,
             aquisition_size=4, batch_size=64, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
-            epochs=500, initial_per_class=2, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, name='vduq_bb_tuning',
+            epochs=500, initial_per_class=2, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, num_repetitions=3, name='vduq_bb_tuning',
             num_aquisitions=100, power_iter=1, spectral_norm=True, coeff=coeff)
 
         dataset_params = parse_dataset(args)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     analysis = tune.run(
         create_training_function(args.data_path),
         resources_per_trial={'gpu': 1},
-        num_samples=4,
+        num_samples=2,
         config={
             "lr": tune.grid_search([0.01]),
             "dropout": tune.grid_search([0.1]),

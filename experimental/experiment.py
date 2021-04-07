@@ -14,6 +14,8 @@ from models.training import TrainingParams
 from methods.method_params import MethodParams
 from datasets.dataset_params import DatasetParams
 from .driver import Driver
+import torch.autograd.profiler as profiler
+
 
 
 # This is responsible for actually creating and executing an experiment
@@ -64,8 +66,13 @@ class Experiment:
     def run(self) -> None:
         iteration = 0
         while(not self.method.complete()):
+            # with profiler.profile() as prof:
+            #    with profiler.record_function("model_inference"):
             self.model.reset(self.dataset)
             Driver.train(self.name, iteration, self.training_params, self.model, self.dataset)
             self.method.acquire(self.model, self.dataset)
             self.model.prepare(self.bs)
             iteration = iteration + 1
+            
+            # prof.export_chrome_trace("trace.json")
+

@@ -44,6 +44,7 @@ def init_parser() -> argparse.ArgumentParser:
         p.add_argument('--batch_size', type=int, required=True)
         p.add_argument('--epochs', default=100, type=int, required=True)
         p.add_argument('--dataset', default=DatasetName.mnist, type=DatasetName)
+        p.add_argument('--num_repetitions', default=1, type=int)
         p.add_argument('--model_index', default=0, type=int)
         p.set_defaults(method=method)
         nestedsubpraser = p.add_subparsers(dest='model')
@@ -75,12 +76,14 @@ def parse_dataset(args: dict) -> DatasetParams:
     if args.dataset == DatasetName.mnist:
         dataset_params = DatasetParams(
             path=args.data_path,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            num_repetitions=args.num_repetitions
         )
     else:
         dataset_params = DatasetParams(
             path=args.data_path,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            num_repetitions=args.num_repetitions
         )
     return dataset_params
 

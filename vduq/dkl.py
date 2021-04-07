@@ -106,7 +106,7 @@ class GP(ApproximateGP):
 
         if num_outputs > 1:
             variational_strategy = IndependentMultitaskVariationalStrategy(
-                variational_strategy, num_tasks=num_outputs
+                variational_strategy, num_tasks=num_outputs, task_dim=-1
             )
 
         super().__init__(variational_strategy)
@@ -146,7 +146,6 @@ class GP(ApproximateGP):
     def forward(self, x):
         mean = self.mean_module(x)
         covar = self.covar_module(x)
-
         return MultivariateNormal(mean, covar)
 
     @property

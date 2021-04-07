@@ -3,6 +3,7 @@ from enum import Enum
 from typing import List
 import torch
 from batchbald_redux.active_learning import RandomFixedLengthSampler
+from .dataset_params import DatasetParams
 Indexes = List[int]
 
 
@@ -48,10 +49,16 @@ class ActiveLearningDataset(ABC):
 class DatasetWrapper(ABC):
     num_workers = 4
     def __init__(self, train_dataset: torch.utils.data.Dataset,
-                 test_dataset: torch.utils.data.Dataset, batch_size: int) -> None:
+                 test_dataset: torch.utils.data.Dataset, config: DatasetParams) -> None:
         super().__init__()
-        self.bs = batch_size
+        self.bs = config.batch_size
         self.trainset = train_dataset
+
+        if config.num_repetitions > 1:
+            self.trainset = torch.utils.data.ConcatDataset([train_dataset] * config.num_repetitions)
+        else:
+            self.trainset = train_dataset
+
         self.testset = test_dataset
 
         self.test_loader = torch.utils.data.DataLoader(

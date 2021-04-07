@@ -17,7 +17,7 @@ class MNIST(DatasetWrapper):
         test_dataset = torchvision.datasets.MNIST(
             root=config.path, train=False, download=True,
             transform=transform)
-        super().__init__(train_dataset, test_dataset, config.batch_size)
+        super().__init__(train_dataset, test_dataset, config)
 
     def get_name(self) -> DatasetName:
         return DatasetName.mnist

@@ -101,7 +101,7 @@ class BatchBALD(UncertainMethod):
             # which is computationaly prohibative (has complexity related to the pool size)
 
             # We instead need to repeatedly compute the updated probabilties for each aquisition
-
+            
             samples = 100
             num_cat = 10
             feature_size = 512
@@ -161,7 +161,6 @@ class BatchBALD(UncertainMethod):
                 # We first calculate the aquisition by itself first.
                 joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
                 scores_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
-                # dists = torch.empty(N, dtype=torch.distributions, pin_memory=torch.cuda.is_available())
 
                 if i > 0:
                     z = pool[candidate_indices]
