@@ -64,7 +64,7 @@ if __name__ == "__main__":
             "method": tune.choice(["batchbald"]),
             "coeff": tune.grid_search([9]),
             "batch_size":  tune.grid_search([64]),
-            "var_opt": tune.choice([True]),
+            "var_opt": tune.choice([None]),
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
