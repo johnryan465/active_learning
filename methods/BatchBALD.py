@@ -2,7 +2,7 @@ from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
 from models.vduq import vDUQ
 from datasets.activelearningdataset import ActiveLearningDataset
-from methods.method import UncertainMethod
+from methods.method import UncertainMethod, Method
 from methods.method_params import MethodParams
 from batchbald_redux.batchbald import get_batchbald_batch, CandidateBatch
 from batchbald_redux import joint_entropy
