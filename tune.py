@@ -56,7 +56,7 @@ if __name__ == "__main__":
     ray.init(include_dashboard=True)
     analysis = tune.run(
         create_training_function(args.data_path),
-        # resources_per_trial={'gpu': 1},
+        resources_per_trial={'gpu': 1},
         num_samples=4,
         config={
             "lr": tune.grid_search([0.1]),
