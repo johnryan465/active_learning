@@ -59,12 +59,12 @@ if __name__ == "__main__":
         resources_per_trial={'gpu': 1},
         num_samples=4,
         config={
-            "lr": tune.grid_search([0.1]),
+            "lr": tune.grid_search([0.03]),
             "dropout": tune.grid_search([0.0]),
             "method": tune.choice(["batchbald"]),
             "coeff": tune.grid_search([9]),
             "batch_size":  tune.grid_search([64]),
-            "var_opt": tune.choice([None, True]),
+            "var_opt": tune.choice([True]),
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
