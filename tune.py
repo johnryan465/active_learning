@@ -21,6 +21,7 @@ def create_training_function(path):
         batch_size = config["batch_size"]
         var_opt = config["var_opt"]
         starting_size = config["starting_size"]
+        num_aquisitions = config["num_aquisitions"]
 
 
         # aquisition
@@ -28,7 +29,7 @@ def create_training_function(path):
             data_path=path,
             aquisition_size=4, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
             epochs=500, initial_per_class=starting_size, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, var_opt=var_opt, num_repetitions=1, name='vduq_bb_tuning',
-            num_aquisitions=1, power_iter=1, spectral_norm=True, coeff=coeff)
+            num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff)
 
         dataset_params = parse_dataset(args)
         method_params = parse_method(args)
@@ -66,7 +67,8 @@ if __name__ == "__main__":
             "coeff": tune.grid_search([9]),
             "batch_size": tune.grid_search([64]),
             "starting_size": tune.choice([2,5,10,50,100,1000,5000]),
-            "var_opt": tune.choice([None]),
+            "num_aquisitions": tune.choice([1]),
+            "var_opt": tune.choice([None])
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
