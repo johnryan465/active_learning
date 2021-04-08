@@ -43,6 +43,10 @@ class ActiveLearningDataset(ABC):
     def get_pool_size(self) -> int:
         pass
 
+    @abstractmethod
+    def get_indexes(self, idxs: Indexes) -> List[torch.Tensor]:
+        pass
+
 
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
@@ -94,7 +98,7 @@ class DatasetWrapper(ABC):
     def move(self, idxs: Indexes) -> None:
         pool_idxs = torch.nonzero(self.mask == 0)
         for i in idxs:
-            self.mask[pool_idxs[i]] = 1
+            self.mask[pool_idxs[i].unsqueeze(0)] = 1
         self.pool_size -= len(idxs)
 
     def get_classes(self):
@@ -103,6 +107,13 @@ class DatasetWrapper(ABC):
     def get_pool_size(self):
         return self.pool_size
 
+    def get_indexes(self, idxs: Indexes) -> List[torch.Tensor]:
+        pool_idxs = torch.nonzero(self.mask == 0)
+        res = []
+        for i in idxs:
+            image, label = self.trainset[pool_idxs[i].squeeze()]
+            res.append(image)
+        return res
 
 class DatasetUtils:
     @staticmethod

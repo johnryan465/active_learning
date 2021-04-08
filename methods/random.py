@@ -6,6 +6,7 @@ from .method import Method
 from models.model import ModelWrapper
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetUtils
 import random
+from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 
 
 @dataclass
@@ -20,8 +21,10 @@ class Random(Method):
         self.params = params
         self.current_aquisition = 0
 
-    def acquire(self, model: ModelWrapper, dataset: ActiveLearningDataset) -> None:
-        dataset.move(list(random.sample(range(0, dataset.get_pool_size()), self.params.aquisition_size)))
+    def acquire(self, model: ModelWrapper, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
+        idxs = list(random.sample(range(0, dataset.get_pool_size()), self.params.aquisition_size))
+        Method.log_batch(dataset.get_indexes(idxs), tb_logger, self.current_aquisition)
+        dataset.move(idxs)
         self.current_aquisition = self.current_aquisition + 1
 
     def complete(self) -> bool:

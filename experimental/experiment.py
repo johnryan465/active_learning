@@ -9,12 +9,14 @@ from models.model import ModelWrapper
 from methods.method import Method
 from datasets.activelearningdataset import ActiveLearningDataset
 from experimental.experiment_params import ExperimentParams
+from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 from models.model_params import ModelParams
 from models.training import TrainingParams
 from methods.method_params import MethodParams
 from datasets.dataset_params import DatasetParams
 from .driver import Driver
 import torch.autograd.profiler as profiler
+import time
 
 
 
@@ -69,9 +71,12 @@ class Experiment:
             # with profiler.profile() as prof:
             #    with profiler.record_function("model_inference"):
             self.model.reset(self.dataset)
-            Driver.train(self.name, iteration, self.training_params, self.model, self.dataset)
-            self.method.acquire(self.model, self.dataset)
+            ts = time.time()
+            tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + self.name + "_" + str(iteration) + str(ts))
+            tb_logger = Driver.train(self.name, iteration, self.training_params, self.model, self.dataset, tb_logger)
+            self.method.acquire(self.model, self.dataset, tb_logger)
             self.model.prepare(self.bs)
+            tb_logger.close()
             iteration = iteration + 1
             
             # prof.export_chrome_trace("trace.json")

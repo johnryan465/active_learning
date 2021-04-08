@@ -6,6 +6,7 @@ from methods.method import UncertainMethod
 from methods.method_params import MethodParams
 from batchbald_redux.batchbald import get_batchbald_batch, CandidateBatch
 from batchbald_redux import joint_entropy
+from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 
 from gpytorch.distributions import MultivariateNormal, MultitaskMultivariateNormal
 from gpytorch.lazy import CatLazyTensor, BlockDiagLazyTensor
@@ -55,6 +56,7 @@ def combine_mvns(mvns):
 # \sigma_{BatchBALD} ( {x_1, ..., x_n}, p(w)) = H(y_1, ..., y_n) - E_{p(w)} H(y | x, w)
 
 
+# We compute the 
 def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs : int) -> torch.Tensor:
     # We wish to find the indexs which we are sampling from
     D = distribution.event_shape[1]
@@ -95,7 +97,7 @@ class BatchBALD(UncertainMethod):
         self.params = params
         self.current_aquisition = 0
 
-    def acquire(self, model: UncertainModel, dataset: ActiveLearningDataset) -> None:
+    def acquire(self, model: UncertainModel, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
         if isinstance(model, vDUQ):
             # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
             # which is computationaly prohibative (has complexity related to the pool size)
@@ -216,8 +218,10 @@ class BatchBALD(UncertainMethod):
                 
                 candidate_indices.append(candidate_index.item())
                 candidate_scores.append(candidate_score.item())
-                        
+            
+            Method.log_batch(dataset.get_indexes(candidate_indices), tb_logger, self.current_aquisition)
             dataset.move(candidate_indices)
+            self.current_aquisition += 1
 
         else:
             probs = []
@@ -225,7 +229,6 @@ class BatchBALD(UncertainMethod):
             for x, _ in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
                 if self.params.use_cuda:
                     x = x.cuda()
-                # probs_ = model.sample(x, self.params.samples).detach().clone()
                 pool.append(model.feature_extractor.forward(x).detach().clone())
 
             pool = torch.cat(pool, dim=0)

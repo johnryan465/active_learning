@@ -14,7 +14,7 @@ from ray import tune
 
 class Driver:
     @staticmethod
-    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset):
+    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger):
         training_params = model_wrapper.get_training_params()
 
         optimizer = model_wrapper.get_optimizer()
@@ -63,9 +63,6 @@ class Driver:
             es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
             evaluator.add_event_handler(Events.COMPLETED, es_handler)
 
-        ts = time.time()
-        tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + exp_name + "_" + str(iteration) + str(ts))
-
         for stage, engine in engines.items():
             tb_logger.attach_output_handler(
                 engine,
@@ -104,4 +101,4 @@ class Driver:
 
         IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
         IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')
-        tb_logger.close()
+        return tb_logger

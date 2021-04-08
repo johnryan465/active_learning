@@ -63,11 +63,11 @@ if __name__ == "__main__":
         config={
             "lr": tune.grid_search([0.03]),
             "dropout": tune.grid_search([0.0]),
-            "method": tune.grid_search(["batchbald"]),
+            "method": tune.grid_search(["random","batchbald"]),
             "coeff": tune.grid_search([9]),
             "batch_size": tune.grid_search([64]),
-            "starting_size": tune.grid_search([2,5,10,50,100,1000,5000]),
-            "num_aquisitions": tune.grid_search([1]),
+            "starting_size": tune.choice([2]),
+            "num_aquisitions": tune.grid_search([70]),
             "var_opt": tune.grid_search([None])
         })
     print(analysis)
