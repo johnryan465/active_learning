@@ -55,14 +55,14 @@ if __name__ == "__main__":
     ray.init(include_dashboard=True)
     analysis = tune.run(
         create_training_function(args.data_path),
-        # resources_per_trial={'gpu': 1},
+        resources_per_trial={'gpu': 1},
         num_samples=1,
         config={
-            "lr": tune.grid_search([0.01, 0.03, 0.1]),
-            "dropout": tune.grid_search([0.0, 0.1]),
+            "lr": tune.grid_search([0.001, 0.003]),
+            "dropout": tune.grid_search([0.0, 0.1, 0.3]),
             "method": tune.choice(["random"]),
-            "coeff": tune.grid_search([9, 12]),
-            "batch_size":  tune.grid_search([64, 128, 256]),
+            "coeff": tune.grid_search([9]),
+            "batch_size":  tune.grid_search([64]),
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
