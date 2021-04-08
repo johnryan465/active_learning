@@ -193,10 +193,13 @@ class vDUQ(UncertainModel):
             self.model_parameters, momentum=0.9, weight_decay=fe_params.weight_decay
         )
 
-        milestones = [60, 120, 160]
+        if self.num_data < 40:
+            milestones = [ i * 8 for i in range(0,3)]
+        else:
+            milestones = [ i * int(self.num_data  / 5) for i in range(0,3)]
 
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=milestones, gamma=1
+            self.optimizer, milestones=milestones, gamma=0.1
         )
 
         self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp,

@@ -56,6 +56,7 @@ def init_parser() -> argparse.ArgumentParser:
                 q.add_argument('--power_iter', default=1, type=int)
                 q.add_argument('--dropout', default=0.0, type=float)
                 q.add_argument('--lr', default=0.01, type=float)
+                q.add_argument('--var_opt', default=None, type=bool)
                 q.add_argument('--coeff', default=3, type=float)
             else:
                 q.add_argument('--dropout', default=0, type=float)
@@ -163,7 +164,7 @@ def parse_training(args: dict) -> TrainingParams:
     # Parse training params
     opt_params = OptimizerParams(
         optimizer=args.lr,
-        var_optimizer=None
+        var_optimizer=args.var_opt
     )
     training_params = TrainingParams(
         dataset=args.dataset,
