@@ -121,7 +121,7 @@ def get_gp_output(inputs: torch.Tensor, model: UncertainModel) -> List[Multivari
     def compute(inputs, start: int, end: int):
         with torch.no_grad():
             if torch.cuda.is_available():
-                inputs = grouped_pool.cuda()
+                inputs = inputs.cuda()
             d = model.model.gp(inputs)
             dists.append(d)
         pbar.update(end - start)
