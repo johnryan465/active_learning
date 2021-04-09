@@ -2,7 +2,6 @@ from experimental.experiment import Experiment
 from experimental.experiment_params import ExperimentParams
 from datasets.activelearningdataset import DatasetName
 from utils.parser import parse_dataset, parse_model, parse_training, parse_method
-
 import ray
 from ray import tune
 from argparse import Namespace
@@ -55,11 +54,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run experiments for active learning")
     parser.add_argument('--data_path', default="./data", type=str)
     args = parser.parse_args()
-    ray.init(include_dashboard=True)
+    ray.init(include_dashboard=False)
     analysis = tune.run(
         create_training_function(args.data_path),
         resources_per_trial={'gpu': 1},
-        # num_samples=4,
+        num_samples=2,
         config={
             "lr": tune.grid_search([0.03]),
             "dropout": tune.grid_search([0.0]),
