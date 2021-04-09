@@ -26,7 +26,7 @@ class BatchBALDParams(MethodParams):
 
 def combine_mvns(mvns):
     if len(mvns) < 2:
-        raise ValueError("Must provide at least 2 MVNs to form a MultitaskMultivariateNormal")
+        return mvns[0]
     if any(isinstance(mvn, MultitaskMultivariateNormal) for mvn in mvns):
         raise ValueError("Cannot accept MultitaskMultivariateNormals")
     if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
@@ -43,7 +43,7 @@ def combine_mvns(mvns):
 
 def combine_mtmvns(mvns):
     if len(mvns) < 2:
-        raise ValueError("Must provide at least 2 MVNs to form a MultitaskMultivariateNormal")
+        return mvns[0]
 
     if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
         raise ValueError("All MultivariateNormals must have the same event shape")
@@ -216,7 +216,7 @@ class BatchBALD(UncertainMethod):
 
                 shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
-                scores_N = joint_entropy_result.cpu()
+                scores_N = joint_entropy_result.detach().clone().cpu()
 
                 scores_N -= conditional_entropies_N + shared_conditinal_entropies
                 scores_N[candidate_indices] = -float("inf")
