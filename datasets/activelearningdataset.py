@@ -93,6 +93,11 @@ class DatasetWrapper(ABC):
             ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, shuffle=True, pin_memory=True
         )
 
+    def get_pool_tensor(self) -> torch.utils.data.DataLoader:
+        ts = torch.utils.data.Subset(
+            self.trainset, torch.nonzero(self.mask == 0).squeeze())
+        return ts
+
     # This method and related ones should take inputs in the range
     # 0 - poolsize instead of 0 - dataset size
     def move(self, idxs: Indexes) -> None:

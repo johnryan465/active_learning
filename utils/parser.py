@@ -172,7 +172,7 @@ def parse_training(args: dict) -> TrainingParams:
         epochs=args.epochs,
         cuda=use_cuda,
         optimizers=opt_params,
-        patience=5,
+        patience=3,
         progress_bar=args.use_progress
     )
     return training_params

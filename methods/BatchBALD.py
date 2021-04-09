@@ -122,9 +122,9 @@ def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihoo
 
 def get_pool(dataset: ActiveLearningDataset) -> torch.Tensor:
     inputs = []
-    for x, i in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
+    for x, i in tqdm(dataset.get_pool_tensor(), desc="Loading pool", leave=False):
         inputs.append(x)
-    inputs = torch.cat(inputs, dim=0)
+    inputs = torch.stack(inputs, dim=0)
     return inputs
 
 def get_features(inputs: torch.Tensor, feature_size: int, model: UncertainModel) -> torch.Tensor:
