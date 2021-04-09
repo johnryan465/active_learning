@@ -10,6 +10,7 @@ from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 
 from gpytorch.distributions import MultivariateNormal, MultitaskMultivariateNormal
 from gpytorch.lazy import CatLazyTensor, BlockDiagLazyTensor
+from torch.distributions.utils import _standard_normal
 from typing import List
 
 import torch
@@ -56,7 +57,7 @@ def combine_mtmvns(mvns):
     return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
 
 # We compute the 
-def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_samples, num_configs: int, low_memory: bool = False) -> torch.Tensor:
+def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_samples, num_configs: int, variance_reduction: bool = False) -> torch.Tensor:
     # We can exactly compute a larger sized exact distribution
     # As the task batches are independent we can chunk them
     D = distributions[0].event_shape[0]
@@ -70,6 +71,10 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
         joint_entropies_N = torch.empty(N, dtype=torch.double)
         pbar = tqdm(total=N, desc="Joint Entropy", leave=False)
         len_d = len(distributions)
+        if variance_reduction:
+            # here is where we generate the 
+            shape = [per_samples] + list(distributions[0].base_sample_shape)
+            samples = _standard_normal(torch.Size(shape), dtype=torch.float, device=joint_entropies_N.device)
         @toma.batch(initial_batchsize=len(distributions))
         def compute(batchsize, distributions):
             start = 0
@@ -77,7 +82,13 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
             for i in range(0, len_d, batchsize):
                 distribution = combine_mtmvns(distributions[i: min(i+batchsize, len_d)])
                 end = start + distribution.batch_shape[0]
-                l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
+                if variance_reduction:
+                    base_samples = samples.detach().clone()
+                    base_samples = base_samples[:,None,:,:]
+                    base_samples = base_samples.expand(-1, distribution.batch_shape[0], -1, -1)
+                    l = likelihood(distribution.sample(base_samples=base_samples)).probs
+                else:
+                    l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
                 l = torch.transpose(l, 0, 1)
                 g = torch.einsum(s, *torch.unbind(l, dim=2))
                 g = g * torch.log(g)
@@ -89,7 +100,7 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
         compute(distributions)
         return joint_entropies_N
     else:
-        return torch.zeros(distribution.batch_shape)
+        return torch.zeros(N)
 
 def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihood, num_samples : int) -> torch.Tensor:
     # The distribution input is a batch of MVNS
@@ -209,8 +220,7 @@ class BatchBALD(UncertainMethod):
 
                 dists = get_gp_output(grouped_pool, model)
 
-                # dists_ = combine_mtmvns(dists)
-                joint_entropy_result = joint_entropy_mvn(dists, model.likelihood, samples, num_cat)
+                joint_entropy_result = joint_entropy_mvn(dists, model.likelihood, samples, num_cat, True)
 
                 # Then we compute the batchbald objective
 
