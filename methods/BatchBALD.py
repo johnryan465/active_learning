@@ -23,20 +23,6 @@ class BatchBALDParams(MethodParams):
     samples: int
     use_cuda: bool
 
-def combine_mtmvns(mvns):
-    if len(mvns) < 2:
-        raise ValueError("Must provide at least 2 MVNs to form a MultitaskMultivariateNormal")
-
-    if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
-        raise ValueError("All MultivariateNormals must have the same event shape")
-    mean = torch.cat([mvn.mean for mvn in mvns], 0)
-
-    covar_blocks_lazy = CatLazyTensor(
-        *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
-    )
-    covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
-    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
-
 
 def combine_mvns(mvns):
     if len(mvns) < 2:
@@ -55,29 +41,52 @@ def combine_mvns(mvns):
 
 # \sigma_{BatchBALD} ( {x_1, ..., x_n}, p(w)) = H(y_1, ..., y_n) - E_{p(w)} H(y | x, w)
 
+def combine_mtmvns(mvns):
+    if len(mvns) < 2:
+        raise ValueError("Must provide at least 2 MVNs to form a MultitaskMultivariateNormal")
+
+    if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
+        raise ValueError("All MultivariateNormals must have the same event shape")
+    mean = torch.cat([mvn.mean for mvn in mvns], 0)
+
+    covar_blocks_lazy = CatLazyTensor(
+        *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
+    )
+    covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
+    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
 
 # We compute the 
-def joint_entropy_mvn(distribution: MultivariateNormal, likelihood, per_samples, num_configs: int, low_memory: bool = False) -> torch.Tensor:
+def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_samples, num_configs: int, low_memory: bool = False) -> torch.Tensor:
     # We can exactly compute a larger sized exact distribution
-    D = distribution.event_shape[0]
-    if D < 5:
-        l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
-        l = torch.transpose(l, 0, 1)
-        t = string.ascii_lowercase[:D]
+    # As the task batches are independent we can chunk them
+    D = distributions[0].event_shape[0]
+    N = sum([distribution.batch_shape[0] for distribution in distributions])
+    t = string.ascii_lowercase[:D]
+    s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
 
+    if D < 5:
         # We can chunk to get away with lower memory usage
-        N = l.shape[0]
-        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
+        # We can't lazily split, only lazily combine
         joint_entropies_N = torch.empty(N, dtype=torch.double)
         pbar = tqdm(total=N, desc="Joint Entropy", leave=False)
-        @toma.execute.chunked(l, 16384)
-        def compute(l, start: int, end: int):
-            g = torch.einsum(s, *torch.unbind(l, dim=2))
-            g = g * torch.log(g)
-            g = -torch.sum(g, dim=tuple(range(2,2+D)))
-            g = torch.mean(g, dim=1)
-            joint_entropies_N[start:end].copy_(g)
-            pbar.update(end - start)
+        len_d = len(distributions)
+        @toma.batch(initial_batchsize=len(distributions))
+        def compute(batchsize, distributions):
+            start = 0
+            end = 0
+            for i in range(0, len_d, batchsize):
+                distribution = combine_mtmvns(distributions[i: min(i+batchsize, len_d)])
+                end = start + distribution.batch_shape[0]
+                l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
+                l = torch.transpose(l, 0, 1)
+                g = torch.einsum(s, *torch.unbind(l, dim=2))
+                g = g * torch.log(g)
+                g = -torch.sum(g, dim=tuple(range(2,2+D)))
+                g = torch.mean(g, dim=1)
+                joint_entropies_N[start:end].copy_(g)
+                pbar.update(end - start)
+                start = end
+        compute(distributions)
         return joint_entropies_N
     else:
         return torch.zeros(distribution.batch_shape)
@@ -200,8 +209,8 @@ class BatchBALD(UncertainMethod):
 
                 dists = get_gp_output(grouped_pool, model)
 
-                dists_ = combine_mtmvns(dists)
-                joint_entropy_result = joint_entropy_mvn(dists_, model.likelihood, samples, num_cat)
+                # dists_ = combine_mtmvns(dists)
+                joint_entropy_result = joint_entropy_mvn(dists, model.likelihood, samples, num_cat)
 
                 # Then we compute the batchbald objective
 
