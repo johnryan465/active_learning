@@ -60,7 +60,7 @@ def combine_mvns(mvns):
 def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs : int) -> torch.Tensor:
     # We wish to find the indexs which we are sampling from
     D = distribution.event_shape[0]
-    if D < 5:
+    if D < 4:
         l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
         l = torch.transpose(l, 0, 1)
         t = string.ascii_lowercase[:D]
