@@ -58,11 +58,11 @@ if __name__ == "__main__":
     analysis = tune.run(
         create_training_function(args.data_path),
         resources_per_trial={'gpu': 1},
-        num_samples=2,
+        num_samples=4,
         config={
             "lr": tune.grid_search([0.03]),
             "dropout": tune.grid_search([0.0]),
-            "method": tune.grid_search(["random","batchbald"]),
+            "method": tune.grid_search(["batchbald"]),
             "coeff": tune.grid_search([9]),
             "batch_size": tune.grid_search([64]),
             "starting_size": tune.choice([2]),
