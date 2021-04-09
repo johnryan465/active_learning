@@ -74,7 +74,7 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
         if variance_reduction:
             # here is where we generate the 
             shape = [per_samples] + list(distributions[0].base_sample_shape)
-            samples = _standard_normal(torch.Size(shape), dtype=torch.float, device=joint_entropies_N.device)
+            samples = _standard_normal(torch.Size(shape), dtype=distributions[0].loc.dtype, device=distributions[0].loc.device)
         @toma.batch(initial_batchsize=len(distributions))
         def compute(batchsize, distributions):
             start = 0
