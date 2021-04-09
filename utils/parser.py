@@ -30,7 +30,7 @@ def init_parser() -> argparse.ArgumentParser:
     subprasers = parser.add_subparsers(dest='method')
     parser.add_argument('--name', required=True)
     parser.add_argument('--description', required=True)
-    parser.add_argument('--aquisition_size', default=5, type=int, required=True)
+    parser.add_argument('--aquisition_size', default=4, type=int, required=True)
     parser.add_argument('--num_aquisitions', default=10, type=int)
     parser.add_argument('--initial_per_class', default=2, type=int)
     parser.add_argument('--use_progress', default=True, type=bool)

@@ -57,19 +57,28 @@ def combine_mvns(mvns):
 
 
 # We compute the 
-def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs : int) -> torch.Tensor:
-    # We wish to find the indexs which we are sampling from
+def joint_entropy_mvn(distribution: MultivariateNormal, likelihood, per_samples, num_configs: int, low_memory: bool = False) -> torch.Tensor:
+    # We can exactly compute a larger sized exact distribution
     D = distribution.event_shape[0]
-    if D < 4:
+    if D < 5:
         l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
         l = torch.transpose(l, 0, 1)
         t = string.ascii_lowercase[:D]
+
+        # We can chunk to get away with lower memory usage
+        N = l.shape[0]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
-        g = torch.einsum(s, *torch.unbind(l, dim=2))
-        g = g * torch.log(g)
-        g = -torch.sum(g, dim=tuple(range(2,2+D)))
-        g = torch.mean(g, dim=1)
-        return g
+        joint_entropies_N = torch.empty(N, dtype=torch.double)
+        pbar = tqdm(total=N, desc="Joint Entropy", leave=False)
+        @toma.execute.chunked(l, 16384)
+        def compute(l, start: int, end: int):
+            g = torch.einsum(s, *torch.unbind(l, dim=2))
+            g = g * torch.log(g)
+            g = -torch.sum(g, dim=tuple(range(2,2+D)))
+            g = torch.mean(g, dim=1)
+            joint_entropies_N[start:end].copy_(g)
+            pbar.update(end - start)
+        return joint_entropies_N
     else:
         return torch.zeros(distribution.batch_shape)
 
