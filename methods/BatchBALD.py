@@ -59,7 +59,7 @@ def combine_mvns(mvns):
 # We compute the 
 def joint_entropy_mvn(distribution : MultivariateNormal, likelihood, per_samples, num_configs : int) -> torch.Tensor:
     # We wish to find the indexs which we are sampling from
-    D = distribution.event_shape[1]
+    D = distribution.event_shape[0]
     if D < 5:
         l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
         l = torch.transpose(l, 0, 1)
@@ -91,6 +91,50 @@ def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihoo
 
     return entropies_N
 
+def get_pool(dataset: ActiveLearningDataset) -> torch.Tensor:
+    inputs = []
+    for x, i in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
+        inputs.append(x)
+    inputs = torch.cat(inputs, dim=0)
+    return inputs
+
+def get_features(inputs: torch.Tensor, feature_size: int, model: UncertainModel) -> torch.Tensor:
+    N = inputs.shape[0]
+    pool = torch.empty((N, feature_size))
+    pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
+    @toma.execute.chunked(inputs, 1024)
+    def compute(inputs, start: int, end: int):
+        with torch.no_grad():
+            if torch.cuda.is_available():
+                inputs = inputs.cuda()
+            tmp = model.feature_extractor.forward(inputs).detach()
+            pool[start:end].copy_(tmp)
+        pbar.update(end - start)
+    pbar.close()
+    return pool
+
+def get_gp_output(inputs: torch.Tensor, model: UncertainModel) -> List[MultivariateNormal]:
+    dists = []
+    N = inputs.shape[0]
+    pbar = tqdm(total=N, desc="GP", leave=False)
+    @toma.execute.chunked(inputs, 256)
+    def compute(inputs, start: int, end: int):
+        with torch.no_grad():
+            if torch.cuda.is_available():
+                inputs = grouped_pool.cuda()
+            d = model.model.gp(inputs)
+            dists.append(d)
+        pbar.update(end - start)
+    pbar.close()
+    return dists
+
+def get_ind_output(inputs: torch.Tensor, model: UncertainModel) -> MultivariateNormal:
+    dists = get_gp_output(inputs, model)
+    dists = list(map(lambda x: x.to_data_independent_dist(), dists))
+    dists = combine_mvns(dists)
+    dists_ind = dists.to_data_independent_dist()
+    return dists_ind
+
 class BatchBALD(UncertainMethod):
     def __init__(self, params: BatchBALDParams) -> None:
         super().__init__()
@@ -108,26 +152,10 @@ class BatchBALD(UncertainMethod):
             num_cat = 10
             feature_size = 512
 
-            inputs = []
-
-            for x, i in tqdm(dataset.get_pool(), desc="Loading pool", leave=False):
-                inputs.append(x)
-            inputs = torch.cat(inputs, dim=0)
-
+            inputs = get_pool(dataset)
             N = inputs.shape[0]
-            pool = torch.empty((N, feature_size))
-            pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
 
-            @toma.execute.chunked(inputs, 1024)
-            def compute(inputs, start: int, end: int):
-                with torch.no_grad():
-                    if torch.cuda.is_available():
-                        inputs = inputs.cuda()
-                    tmp = model.feature_extractor.forward(inputs).detach()
-                    pool[start:end].copy_(tmp)
-                pbar.update(end - start)
-
-            pbar.close()
+            pool = get_features(inputs, feature_size, model)
 
             model.model.eval()
             batch_size = self.params.aquisition_size
@@ -142,68 +170,29 @@ class BatchBALD(UncertainMethod):
 
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
 
-            dists = []
-
-            pbar = tqdm(total=N, desc="Conditional Distributions", leave=False)
-            @toma.execute.chunked(pool, 256)
-            def compute(pool, start: int, end: int):
-                with torch.no_grad():
-                    if torch.cuda.is_available():
-                        pool = pool.cuda()
-                    d = model.model.gp(pool).to_data_independent_dist()
-                    dists.append(d)
-                pbar.update(end - start)
-            pbar.close()
-            
-            dists = combine_mvns(dists).to_data_independent_dist()
+            dists = get_ind_output(pool, model)
             conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples).cpu()
             
-            for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
+            for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
                 # First we compute the joint distribution of each of the datapoints with the current aquisition
                 # We first calculate the aquisition by itself first.
                 joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
                 scores_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
 
-                if i > 0:
-                    z = pool[candidate_indices]
-                    z = z[None,:,:]
-                    z = z.expand(N, -1, -1)
+                # We get the current selected datapoints and broadcast them together with
+                # the pool
+                z = pool[candidate_indices]
+                z = z[None,:,:]
+                z = z.expand(N, -1, -1)
 
-                    dists = []
-                    pbar = tqdm(total=N, desc="Joint", leave=False)
-                    t = pool[:,None,:]
-                    grouped_pool = torch.cat([z,t], dim=1)
-                    grouped_pool = grouped_pool[:,None,:,:]
+                t = pool[:,None,:]
+                grouped_pool = torch.cat([z,t], dim=1)
+                grouped_pool = grouped_pool[:,None,:,:]
 
-                    @toma.execute.chunked(grouped_pool, 256)
-                    def compute(grouped_pool, start: int, end: int):
-                        with torch.no_grad():
-                            if torch.cuda.is_available():
-                                grouped_pool = grouped_pool.cuda()
-                            d = model.model.gp(grouped_pool)
-                            dists.append(d)
-                        pbar.update(end - start)
-                    pbar.close()
+                dists = get_gp_output(grouped_pool, model)
 
-                    dists_ = combine_mtmvns(dists)
-                    joint_entropy_result = joint_entropy_mvn(dists_, model.likelihood, samples, num_cat)
-                            
-                else:
-                    dists = []
-                    pbar = tqdm(total=N, desc="Joint", leave=False)
-                    @toma.execute.chunked(pool, 256)
-                    def compute(pool, start: int, end: int):
-                        with torch.no_grad():
-                            if torch.cuda.is_available():
-                                pool = pool.cuda()
-                            d = model.model.gp(pool).to_data_independent_dist()
-                            dists.append(d)
-                        pbar.update(end - start)
-                    pbar.close()
-                    dists = combine_mvns(dists)
-                    dists_ind = dists.to_data_independent_dist()
-                    dists_ind_ = MultitaskMultivariateNormal.from_repeated_mvn(dists_ind, 1)
-                    joint_entropy_result = joint_entropy_mvn(dists_ind_, model.likelihood, samples, num_cat)
+                dists_ = combine_mtmvns(dists)
+                joint_entropy_result = joint_entropy_mvn(dists_, model.likelihood, samples, num_cat)
 
                 # Then we compute the batchbald objective
 
