@@ -67,7 +67,7 @@ if __name__ == "__main__":
             "batch_size": tune.grid_search([64]),
             "starting_size": tune.choice([2]),
             "num_aquisitions": tune.grid_search([70]),
-            "var_opt": tune.grid_search([None])
+            "var_opt": tune.grid_search([-1])
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(

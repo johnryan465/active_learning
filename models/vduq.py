@@ -124,7 +124,8 @@ class vDUQ(UncertainModel):
         training_params = self.training_params
 
         train_dataset = dataset.get_train()
-        num_data = len(train_dataset)
+        self.num_data = len(train_dataset)
+        num_data = self.num_data
 
         # Initialise different feature extractors based on the dataset
         # We can have multiple configs per dataset
