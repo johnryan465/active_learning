@@ -45,7 +45,7 @@ class Experiment:
         elif isinstance(model_config, BNNParams):
             model = BNN(model_config, training_config, dataset)
         else:
-            model = DNN(model_config, training_config, dataset)
+            raise NotImplementedError('Model')
         return model
 
     @staticmethod
@@ -57,7 +57,7 @@ class Experiment:
         elif isinstance(method_config, BatchBALDParams):
             method = BatchBALD(method_config)
         else:
-            method = Random(method_config)
+            raise NotImplementedError('Method')
         return method
 
     @staticmethod
@@ -72,8 +72,9 @@ class Experiment:
             #    with profiler.record_function("model_inference"):
             self.model.reset(self.dataset)
             ts = time.time()
-            tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + self.name + "_" + str(iteration) + str(ts))
-            tb_logger = Driver.train(self.name, iteration, self.training_params, self.model, self.dataset, tb_logger)
+            name = self.name + "_" + str(iteration) + str(ts)
+            tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + name)
+            self.model = Driver.train(name, iteration, self.training_params, self.model, self.dataset, tb_logger)
             self.method.acquire(self.model, self.dataset, tb_logger)
             self.model.prepare(self.bs)
             tb_logger.close()

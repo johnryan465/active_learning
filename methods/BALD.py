@@ -101,7 +101,7 @@ class BALD(UncertainMethod):
 
             probs = torch.cat(probs, dim=0)
             batch = get_bald_batch(probs, self.params.aquisition_size)
-            Method.log_batch(batch.indices, tb_logger, self.current_aquisition)
+            Method.log_batch(dataset.get_indexes(batch.indices), tb_logger, self.current_aquisition)
             dataset.move(batch.indices)
             self.current_aquisition += 1
 

@@ -1,7 +1,7 @@
-from types import FunctionType
+from typing import Callable, Dict, List, Optional
 
 from models.model_params import NNParams, ModelWrapperParams
-from datasets.activelearningdataset import DatasetName
+from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.training import TrainingParams
 from .model import ModelWrapper
 
@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from marshmallow_dataclass import dataclass
+from dataclasses import dataclass
 
 
 @dataclass
@@ -18,9 +18,8 @@ class DNNParams(ModelWrapperParams):
 
 
 class DNN(ModelWrapper):
-    def __init__(self, params: DNNParams, training_params: TrainingParams) -> None:
+    def __init__(self, params: DNNParams, training_params: TrainingParams, dataset: ActiveLearningDataset) -> None:
         super().__init__()
-        self.params = params
         self.training_params = training_params
         if training_params.dataset == DatasetName.mnist:
             self.model = MNISTNet()
@@ -33,7 +32,7 @@ class DNN(ModelWrapper):
             self.model = self.model.cuda()
 
         self.paramaters = [{"params": self.model.parameters(), "lr": 0.001}]
-        self.optimizer = optim.SGD(self.paramaters, momentum=0.9)
+        self.optimizer = optim.SGD(self.paramaters, lr=0.001, momentum=0.9)
         self.loss_fn = nn.CrossEntropyLoss()
 
     def reset(self) -> None:
@@ -48,19 +47,16 @@ class DNN(ModelWrapper):
     def get_model(self) -> torch.nn.Module:
         return self.model
 
-    def get_model_params(self) -> dict:
-        return self.params
-
     def prepare(self, batch_size: int) -> None:
         pass
 
     def get_training_params(self) -> TrainingParams:
         return self.training_params
 
-    def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
-        return None
+    def get_scheduler(self, optimizer: torch.optim.Optimizer) -> Optional[torch.optim.lr_scheduler._LRScheduler]:
+        pass
 
-    def get_eval_step(self) -> FunctionType:
+    def get_eval_step(self) -> Callable:
         def eval_step(engine, batch):
             self.model.eval()
 
@@ -74,7 +70,7 @@ class DNN(ModelWrapper):
             return y_pred, y
         return eval_step
 
-    def get_train_step(self):
+    def get_train_step(self) -> Callable:
         optimizer = self.optimizer
 
         def step(engine, batch):
@@ -93,8 +89,14 @@ class DNN(ModelWrapper):
             return loss.item()
         return step
 
-    def get_output_transform(self):
+    def get_output_transform(self) -> Callable:
         return lambda x: x
+
+    def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+        return {}
+
+    def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+        return {}
 
 
 class CIFAR10Net(nn.Module):

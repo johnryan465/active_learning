@@ -1,12 +1,13 @@
 name: active_learning
 channels:
-  - pytorch-nightly
   - conda-forge
   - anaconda
+  - pytorch
+  - omegacen
 dependencies:
   - python==3.8
   - gpytorch==1.4.0
-  - pytorch
+  - pytorch==1.8.1
   - cudatoolkit=10.2
   - numpy
   - torchvision
@@ -20,4 +21,5 @@ dependencies:
   - pip
   - pip:
     - toma
-    - batchbald_redux==2.0.2
+    - torchtyping
+    - batchbald_redux==2.0.5

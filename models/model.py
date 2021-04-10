@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from models.training import TrainingParams
 from datasets.activelearningdataset import ActiveLearningDataset
 from types import FunctionType
-from typing import Callable, Dict
+from typing import Any, Callable, Dict, List, Optional
 from enum import Enum
 import torch
 
@@ -22,13 +23,6 @@ class ModelWrapper(ABC):
         pass
 
     @abstractmethod
-    def get_model_params(self) -> dict:
-        """
-        Returns the trainable model parameters
-        """
-        pass
-
-    @abstractmethod
     def get_optimizer(self) -> torch.optim.Optimizer:
         """
         Returns the optimizer we are using in training
@@ -36,19 +30,19 @@ class ModelWrapper(ABC):
         pass
 
     @abstractmethod
-    def get_train_step(self) -> FunctionType:
+    def get_train_step(self) -> Callable:
         pass
 
     @abstractmethod
-    def get_eval_step(self) -> FunctionType:
+    def get_eval_step(self) -> Callable:
         pass
 
     @abstractmethod
-    def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
+    def get_scheduler(self, optimizer: torch.optim.Optimizer) -> Optional[torch.optim.lr_scheduler._LRScheduler]:
         pass
 
     @abstractmethod
-    def get_output_transform(self):
+    def get_output_transform(self) -> Callable:
         pass
 
     @abstractmethod
@@ -59,11 +53,11 @@ class ModelWrapper(ABC):
         pass
 
     @abstractmethod
-    def get_training_params(self):
+    def get_training_params(self) -> TrainingParams:
         pass
 
     @abstractmethod
-    def get_loss_fn(self):
+    def get_loss_fn(self) -> Callable:
         pass
 
     @abstractmethod
@@ -74,6 +68,13 @@ class ModelWrapper(ABC):
     def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
         pass
 
+    @abstractmethod
+    def state_dict(self) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        pass
 
 # This is a model which we can sample from
 class UncertainModel(ModelWrapper):

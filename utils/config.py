@@ -1,32 +1,36 @@
 from dataclasses import fields
-from typing import Any
+from typing import Any, List
 from params.registered import Registered
 from params.params import Params
 import os.path
+import os
 import json
 import csv
 from ignite.metrics.loss import Loss
 from typing import Callable, Dict, Sequence, Tuple, Union, cast
+from typing import Type, TypeVar
 
 import torch
 
 from ignite.metrics.metric import reinit__is_reduced
 
+T = TypeVar('T')
+
 
 class IO:
     @staticmethod
-    def parseParams(cls: type, dic: dict) -> Any:
+    def parseParams(param_type: Type[T], dic: dict) -> T:
         kwds = {}
-        for field in fields(cls):
+        for field in fields(param_type):
             a = dic.get(field.name)
-            if issubclass(field.type, Params):
+            if issubclass(field.type, Params): # type: ignore
                 for option in Registered.types[field.type.name()]:
                     if option.name() == dic[field.name]['__name__']:
                         a = IO.parseParams(option, dic[field.name])
 
             kwds[field.name] = a
 
-        return cls(**kwds)
+        return param_type(**kwds)
 
     @staticmethod
     def create_directory(path: str) -> None:
@@ -52,7 +56,7 @@ class IO:
         return os.path.isfile(file_name)
 
     @staticmethod
-    def dict_to_csv(dic: dict, file_name: str) -> None:
+    def dict_to_csv(dic: List, file_name: str) -> None:
         IO.create_directory(file_name)
         keys = dic[0].keys()
         with open(file_name, 'w', newline='') as output_file:

@@ -56,7 +56,7 @@ def init_parser() -> argparse.ArgumentParser:
                 q.add_argument('--power_iter', default=1, type=int)
                 q.add_argument('--dropout', default=0.0, type=float)
                 q.add_argument('--lr', default=0.01, type=float)
-                q.add_argument('--var_opt', default=None, type=bool)
+                q.add_argument('--var_opt', default=-1, type=float)
                 q.add_argument('--coeff', default=3, type=float)
             else:
                 q.add_argument('--dropout', default=0, type=float)
@@ -72,7 +72,7 @@ This level of abstraction lets us keep the command line interface seperate from 
 """
 
 
-def parse_dataset(args: dict) -> DatasetParams:
+def parse_dataset(args: argparse.Namespace) -> DatasetParams:
     # Setup the dataset config
     if args.dataset == DatasetName.mnist:
         dataset_params = DatasetParams(
@@ -89,7 +89,7 @@ def parse_dataset(args: dict) -> DatasetParams:
     return dataset_params
 
 
-def parse_method(args: dict) -> MethodParams:
+def parse_method(args: argparse.Namespace) -> MethodParams:
     # Create the active learning method
     if args.method == MethodName.batchbald:
         method_params = BatchBALDParams(
@@ -115,13 +115,13 @@ def parse_method(args: dict) -> MethodParams:
     return method_params
 
 
-def parse_model(args: dict) -> ModelParams:
+def parse_model(args: argparse.Namespace) -> ModelParams:
     # print(args)
     if args.model == ModelName.vduq:
         gp_params = GPParams(
             kernel='RBF',
             num_classes=10,
-            ard=None,
+            ard=-1,
             n_inducing_points=10,
             lengthscale_prior=False,
             separate_inducing_points=False,
@@ -154,13 +154,12 @@ def parse_model(args: dict) -> ModelParams:
 
         model_params = DNNParams(
             model_index=args.model_index,
-            gp_params=gp_params,
-            fe_params=nn_params
+            nn_params=nn_params
         )
     return model_params
 
 
-def parse_training(args: dict) -> TrainingParams:
+def parse_training(args: argparse.Namespace) -> TrainingParams:
     # Parse training params
     opt_params = OptimizerParams(
         optimizer=args.lr,

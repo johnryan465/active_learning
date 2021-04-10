@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Any, Callable, Dict
 
 
 from uncertainty.fixed_dropout import BayesianModule
@@ -13,7 +13,7 @@ from vduq.small_resnet import BNNMNISTResNet, MNISTResNet, PTMNISTResNet, CIFARR
 from vduq.dkl import initial_values_for_GP
 from gpytorch.mlls import VariationalELBO
 from gpytorch.likelihoods import SoftmaxLikelihood
-from marshmallow_dataclass import dataclass
+from dataclasses import dataclass
 
 
 import gpytorch
@@ -28,6 +28,7 @@ class vDUQParams(ModelWrapperParams):
 
 
 class vDUQ(UncertainModel):
+    model : DKL_GP
     fe_config = {
         DatasetName.mnist: [MNISTResNet, PTMNISTResNet, BNNMNISTResNet],
         DatasetName.cifar10: [CIFARResNet]
@@ -83,7 +84,7 @@ class vDUQ(UncertainModel):
             # Get a a better estimate
             with gpytorch.settings.num_likelihood_samples(32):
                 y_pred = self.model(x)
-            elbo = -self.elbo_fn(y_pred, y)
+            elbo = -self.elbo_fn(y_pred, y) #type: ignore
             elbo.backward()
             optimizer.step()
             if self.seperate_optimizers:
@@ -103,12 +104,9 @@ class vDUQ(UncertainModel):
             y_pred = y_pred.to_data_independent_dist()
 
             # The mean here is over likelihood samples
-            y_pred = self.likelihood(y_pred).probs.mean(0)
+            y_pred = self.likelihood(y_pred).probs.mean(0) #type: ignore
             return y_pred, y
         return output_transform
-
-    def get_model_params(self):
-        return self.model_parameters
 
     def get_optimizer(self):
         return self.optimizer
@@ -126,12 +124,12 @@ class vDUQ(UncertainModel):
         training_params = self.training_params
 
         train_dataset = dataset.get_train()
-        self.num_data = len(train_dataset)
+        num_data = len(train_dataset)
 
         # Initialise different feature extractors based on the dataset
         # We can have multiple configs per dataset
         # This allows us to compare various completely different architectures in a controlled way
-        self.feature_extractor = vDUQ.fe_config[training_params.dataset][params.model_index](fe_params)
+        feature_extractor = vDUQ.fe_config[training_params.dataset][params.model_index](fe_params)
 
         dataset_list = list(iter(train_dataset))
 
@@ -139,25 +137,26 @@ class vDUQ(UncertainModel):
         y_ = torch.cat([x[1] for x in dataset_list])
 
         init_inducing_points, init_lengthscale = initial_values_for_GP(
-            TensorDataset(x_, y_), self.feature_extractor,
+            TensorDataset(x_, y_), feature_extractor,
             gp_params.n_inducing_points
         )
 
         # The ability to use split optimizers in vDUQ for the variational parameters
-        self.seperate_optimizers = (training_params.optimizers.var_optimizer is not None)
+        self.seperate_optimizers = (training_params.optimizers.var_optimizer > 0)
 
+        ard = gp_params.ard if gp_params.ard != -1 else None
         gp = GP(
               num_outputs=gp_params.num_classes,
               initial_lengthscale=init_lengthscale,
               initial_inducing_points=init_inducing_points,
               separate_inducing_points=gp_params.separate_inducing_points,
               kernel=gp_params.kernel,
-              ard=gp_params.ard,
+              ard=ard,
               lengthscale_prior=gp_params.lengthscale_prior,
               var_dist="triangular" if self.seperate_optimizers else "default"
         )
 
-        self.model = DKL_GP(self.feature_extractor, gp)
+        self.model = DKL_GP(feature_extractor, gp)
 
         self.likelihood = SoftmaxLikelihood(
             num_classes=gp_params.num_classes, mixing_weights=False)
@@ -168,7 +167,7 @@ class vDUQ(UncertainModel):
             self.likelihood = self.likelihood.cuda()
             init_inducing_points = init_inducing_points.cuda()
 
-        self.model_parameters = [
+        model_parameters = [
             {"params": self.model.feature_extractor.parameters(),
                 "lr": training_params.optimizers.optimizer},
             {"params": self.likelihood.parameters(
@@ -180,33 +179,35 @@ class vDUQ(UncertainModel):
                 "params": self.model.gp.parameters(),
                 "lr": training_params.optimizers.optimizer}
             ]
-            self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data=self.num_data)
+            self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data=num_data)
 
         else:
-            self.model_parameters.append({
+            model_parameters.append({
                     "params": self.model.gp.parameters(),
                     "lr": training_params.optimizers.optimizer
                 }
             )
 
         self.optimizer = torch.optim.SGD(
-            self.model_parameters, momentum=0.9, weight_decay=fe_params.weight_decay
+            model_parameters,
+            lr=training_params.optimizers.optimizer,
+            momentum=0.9,
+            weight_decay=fe_params.weight_decay
         )
 
-        if self.num_data < 40:
+        if num_data < 40:
             milestones = [ i * 8 for i in range(0,3)]
         else:
-            milestones = [ i * int(self.num_data  / 5) for i in range(0,3)]
+            milestones = [ i * int(num_data  / 5) for i in range(0,3)]
 
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
             self.optimizer, milestones=milestones, gamma=0.33
         )
 
-        self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp,
-                                       num_data=self.num_data)
+        self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp, num_data=num_data)
 
     def get_loss_fn(self):
-        return lambda x, y: -self.elbo_fn(x, y)
+        return lambda x, y: -self.elbo_fn(x, y) #type: ignore
 
     def get_training_params(self):
         return self.training_params
@@ -215,43 +216,49 @@ class vDUQ(UncertainModel):
     # we need to sample from the feature extractor and the GP
     # or just the GP
     def sample(self, input: torch.Tensor, samples: int) -> torch.Tensor:
-        if isinstance(self.feature_extractor, BayesianModule):
+        if isinstance(self.model.feature_extractor, BayesianModule):
             # We need to sample the feature extractor and the GP
             # We can either independently sample both
             # Or sample the fe k times
             # For each sample of the fe we sample the GP samples/k times
             # Requires sample which is a composite and a ratio
-            fe_sampled = self.feature_extractor.forward(input, samples)
+            fe_sampled = self.model.feature_extractor.forward(input, samples)
             flat = BayesianModule.flatten_tensor(fe_sampled)
             out = self.model.gp(flat)
             out = out.sample(torch.Size((1,)))
             out = out.permute(1, 0, 2)
-            return self.likelihood(out).probs
+            return self.likelihood(out).probs #type: ignore
         else:
-            flat = self.feature_extractor.forward(input)
+            flat = self.model.feature_extractor.forward(input)
             out = self.model.gp(flat)
             out = out.sample(torch.Size((samples,)))
             out = out.permute(1, 0, 2)
-            return self.likelihood(out).probs
+            return self.likelihood(out).probs #type: ignore
 
-    def sample_gp(self, input: torch.Tensor, samples: int) -> torch.Tensor:
-        print(input.size())
-        print(self.model.gp.covar_module(input))
-        out = self.model.gp(input)
-        print(out)
-        #out = out.sample(torch.Size((samples,)))
-        #out = out.permute(1, 0, 2)
-        return self.likelihood(out).probs
-
-    def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+    def get_training_log_hooks(self):
         return {
             'cond': lambda x: x['cond'],
             'min': lambda x: x['min'],
             'loss': lambda x: x['loss']
         }
 
-    def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+    def get_test_log_hooks(self):
         return {
             'accuracy': self.get_output_transform(),
             'loss': lambda x: x
         }
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "model": self.model.state_dict(),
+            "training_params": self.training_params,
+            "model_params": self.params,
+            "likelihood": self.likelihood.state_dict()
+        }
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        self.params = state['model_params']
+        self.training_params = state['training_params']
+        self.seperate_optimizers = (self.training_params.optimizers.var_optimizer > 0)
+        self.model.load_state_dict(state["model"])
+        self.likelihood.load_state_dict(state["likelihood"])

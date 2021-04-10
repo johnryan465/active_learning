@@ -6,15 +6,16 @@ from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import global_step_from_engine, TensorboardLogger
 from utils.config import IO, VariationalLoss
 from models.training import TrainingParams
+from ignite.handlers import ModelCheckpoint, Checkpoint
 
 from datasets.activelearningdataset import ActiveLearningDataset
 import time
 from ray import tune
-
+import torch
 
 class Driver:
     @staticmethod
-    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger):
+    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger) -> ModelWrapper:
         training_params = model_wrapper.get_training_params()
 
         optimizer = model_wrapper.get_optimizer()
@@ -63,6 +64,16 @@ class Driver:
             es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
             evaluator.add_event_handler(Events.COMPLETED, es_handler)
 
+        saving_handler = ModelCheckpoint('/tmp/models', exp_name, n_saved=1, create_dir=True, score_function=score_fn, require_empty=False)
+        evaluator.add_event_handler(
+            Events.COMPLETED,
+            saving_handler,
+            to_save = {
+                "model": model_wrapper
+            }
+        )
+
+
         for stage, engine in engines.items():
             tb_logger.attach_output_handler(
                 engine,
@@ -98,8 +109,8 @@ class Driver:
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
         # tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
-
+        model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint))
         if training_params.epochs > 0:
             IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
             IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')
-        return tb_logger
+        return model_wrapper
