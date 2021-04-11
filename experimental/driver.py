@@ -15,7 +15,7 @@ import torch
 
 class Driver:
     @staticmethod
-    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger) -> ModelWrapper:
+    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger) -> None:
         training_params = model_wrapper.get_training_params()
 
         optimizer = model_wrapper.get_optimizer()
@@ -113,4 +113,3 @@ class Driver:
         if training_params.epochs > 0:
             IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
             IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')
-        return model_wrapper

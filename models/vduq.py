@@ -27,7 +27,7 @@ class vDUQParams(ModelWrapperParams):
     gp_params: GPParams
 
 
-class vDUQ(UncertainModel):
+class   vDUQ(UncertainModel):
     model : DKL_GP
     fe_config = {
         DatasetName.mnist: [MNISTResNet, PTMNISTResNet, BNNMNISTResNet],
@@ -39,7 +39,7 @@ class vDUQ(UncertainModel):
         super().__init__()
         self.params = model_params
         self.training_params = training_params
-        self.reset(dataset)
+        self.initialize(dataset)
 
     # To prepare for a new batch we need to update the size of the dataset and update the
     # classes who depend on the size of the training set
@@ -117,7 +117,7 @@ class vDUQ(UncertainModel):
     def get_model(self):
         return self.model
 
-    def reset(self, dataset: ActiveLearningDataset):
+    def initialize(self, dataset: ActiveLearningDataset) -> None:
         params = self.params
         gp_params = params.gp_params
         fe_params = params.fe_params
@@ -207,6 +207,7 @@ class vDUQ(UncertainModel):
 
         self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp, num_data=num_data)
 
+
     def get_loss_fn(self):
         return lambda x, y: -self.elbo_fn(x, y) #type: ignore
 
@@ -258,8 +259,12 @@ class vDUQ(UncertainModel):
         }
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
-        self.params = state['model_params']
-        self.training_params = state['training_params']
-        self.seperate_optimizers = (self.training_params.optimizers.var_optimizer > 0)
-        self.model.load_state_dict(state["model"])
-        self.likelihood.load_state_dict(state["likelihood"])
+        params = state['model_params']
+        training_params = state['training_params']
+
+        # We create the new object and then update the weights
+        self.model.load_state_dict(state['model'])
+        self.likelihood.load_state_dict(state['likelihood'])
+
+    def reset(self) -> None:
+        return super().reset()

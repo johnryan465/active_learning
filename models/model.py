@@ -2,16 +2,23 @@ from abc import ABC, abstractmethod
 from models.training import TrainingParams
 from datasets.activelearningdataset import ActiveLearningDataset
 from types import FunctionType
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 from enum import Enum
 import torch
 
 
 class ModelWrapper(ABC):
     @abstractmethod
-    def reset(self, dataset: ActiveLearningDataset) -> None:
+    def reset(self) -> None:
         """
         Resets the model to an untrained state
+        """
+        pass
+
+    @abstractmethod
+    def initialize(self, dataset: ActiveLearningDataset) -> None:
+        """
+        Initialise the weights
         """
         pass
 

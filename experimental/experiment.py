@@ -68,17 +68,17 @@ class Experiment:
     def run(self) -> None:
         iteration = 0
         while(not self.method.complete()):
-            # with profiler.profile() as prof:
-            #    with profiler.record_function("model_inference"):
-            self.model.reset(self.dataset)
             ts = time.time()
+            #with profiler.profile() as prof:
+            #    with profiler.record_function("model_inference"):
+            self.model.initialize(self.dataset)
             name = self.name + "_" + str(iteration) + str(ts)
             tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + name)
-            self.model = Driver.train(name, iteration, self.training_params, self.model, self.dataset, tb_logger)
+            Driver.train(name, iteration, self.training_params, self.model, self.dataset, tb_logger)
             self.method.acquire(self.model, self.dataset, tb_logger)
             self.model.prepare(self.bs)
             tb_logger.close()
             iteration = iteration + 1
             
-            # prof.export_chrome_trace("trace.json")
+            #prof.export_chrome_trace(str(ts)+"trace.json")
 
