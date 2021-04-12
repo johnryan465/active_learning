@@ -3,23 +3,18 @@ channels:
   - conda-forge
   - anaconda
   - pytorch
-  - omegacen
 dependencies:
-  - python==3.8
-  - gpytorch==1.4.0
-  - pytorch==1.8.1
+  - python=3.9
+  - gpytorch=1.4.0
+  - pytorch=1.8.1
   - cudatoolkit=10.2
-  - numpy
   - torchvision
-  - marshmallow-dataclass
+  - ray-tune
+  - numpy
+  - tensorboard
   - scikit-learn
   - ignite
-  - requests
-  - tensorboardx
-  - ray-tune
-  - ray-dashboard
   - pip
   - pip:
     - toma
     - torchtyping
-    - batchbald_redux==2.0.5

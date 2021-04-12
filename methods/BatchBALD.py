@@ -1,3 +1,4 @@
+from torch.distributions.normal import Normal
 from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
 from models.vduq import vDUQ
@@ -11,15 +12,17 @@ from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 from gpytorch.distributions import MultivariateNormal, MultitaskMultivariateNormal
 from gpytorch.lazy import CatLazyTensor, BlockDiagLazyTensor
 from torch.distributions.utils import _standard_normal
-from typing import List
-from torchtyping import TensorType
-
+from typing import Annotated, Generic, List, NewType, Type, TypeVar, Union
+from typeguard import typechecked
+from utils.typing import TensorType
 
 import torch
 from tqdm import tqdm
 from dataclasses import dataclass
 from toma import toma
 import string
+
+
 
 @dataclass
 class BatchBALDParams(MethodParams):
@@ -58,7 +61,7 @@ def combine_mtmvns(mvns) -> MultitaskMultivariateNormal:
     covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
     return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
 
-# We compute the 
+# We compute the joint entropy of the distributions
 def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_samples, num_configs: int, output: torch.Tensor, variance_reduction: bool = False) -> None:
     # We can exactly compute a larger sized exact distribution
     # As the task batches are independent we can chunk them
@@ -72,7 +75,7 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
         # We can't lazily split, only lazily combine
         len_d = len(distributions)
         if variance_reduction:
-            # here is where we generate the 
+            # here is where we generate the samples which we will 
             shape = [per_samples] + list(distributions[0].base_sample_shape)
             samples = _standard_normal(torch.Size(shape), dtype=distributions[0].loc.dtype, device=distributions[0].loc.device)
 
@@ -104,9 +107,10 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
     else:
         return None
 
-def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihood, num_samples : int) -> torch.Tensor:
+
+def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihood, num_samples : int) -> TensorType["datapoints"]:
     # The distribution input is a batch of MVNS
-    log_probs_N_K_C = (likelihood(distributions.sample(sample_shape=torch.Size([num_samples]))).logits).permute(1, 0, 2)
+    log_probs_N_K_C = torch.squeeze((likelihood(distributions.sample(sample_shape=torch.Size([num_samples]))).logits).permute(1, 0, 3, 2), dim=3)
     N, K, C = log_probs_N_K_C.shape
     entropies_N = torch.empty(N, dtype=torch.double)
     pbar = tqdm(total=N, desc="Conditional Entropy", leave=False)
@@ -122,14 +126,18 @@ def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihoo
 
     return entropies_N
 
-def get_pool(dataset: ActiveLearningDataset) -> torch.Tensor:
+# Gets the pool from the dataset as a tensor
+@typechecked
+def get_pool(dataset: ActiveLearningDataset) -> TensorType["datapoints", "channels", "x", "y"]:
     inputs = []
-    for x, i in tqdm(dataset.get_pool_tensor(), desc="Loading pool", leave=False):
+    for x, _ in tqdm(dataset.get_pool_tensor(), desc="Loading pool", leave=False):
         inputs.append(x)
     inputs = torch.stack(inputs, dim=0)
     return inputs
 
-def get_features(inputs: torch.Tensor, feature_size: int, model: vDUQ) -> torch.Tensor:
+
+@typechecked
+def get_features(inputs: TensorType["datapoints", "channels", "x", "y"], feature_size: int, model_wrapper: vDUQ) -> TensorType["datapoints", "num_features"]:
     N = inputs.shape[0]
     pool = torch.empty((N, feature_size))
     pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
@@ -138,29 +146,37 @@ def get_features(inputs: torch.Tensor, feature_size: int, model: vDUQ) -> torch.
         with torch.no_grad():
             if torch.cuda.is_available():
                 inputs = inputs.cuda()
-            tmp = model.model.feature_extractor.forward(inputs).detach()
+            tmp = model_wrapper.model.feature_extractor.forward(inputs).detach()
             pool[start:end].copy_(tmp)
         pbar.update(end - start)
     pbar.close()
     return pool
 
-def get_gp_output(inputs: torch.Tensor, model: vDUQ) -> List[MultivariateNormal]:
+
+@typechecked
+def get_gp_output(features: TensorType["datapoints", "num_points", "num_features"], model: vDUQ) -> List[MultivariateNormal]:
+    features = features[:,None,:,:]
     with torch.no_grad():
         dists = []
-        N = inputs.shape[0]
+        N = features.shape[0]
         pbar = tqdm(total=N, desc="GP", leave=False)
-        @toma.execute.chunked(inputs, 256)
-        def compute(inputs, start: int, end: int):
+        @toma.execute.chunked(features, 256)
+        def compute(features, start: int, end: int):
             if torch.cuda.is_available():
-                inputs = inputs.cuda()
-            d = model.model.gp(inputs)
+                features = features.cuda()
+            d = model.model.gp(features)
             dists.append(d)
             pbar.update(end - start)
         pbar.close()
         return dists
 
-def get_ind_output(inputs: torch.Tensor, model: vDUQ) -> MultivariateNormal:
-    dists = get_gp_output(inputs, model)
+
+# This is a wrapper function which creates a multivariate distibution representing all of the datapoints
+# independently.
+@typechecked
+def get_ind_output(features: TensorType["datapoints", "num_features"], model_wrapper: vDUQ) -> Normal:
+    features_expanded: TensorType["datapoints", 1, "num_features"] = features[:,None,:]
+    dists = get_gp_output(features_expanded, model_wrapper)
     dists = list(map(lambda x: x.to_data_independent_dist(), dists))
     dists = combine_mvns(dists)
     dists_ind = dists.to_data_independent_dist()
@@ -172,9 +188,10 @@ class BatchBALD(UncertainMethod):
         self.params = params
         self.current_aquisition = 0
 
-    def acquire(self, model: UncertainModel, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
+    @typechecked
+    def acquire(self, model_wrapper: UncertainModel, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
         with torch.no_grad():
-            if isinstance(model, vDUQ):
+            if isinstance(model_wrapper, vDUQ):
                 # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
                 # which is computationaly prohibative (has complexity related to the pool size)
 
@@ -184,12 +201,12 @@ class BatchBALD(UncertainMethod):
                 num_cat = 10
                 feature_size = 512
 
-                inputs = get_pool(dataset)
+                inputs: TensorType["datapoints","channels","x","y"] = get_pool(dataset)
                 N = inputs.shape[0]
 
-                pool = get_features(inputs, feature_size, model)
+                pool: TensorType["datapoints","num_features"] = get_features(inputs, feature_size, model_wrapper)
 
-                model.model.eval()
+                model_wrapper.model.eval()
                 batch_size = self.params.aquisition_size
                 batch_size = min(batch_size, N)
 
@@ -200,31 +217,28 @@ class BatchBALD(UncertainMethod):
                 candidate_indices = []
                 candidate_scores = []
 
-                conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-
-                dists = get_ind_output(pool, model)
-                conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples).cpu()
+                dists = get_ind_output(pool, model_wrapper)
+                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(dists, model_wrapper.likelihood, samples).cpu()
                 
                 for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
                     # First we compute the joint distribution of each of the datapoints with the current aquisition
                     # We first calculate the aquisition by itself first.
 
                     joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-                    scores_N = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
+                    scores_N: TensorType["datapoints"]= torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
 
                     # We get the current selected datapoints and broadcast them together with
                     # the pool
-                    z = pool[candidate_indices]
-                    z = z[None,:,:]
-                    z = z.expand(N, -1, -1)
+                    z: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
+                    z: TensorType[1, "current_batch_size", "num_features"]= z[None,:,:]
+                    z: TensorType["datapoints", "current_batch_size", "num_features"] = z.expand(N, -1, -1)
 
-                    t = pool[:,None,:]
-                    grouped_pool = torch.cat([z,t], dim=1)
-                    grouped_pool = grouped_pool[:,None,:,:]
+                    t: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
+                    grouped_pool: TensorType["datapoints": "new_batch_size", "num_features"] = torch.cat([z,t], dim=1)
 
-                    dists = get_gp_output(grouped_pool, model)
+                    dists = get_gp_output(grouped_pool, model_wrapper)
 
-                    joint_entropy_mvn(dists, model.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=True)
+                    joint_entropy_mvn(dists, model_wrapper.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=True)
 
                     # Then we compute the batchbald objective
 
