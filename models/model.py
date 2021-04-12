@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 from enum import Enum
 import torch
 
+T = TypeVar("T")
 
 class ModelWrapper(ABC):
     @abstractmethod
@@ -79,8 +80,9 @@ class ModelWrapper(ABC):
     def state_dict(self) -> Dict[str, Any]:
         pass
 
+    @classmethod
     @abstractmethod
-    def load_state_dict(self, state: Dict[str, Any]) -> None:
+    def load_state_dict(cls: Type[T], state: Dict[str, Any], dataset: ActiveLearningDataset) -> T:
         pass
 
 # This is a model which we can sample from

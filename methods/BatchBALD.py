@@ -59,7 +59,7 @@ def combine_mtmvns(mvns) -> MultitaskMultivariateNormal:
     return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
 
 # We compute the 
-def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_samples, num_configs: int, variance_reduction: bool = False) -> torch.Tensor:
+def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_samples, num_configs: int, output: torch.Tensor, variance_reduction: bool = False) -> None:
     # We can exactly compute a larger sized exact distribution
     # As the task batches are independent we can chunk them
     D = distributions[0].event_shape[0]
@@ -70,8 +70,6 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
     if D < 5:
         # We can chunk to get away with lower memory usage
         # We can't lazily split, only lazily combine
-        joint_entropies_N = torch.empty(N, dtype=torch.double)
-        pbar = tqdm(total=N, desc="Joint Entropy", leave=False)
         len_d = len(distributions)
         if variance_reduction:
             # here is where we generate the 
@@ -79,7 +77,8 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
             samples = _standard_normal(torch.Size(shape), dtype=distributions[0].loc.dtype, device=distributions[0].loc.device)
 
         @toma.batch(initial_batchsize=len(distributions))
-        def compute(batchsize: int):
+        def compute(batchsize: int, distributions: List[MultivariateNormal]):
+            pbar = tqdm(total=N, desc="Joint Entropy", leave=False)
             start = 0
             end = 0
             for i in range(0, len_d, batchsize):
@@ -97,13 +96,13 @@ def joint_entropy_mvn(distributions: List[MultivariateNormal], likelihood, per_s
                 g = g * torch.log(g)
                 g = -torch.sum(g, dim=tuple(range(2,2+D)))
                 g = torch.mean(g, dim=1)
-                joint_entropies_N[start:end].copy_(g)
+                output[start:end].copy_(g)
                 pbar.update(end - start)
                 start = end
-        compute() # type: ignore
-        return joint_entropies_N
+            pbar.close()
+        compute(distributions) # type: ignore
     else:
-        return torch.zeros(N)
+        return None
 
 def compute_conditional_entropy_mvn(distributions: MultivariateNormal, likelihood, num_samples : int) -> torch.Tensor:
     # The distribution input is a batch of MVNS
@@ -146,19 +145,19 @@ def get_features(inputs: torch.Tensor, feature_size: int, model: vDUQ) -> torch.
     return pool
 
 def get_gp_output(inputs: torch.Tensor, model: vDUQ) -> List[MultivariateNormal]:
-    dists = []
-    N = inputs.shape[0]
-    pbar = tqdm(total=N, desc="GP", leave=False)
-    @toma.execute.chunked(inputs, 256)
-    def compute(inputs, start: int, end: int):
-        with torch.no_grad():
+    with torch.no_grad():
+        dists = []
+        N = inputs.shape[0]
+        pbar = tqdm(total=N, desc="GP", leave=False)
+        @toma.execute.chunked(inputs, 256)
+        def compute(inputs, start: int, end: int):
             if torch.cuda.is_available():
                 inputs = inputs.cuda()
             d = model.model.gp(inputs)
             dists.append(d)
-        pbar.update(end - start)
-    pbar.close()
-    return dists
+            pbar.update(end - start)
+        pbar.close()
+        return dists
 
 def get_ind_output(inputs: torch.Tensor, model: vDUQ) -> MultivariateNormal:
     dists = get_gp_output(inputs, model)
@@ -174,77 +173,83 @@ class BatchBALD(UncertainMethod):
         self.current_aquisition = 0
 
     def acquire(self, model: UncertainModel, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
-        if isinstance(model, vDUQ):
-            # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
-            # which is computationaly prohibative (has complexity related to the pool size)
+        with torch.no_grad():
+            if isinstance(model, vDUQ):
+                # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
+                # which is computationaly prohibative (has complexity related to the pool size)
 
-            # We instead need to repeatedly compute the updated probabilties for each aquisition
-            
-            samples = 100
-            num_cat = 10
-            feature_size = 512
-
-            inputs = get_pool(dataset)
-            N = inputs.shape[0]
-
-            pool = get_features(inputs, feature_size, model)
-
-            model.model.eval()
-            batch_size = self.params.aquisition_size
-            batch_size = min(batch_size, N)
-
-            if batch_size == 0:
-                self.current_aquisition += 1
-                return
-
-            candidate_indices = []
-            candidate_scores = []
-
-            conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-
-            dists = get_ind_output(pool, model)
-            conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples).cpu()
-            
-            for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
-                # First we compute the joint distribution of each of the datapoints with the current aquisition
-                # We first calculate the aquisition by itself first.
-                joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-                scores_N = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-
-                # We get the current selected datapoints and broadcast them together with
-                # the pool
-                z = pool[candidate_indices]
-                z = z[None,:,:]
-                z = z.expand(N, -1, -1)
-
-                t = pool[:,None,:]
-                grouped_pool = torch.cat([z,t], dim=1)
-                grouped_pool = grouped_pool[:,None,:,:]
-
-                dists = get_gp_output(grouped_pool, model)
-
-                joint_entropy_result = joint_entropy_mvn(dists, model.likelihood, samples, num_cat, True)
-
-                # Then we compute the batchbald objective
-
-                shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
-
-                scores_N = joint_entropy_result.detach().clone().cpu()
-
-                scores_N -= conditional_entropies_N + shared_conditinal_entropies
-                scores_N[candidate_indices] = -float("inf")
-
-                candidate_score, candidate_index = scores_N.max(dim=0)
+                # We instead need to repeatedly compute the updated probabilties for each aquisition
                 
-                candidate_indices.append(candidate_index.item())
-                candidate_scores.append(candidate_score.item())
-            
-            Method.log_batch(dataset.get_indexes(candidate_indices), tb_logger, self.current_aquisition)
-            dataset.move(candidate_indices)
-            self.current_aquisition += 1
+                samples = 100
+                num_cat = 10
+                feature_size = 512
 
-        else:
-            raise NotImplementedError("BatchBALD")
+                inputs = get_pool(dataset)
+                N = inputs.shape[0]
+
+                pool = get_features(inputs, feature_size, model)
+
+                model.model.eval()
+                batch_size = self.params.aquisition_size
+                batch_size = min(batch_size, N)
+
+                if batch_size == 0:
+                    self.current_aquisition += 1
+                    return
+
+                candidate_indices = []
+                candidate_scores = []
+
+                conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
+
+                dists = get_ind_output(pool, model)
+                conditional_entropies_N = compute_conditional_entropy_mvn(dists, model.likelihood, samples).cpu()
+                
+                for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
+                    # First we compute the joint distribution of each of the datapoints with the current aquisition
+                    # We first calculate the aquisition by itself first.
+
+                    joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
+                    scores_N = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
+
+                    # We get the current selected datapoints and broadcast them together with
+                    # the pool
+                    z = pool[candidate_indices]
+                    z = z[None,:,:]
+                    z = z.expand(N, -1, -1)
+
+                    t = pool[:,None,:]
+                    grouped_pool = torch.cat([z,t], dim=1)
+                    grouped_pool = grouped_pool[:,None,:,:]
+
+                    dists = get_gp_output(grouped_pool, model)
+
+                    joint_entropy_mvn(dists, model.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=True)
+
+                    # Then we compute the batchbald objective
+
+                    shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
+
+                    scores_N = joint_entropy_result.detach().clone().cpu()
+
+                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                    scores_N[candidate_indices] = -float("inf")
+
+                    candidate_score, candidate_index = scores_N.max(dim=0)
+                    
+                    candidate_indices.append(candidate_index.item())
+                    candidate_scores.append(candidate_score.item())
+                
+                Method.log_batch(dataset.get_indexes(candidate_indices), tb_logger, self.current_aquisition)
+                dataset.move(candidate_indices)
+                del candidate_indices
+                del pool
+                del joint_entropy_result
+                del scores_N
+                self.current_aquisition += 1
+
+            else:
+                raise NotImplementedError("BatchBALD")
 
     def initialise(self, dataset: ActiveLearningDataset) -> None:
         DatasetUtils.balanced_init(dataset, self.params.initial_size)

@@ -15,7 +15,7 @@ import torch
 
 class Driver:
     @staticmethod
-    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger) -> None:
+    def train(exp_name: str, iteration: int, training_params: TrainingParams, model_wrapper: ModelWrapper, dataset: ActiveLearningDataset, tb_logger) -> ModelWrapper:
         training_params = model_wrapper.get_training_params()
 
         optimizer = model_wrapper.get_optimizer()
@@ -109,7 +109,9 @@ class Driver:
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
         # tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
-        model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint))
+        best_model = model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint), dataset)
         if training_params.epochs > 0:
             IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
             IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')
+
+        return best_model

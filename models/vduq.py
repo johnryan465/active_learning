@@ -258,13 +258,16 @@ class   vDUQ(UncertainModel):
             "likelihood": self.likelihood.state_dict()
         }
 
-    def load_state_dict(self, state: Dict[str, Any]) -> None:
+    @classmethod
+    def load_state_dict(cls, state: Dict[str, Any], dataset: ActiveLearningDataset) -> 'vDUQ':
         params = state['model_params']
         training_params = state['training_params']
 
         # We create the new object and then update the weights
-        self.model.load_state_dict(state['model'])
-        self.likelihood.load_state_dict(state['likelihood'])
 
+        model = vDUQ(params, training_params, dataset)
+        model.model.load_state_dict(state['model'])
+        model.likelihood.load_state_dict(state['likelihood'])
+        return model
     def reset(self) -> None:
         return super().reset()
