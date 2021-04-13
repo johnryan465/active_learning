@@ -202,7 +202,7 @@ class   vDUQ(UncertainModel):
             milestones = [ i * int(num_data  / 5) for i in range(0,3)]
 
         self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=milestones, gamma=0.33
+            self.optimizer, milestones=milestones, gamma=1
         )
 
         self.elbo_fn = VariationalELBO(self.likelihood, self.model.gp, num_data=num_data)
