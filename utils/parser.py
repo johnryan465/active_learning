@@ -96,8 +96,9 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=50,
-            use_cuda=use_cuda
+            samples=250,
+            use_cuda=use_cuda,
+            var_reduction=False
         )
     elif args.method == MethodName.bald:
         method_params = BALDParams(

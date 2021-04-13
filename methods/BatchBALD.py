@@ -28,6 +28,7 @@ import string
 class BatchBALDParams(MethodParams):
     samples: int
     use_cuda: bool
+    var_reduction: bool = True
 
 
 def combine_mvns(mvns) -> MultitaskMultivariateNormal:
@@ -197,7 +198,7 @@ class BatchBALD(UncertainMethod):
 
                 # We instead need to repeatedly compute the updated probabilties for each aquisition
                 
-                samples = 100
+                samples = self.params.samples
                 num_cat = 10
                 feature_size = 512
 
@@ -238,7 +239,7 @@ class BatchBALD(UncertainMethod):
 
                     dists = get_gp_output(grouped_pool, model_wrapper)
 
-                    joint_entropy_mvn(dists, model_wrapper.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=True)
+                    joint_entropy_mvn(dists, model_wrapper.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=self.params.var_reduction)
 
                     # Then we compute the batchbald objective
 
