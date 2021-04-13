@@ -1,3 +1,4 @@
+from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 from torch.distributions.normal import Normal
 from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
@@ -46,11 +47,11 @@ def combine_mtmvns(mvns) -> MultitaskMultivariateNormalType:
         *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
     )
     covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
-    return MultitaskMultivariateNormalType(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
+    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
 
 # We compute the joint entropy of the distributions
 @typechecked
-def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, per_samples, num_configs: int, output: torch.Tensor, variance_reduction: bool = False) -> None:
+def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, per_samples, output: torch.Tensor, variance_reduction: bool = False) -> None:
     # We can exactly compute a larger sized exact distribution
     # As the task batches are independent we can chunk them
     D = distributions[0].event_shape[0]
@@ -78,7 +79,7 @@ def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, p
             l = torch.transpose(l, 0, 1)
             g = torch.einsum(s, *torch.unbind(l, dim=2))
             g = g * torch.log(g)
-            g = -torch.sum(g.flatten(2), 1) / per_samples
+            g = -torch.sum(g.flatten(1), 1) / per_samples
             return g
         
         chunked_distribution("Joint Entropy", distributions, func, output)
@@ -91,7 +92,7 @@ def chunked_distribution(name: str, distributions: List[MultivariateNormalType],
     len_d = len(distributions)
     @toma.batch(initial_batchsize=len_d)
     def compute(batchsize: int, distributions: List[MultivariateNormalType]):
-        pbar = tqdm(total=N, desc="name", leave=False)
+        pbar = tqdm(total=N, desc=name, leave=False)
         start = 0
         end = 0
         for i in range(0, len_d, batchsize):
@@ -232,7 +233,7 @@ class BatchBALD(UncertainMethod):
 
                     dists: List[MultitaskMultivariateNormalType[("chunked"), ("new_batch_size", "num_cat")]] = get_gp_output(grouped_pool, model_wrapper)
 
-                    joint_entropy_mvn(dists, model_wrapper.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=self.params.var_reduction)
+                    joint_entropy_mvn(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
 
                     # Then we compute the batchbald objective
 
