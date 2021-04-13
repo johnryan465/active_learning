@@ -110,6 +110,7 @@ class Driver:
         trainer.run(train_loader, max_epochs=training_params.epochs)
         # tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
         best_model = model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint), dataset)
+        saving_handler.save_handler.remove(saving_handler.last_checkpoint)
         if training_params.epochs > 0:
             IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
             IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')
