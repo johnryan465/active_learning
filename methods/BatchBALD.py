@@ -78,8 +78,7 @@ def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, p
             l = torch.transpose(l, 0, 1)
             g = torch.einsum(s, *torch.unbind(l, dim=2))
             g = g * torch.log(g)
-            g = -torch.sum(g, dim=tuple(range(2,2+D)))
-            g = torch.mean(g, dim=1)
+            g = -torch.sum(g.flatten(2), 1) / per_samples
             return g
         
         chunked_distribution("Joint Entropy", distributions, func, output)
@@ -175,13 +174,6 @@ def compute_conditional_entropy_mvn(distributions: List[MultitaskMultivariateNor
 
     return entropies_N
 
-# This is a wrapper function which creates a multivariate distibution representing all of the datapoints
-# independently.
-@typechecked
-def get_ind_output(features: TensorType["datapoints", "num_features"], model_wrapper: vDUQ) -> List[MultitaskMultivariateNormalType[ ("chunked") , (1, "num_cats") ]]:
-    features_expanded: TensorType["datapoints", 1, "num_features"] = features[:,None,:]
-    dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = get_gp_output(features_expanded, model_wrapper)
-    return dists
 
 class BatchBALD(UncertainMethod):
     def __init__(self, params: BatchBALDParams) -> None:
@@ -219,7 +211,8 @@ class BatchBALD(UncertainMethod):
                 candidate_scores = []
 
                 # Todo, creation this large distribution is unnecessary so do what we do for joint
-                ind_dists: MultitaskMultivariateNormalType[("datapoints"), (1, "num_cats")] = get_ind_output(pool, model_wrapper)
+                features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
+                ind_dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = get_gp_output(features_expanded, model_wrapper)
                 conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
                 
                 for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
@@ -227,7 +220,6 @@ class BatchBALD(UncertainMethod):
                     # We first calculate the aquisition by itself first.
 
                     joint_entropy_result: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-                    scores_N: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
 
                     # We get the current selected datapoints and broadcast them together with
                     # the pool
@@ -246,7 +238,7 @@ class BatchBALD(UncertainMethod):
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
-                    scores_N = joint_entropy_result.detach().clone().cpu()
+                    scores_N = joint_entropy_result.detach().cpu()
 
                     scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
