@@ -1,5 +1,5 @@
 from types import FunctionType
-from typing import Callable, Dict
+from typing import Callable, Dict, List
 from models.model_params import NNParams, ModelWrapperParams
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.model import UncertainModel
@@ -48,11 +48,12 @@ class BNN(UncertainModel):
 
     def __init__(self, params: BNNParams, training_params: TrainingParams, dataset: ActiveLearningDataset) -> None:
         super().__init__()
+        self.params = params
         self.nn_params = params.fe_params
         self.training_params = training_params
         self.reset(dataset)
 
-    def get_eval_step(self) -> FunctionType:
+    def get_eval_step(self) -> Callable:
         def eval_step(engine, batch):
             self.model.eval()
 
@@ -66,7 +67,7 @@ class BNN(UncertainModel):
             return y_pred.squeeze(), y
         return eval_step
 
-    def get_train_step(self) -> FunctionType:
+    def get_train_step(self) -> Callable:
         def step(engine, batch):
             self.model.train()
 
@@ -90,11 +91,11 @@ class BNN(UncertainModel):
             return s(x, y)
         return loss_fn
 
-    def sample(self, input: torch.tensor, samples: int):
+    def sample(self, input: torch.Tensor, samples: int):
         return self.model(input, samples)
 
     def reset(self, dataset: ActiveLearningDataset) -> None:
-        self.model = BNN.model_config[self.training_params.dataset][self.training_params.model_index](self.nn_params)
+        self.model = BNN.model_config[self.training_params.dataset][self.params.model_index](self.nn_params)
 
         self.parameters = [{
             "params": self.model.parameters(),
@@ -102,7 +103,8 @@ class BNN(UncertainModel):
 
         milestones = [60, 120, 160]
         self.optimizer = torch.optim.SGD(
-            self.parameters, momentum=0.9, weight_decay=self.nn_params.weight_decay
+            self.parameters, lr=self.training_params.optimizers.optimizer,
+            momentum=0.9, weight_decay=self.nn_params.weight_decay
         )
         if self.training_params.cuda:
             self.model = self.model.cuda()
@@ -120,21 +122,18 @@ class BNN(UncertainModel):
     def get_model(self) -> torch.nn.Module:
         return self.model
 
-    def get_model_params(self) -> dict:
-        return self.parameters
-
     def get_training_params(self):
         return self.training_params
 
     def get_scheduler(self, optimizer: torch.optim.Optimizer) -> torch.optim.lr_scheduler._LRScheduler:
         return self.scheduler
 
-    def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+    def get_training_log_hooks(self):
         return {
             'loss': lambda x: x
         }
 
-    def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
+    def get_test_log_hooks(self):
         return {
             'accuracy': self.get_output_transform(),
             'loss': lambda x: x

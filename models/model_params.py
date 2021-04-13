@@ -1,5 +1,6 @@
 from params.params import Params
-from marshmallow_dataclass import dataclass
+from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass

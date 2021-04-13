@@ -52,7 +52,7 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
 def _get_initial_inducing_points(f_X_sample, n_inducing_points):
     # print(f_X_sample.shape)
     kmeans = cluster.MiniBatchKMeans(
-        n_clusters=n_inducing_points, batch_size=n_inducing_points * 10
+        n_clusters=n_inducing_points, batch_size=n_inducing_points * 10 #type: ignore
     )
     kmeans.fit(f_X_sample)
     initial_inducing_points = torch.from_numpy(kmeans.cluster_centers_)
@@ -136,9 +136,8 @@ class GP(ApproximateGP):
         else:
             raise ValueError("Specified kernel not known.")
 
-        kernel.lengthscale = initial_lengthscale * torch.ones_like(
-            kernel.lengthscale
-        )
+        # GPytorch doesn't give the type of the kernel length scale
+        kernel.lengthscale = initial_lengthscale * torch.ones_like(kernel.lengthscale) # type: ignore
 
         self.mean_module = ConstantMean(batch_shape=batch_shape)
         self.covar_module = ScaleKernel(kernel, batch_shape=batch_shape)

@@ -10,10 +10,10 @@ class Params(ABC):
         dic = self.__dict__
         for field in fields(cls):
             a = dic.get(field.name)
-            if issubclass(field.type, Params):
+            if issubclass(field.type, Params): # type: ignore
                 a = a.export()
 
-            kwds[field.name] = a
+            kwds[field.name] = a # type: ignore
 
         return kwds
 

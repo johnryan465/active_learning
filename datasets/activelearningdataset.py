@@ -1,11 +1,17 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List
+from typing import List, Sequence
 import torch
 from batchbald_redux.active_learning import RandomFixedLengthSampler
+from torch.utils.data import Dataset, ConcatDataset, DataLoader, Subset
+from torchvision.datasets.vision import VisionDataset
 from .dataset_params import DatasetParams
-Indexes = List[int]
+from torchtyping import TensorType # type: ignore
 
+
+from typeguard import typechecked
+
+Indexes = List[int]
 
 class DatasetName(str, Enum):
     cifar10 = 'cifar10'
@@ -16,15 +22,19 @@ class DatasetName(str, Enum):
 
 class ActiveLearningDataset(ABC):
     @abstractmethod
-    def get_train(self):
+    def get_train(self) -> DataLoader:
         pass
 
     @abstractmethod
-    def get_test(self):
+    def get_test(self) -> DataLoader:
         pass
 
     @abstractmethod
-    def get_pool(self):
+    def get_pool(self) -> DataLoader:
+        pass
+
+    @abstractmethod
+    def get_pool_tensor(self) -> torch.Tensor:
         pass
 
     @abstractmethod
@@ -32,7 +42,7 @@ class ActiveLearningDataset(ABC):
         pass
 
     @abstractmethod
-    def get_classes(self):
+    def get_classes(self) -> List[str]:
         pass
 
     @abstractmethod
@@ -50,34 +60,34 @@ class ActiveLearningDataset(ABC):
 
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
-class DatasetWrapper(ABC):
+class DatasetWrapper(ActiveLearningDataset):
     num_workers = 4
-    def __init__(self, train_dataset: torch.utils.data.Dataset,
-                 test_dataset: torch.utils.data.Dataset, config: DatasetParams) -> None:
+    
+    def __init__(self, train_dataset: VisionDataset,
+                 test_dataset: VisionDataset, config: DatasetParams) -> None:
         super().__init__()
         self.bs = config.batch_size
         self.trainset = train_dataset
 
         if config.num_repetitions > 1:
-            self.trainset = torch.utils.data.ConcatDataset([train_dataset] * config.num_repetitions)
+            self.trainset = ConcatDataset([train_dataset] * config.num_repetitions)
         else:
             self.trainset = train_dataset
 
         self.testset = test_dataset
 
-        self.test_loader = torch.utils.data.DataLoader(
+        self.test_loader = DataLoader(
             self.testset, batch_size=self.bs, shuffle=False,
             pin_memory=True,
             drop_last=True, num_workers=DatasetWrapper.num_workers)
 
-        self.classes = train_dataset.classes
+        self.classes = config.classes.split(',')
         self.pool_size = len(self.trainset)
         self.mask = torch.zeros(self.pool_size)
 
-    def get_train(self):
-        ts = torch.utils.data.Subset(
-            self.trainset, torch.nonzero(self.mask != 0).squeeze())
-        return torch.utils.data.DataLoader(
+    def get_train(self) -> DataLoader:
+        ts = Subset(self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask != 0).squeeze()))
+        return DataLoader(
             ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, drop_last=False,
             pin_memory=True,
             sampler=RandomFixedLengthSampler(ts, 40000)
@@ -86,12 +96,16 @@ class DatasetWrapper(ABC):
     def get_test(self):
         return self.test_loader
 
-    def get_pool(self) -> torch.utils.data.DataLoader:
-        ts = torch.utils.data.Subset(
-            self.trainset, torch.nonzero(self.mask == 0).squeeze())
-        return torch.utils.data.DataLoader(
+    def get_pool(self) -> DataLoader:
+        ts = Subset(self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask == 0).squeeze()))
+        return DataLoader(
             ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, shuffle=True, pin_memory=True
         )
+
+    def get_pool_tensor(self) -> Dataset:
+        ts = Subset(
+            self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask == 0).squeeze()))
+        return ts
 
     # This method and related ones should take inputs in the range
     # 0 - poolsize instead of 0 - dataset size
@@ -101,7 +115,7 @@ class DatasetWrapper(ABC):
             self.mask[pool_idxs[i].unsqueeze(0)] = 1
         self.pool_size -= len(idxs)
 
-    def get_classes(self):
+    def get_classes(self) -> List[str]:
         return self.classes
 
     def get_pool_size(self):
@@ -140,3 +154,7 @@ class DatasetUtils:
             if completed_classes == num_classes:
                 break
         dataset.move(indexes)
+    
+    @staticmethod
+    def tensor_to_sequence(input: torch.Tensor) -> Sequence[int]:
+        return input.tolist()

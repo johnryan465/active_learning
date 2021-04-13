@@ -1,12 +1,12 @@
 from datasets.activelearningdataset import DatasetName
-from marshmallow_dataclass import dataclass
+from dataclasses import dataclass
 from .model_params import ModelParams
-
+from typing import Optional
 
 @dataclass
 class OptimizerParams(ModelParams):
     optimizer: float
-    var_optimizer: float = None
+    var_optimizer: float = -1
 
 
 @dataclass
@@ -18,3 +18,4 @@ class TrainingParams(ModelParams):
     batch_size: int
     patience: int
     progress_bar: bool
+    profiler: bool = False

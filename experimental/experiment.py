@@ -17,8 +17,22 @@ from datasets.dataset_params import DatasetParams
 from .driver import Driver
 import torch.autograd.profiler as profiler
 import time
+import tracemalloc
+import gc
+import sys
+import torch
 
-
+def debug_gpu():
+    # Debug out of memory bugs.
+    # tensor_list = []
+    tensor_count = 0
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                tensor_count = tensor_count + 1
+        except:
+            pass
+    print(f'Count of tensors = {tensor_count}.')
 
 # This is responsible for actually creating and executing an experiment
 
@@ -45,7 +59,7 @@ class Experiment:
         elif isinstance(model_config, BNNParams):
             model = BNN(model_config, training_config, dataset)
         else:
-            model = DNN(model_config, training_config, dataset)
+            raise NotImplementedError('Model')
         return model
 
     @staticmethod
@@ -57,7 +71,7 @@ class Experiment:
         elif isinstance(method_config, BatchBALDParams):
             method = BatchBALD(method_config)
         else:
-            method = Random(method_config)
+            raise NotImplementedError('Method')
         return method
 
     @staticmethod
@@ -67,17 +81,35 @@ class Experiment:
 
     def run(self) -> None:
         iteration = 0
+        # tracemalloc.start(25)
+        # snapshot_1 = tracemalloc.take_snapshot()
         while(not self.method.complete()):
-            # with profiler.profile() as prof:
-            #    with profiler.record_function("model_inference"):
-            self.model.reset(self.dataset)
             ts = time.time()
-            tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + self.name + "_" + str(iteration) + str(ts))
-            tb_logger = Driver.train(self.name, iteration, self.training_params, self.model, self.dataset, tb_logger)
+             #with profiler.profile(profile_memory=True, record_shapes=True) as prof:
+            self.model.initialize(self.dataset)
+            name = self.name + "_" + str(iteration) + str(ts)
+            tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + name)
+            self.model = Driver.train(name, iteration, self.training_params, self.model, self.dataset, tb_logger)
             self.method.acquire(self.model, self.dataset, tb_logger)
             self.model.prepare(self.bs)
+            # gc.collect()
             tb_logger.close()
             iteration = iteration + 1
-            
-            # prof.export_chrome_trace("trace.json")
+            # debug_gpu()
+            # snapshot_2 = tracemalloc.take_snapshot()
+            # print(tracemalloc.get_traceback_limit())
+            # top_stats = snapshot_2.compare_to(snapshot_1, 'lineno')
+
+            # print("[ Top 10 differences ]")
+            # for stat in top_stats[:10]:
+            #   print(stat)
+
+            # stat = top_stats[0]
+            # print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
+            # print(stat.traceback.total_nframe())
+            # for line in stat.traceback:
+            #    print(line)
+            # snapshot_1 = snapshot_2
+            # print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
+            # print(prof.key_averages().table(sort_by="cpu_memory_usage", row_limit=10))
 
