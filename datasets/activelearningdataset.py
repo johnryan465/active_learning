@@ -67,14 +67,18 @@ class DatasetWrapper(ActiveLearningDataset):
                  test_dataset: VisionDataset, config: DatasetParams) -> None:
         super().__init__()
         self.bs = config.batch_size
-        self.trainset = train_dataset
 
-        if config.num_repetitions > 1:
-            self.trainset = ConcatDataset([train_dataset] * config.num_repetitions)
+        if config.smoke_test:
+            self.trainset = Subset(train_dataset, list(range(0,200)))
+            self.testset = Subset(test_dataset, list(range(0,200))) # test_dataset
+            self.sampler_size = 2000
         else:
             self.trainset = train_dataset
+            self.testset = test_dataset
+            self.sampler_size = 40000
+        if config.num_repetitions > 1:
+            self.trainset = ConcatDataset([self.trainset] * config.num_repetitions)
 
-        self.testset = test_dataset
 
         self.test_loader = DataLoader(
             self.testset, batch_size=self.bs, shuffle=False,
@@ -90,7 +94,7 @@ class DatasetWrapper(ActiveLearningDataset):
         return DataLoader(
             ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, drop_last=False,
             pin_memory=True,
-            sampler=RandomFixedLengthSampler(ts, 40000)
+            sampler=RandomFixedLengthSampler(ts, self.sampler_size)
         )
 
     def get_test(self):

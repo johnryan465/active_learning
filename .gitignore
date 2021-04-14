@@ -1,7 +1,7 @@
 data/*
 .vscode/*
 logs/*
-
+experiments/*
 __pycache__/
 *.py[cod]
 *.png

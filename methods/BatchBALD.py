@@ -1,4 +1,6 @@
+from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 from torch.distributions.normal import Normal
+from torch.tensor import Tensor
 from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
 from models.vduq import vDUQ
@@ -46,11 +48,11 @@ def combine_mtmvns(mvns) -> MultitaskMultivariateNormalType:
         *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
     )
     covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
-    return MultitaskMultivariateNormalType(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
+    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
 
 # We compute the joint entropy of the distributions
 @typechecked
-def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, per_samples, num_configs: int, output: torch.Tensor, variance_reduction: bool = False) -> None:
+def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, per_samples: int, output: TensorType["N"], variance_reduction: bool = False) -> None:
     # We can exactly compute a larger sized exact distribution
     # As the task batches are independent we can chunk them
     D = distributions[0].event_shape[0]
@@ -61,25 +63,26 @@ def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, p
     if D < 5:
         # We can chunk to get away with lower memory usage
         # We can't lazily split, only lazily combine
-        len_d = len(distributions)
         if variance_reduction:
             # here is where we generate the samples which we will 
             shape = [per_samples] + list(distributions[0].base_sample_shape)
             samples = _standard_normal(torch.Size(shape), dtype=distributions[0].loc.dtype, device=distributions[0].loc.device)
 
-        def func(distribution: MultivariateNormalType) -> TensorType:
+        @typechecked
+        def func(distribution: MultivariateNormalType) -> TensorType["N"]:
             if variance_reduction:
                 base_samples = samples.detach().clone()
                 base_samples = base_samples[:,None,:,:]
                 base_samples = base_samples.expand(-1, distribution.batch_shape[0], -1, -1)
-                l = likelihood(distribution.sample(base_samples=base_samples)).probs
+                l: TensorType["num_samples", "N", "num_points", "num_cat"] = likelihood(distribution.sample(base_samples=base_samples)).probs
             else:
-                l = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
-            l = torch.transpose(l, 0, 1)
-            g = torch.einsum(s, *torch.unbind(l, dim=2))
-            g = g * torch.log(g)
-            g = -torch.sum(g, dim=tuple(range(2,2+D)))
-            g = torch.mean(g, dim=1)
+                l: TensorType["num_samples", "N", "num_points", "num_cat"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
+            l: TensorType["N", "num_samples", "num_points", "num_cat"] = torch.transpose(l, 0, 1)
+            j: List[TensorType["N", "num_samples", "num_cat"]] = torch.unbind(l, dim=2)
+            g: TensorType["N", "num_samples", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
+            g: TensorType["N", "expanded" : ...] = torch.mean(g, 1)
+            g: TensorType["N", "expanded" : ...] = g * torch.log(g)
+            g: TensorType["N"] = - torch.sum(g.flatten(1), 1)
             return g
         
         chunked_distribution("Joint Entropy", distributions, func, output)
@@ -92,7 +95,7 @@ def chunked_distribution(name: str, distributions: List[MultivariateNormalType],
     len_d = len(distributions)
     @toma.batch(initial_batchsize=len_d)
     def compute(batchsize: int, distributions: List[MultivariateNormalType]):
-        pbar = tqdm(total=N, desc="name", leave=False)
+        pbar = tqdm(total=N, desc=name, leave=False)
         start = 0
         end = 0
         for i in range(0, len_d, batchsize):
@@ -175,13 +178,6 @@ def compute_conditional_entropy_mvn(distributions: List[MultitaskMultivariateNor
 
     return entropies_N
 
-# This is a wrapper function which creates a multivariate distibution representing all of the datapoints
-# independently.
-@typechecked
-def get_ind_output(features: TensorType["datapoints", "num_features"], model_wrapper: vDUQ) -> List[MultitaskMultivariateNormalType[ ("chunked") , (1, "num_cats") ]]:
-    features_expanded: TensorType["datapoints", 1, "num_features"] = features[:,None,:]
-    dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = get_gp_output(features_expanded, model_wrapper)
-    return dists
 
 class BatchBALD(UncertainMethod):
     def __init__(self, params: BatchBALDParams) -> None:
@@ -193,12 +189,10 @@ class BatchBALD(UncertainMethod):
     def acquire(self, model_wrapper: UncertainModel, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
         with torch.no_grad():
             if isinstance(model_wrapper, vDUQ):
-                # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
-                # which is computationaly prohibative (has complexity related to the pool size)
-
-                # We instead need to repeatedly compute the updated probabilties for each aquisition
-                
+                candidate_indices = []
+                candidate_scores = []
                 samples = self.params.samples
+                efficent = False
                 num_cat = 10
                 feature_size = 512
 
@@ -214,48 +208,85 @@ class BatchBALD(UncertainMethod):
                 if batch_size == 0:
                     self.current_aquisition += 1
                     return
-
-                candidate_indices = []
-                candidate_scores = []
-
-                # Todo, creation this large distribution is unnecessary so do what we do for joint
-                ind_dists: MultitaskMultivariateNormalType[("datapoints"), (1, "num_cats")] = get_ind_output(pool, model_wrapper)
-                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
                 
-                for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
-                    # First we compute the joint distribution of each of the datapoints with the current aquisition
-                    # We first calculate the aquisition by itself first.
+                if efficent or self.params.smoke_test:
+                    # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
+                    # which is computationaly prohibative (has complexity related to the pool size)
 
-                    joint_entropy_result: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-                    scores_N: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-
-                    # We get the current selected datapoints and broadcast them together with
-                    # the pool
-                    z: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
-                    z: TensorType[1, "current_batch_size", "num_features"]= z[None,:,:]
-                    z: TensorType["datapoints", "current_batch_size", "num_features"] = z.expand(N, -1, -1)
-
-                    t: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
-                    grouped_pool: TensorType["datapoints": "new_batch_size", "num_features"] = torch.cat([z,t], dim=1)
-
-                    dists: List[MultitaskMultivariateNormalType[("chunked"), ("new_batch_size", "num_cat")]] = get_gp_output(grouped_pool, model_wrapper)
-
-                    joint_entropy_mvn(dists, model_wrapper.likelihood, samples, num_cat, joint_entropy_result, variance_reduction=self.params.var_reduction)
-
-                    # Then we compute the batchbald objective
-
-                    shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
-
-                    scores_N = joint_entropy_result.detach().clone().cpu()
-
-                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
-                    scores_N[candidate_indices] = -float("inf")
-
-                    candidate_score, candidate_index = scores_N.max(dim=0)
+                    # We instead need to repeatedly compute the updated probabilties for each aquisition
                     
-                    candidate_indices.append(candidate_index.item())
-                    candidate_scores.append(candidate_score.item())
+
+
+                    # Todo, creation this large distribution is unnecessary so do what we do for joint
+                    features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
+                    ind_dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = get_gp_output(features_expanded, model_wrapper)
+                    conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
+                    
+                    for i in tqdm(range(batch_size), desc="Acquiring", leave=False):
+                        # First we compute the joint distribution of each of the datapoints with the current aquisition
+                        # We first calculate the aquisition by itself first.
+
+                        joint_entropy_result: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
+
+                        # We get the current selected datapoints and broadcast them together with
+                        # the pool
+                        z: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
+                        z: TensorType[1, "current_batch_size", "num_features"]= z[None,:,:]
+                        z: TensorType["datapoints", "current_batch_size", "num_features"] = z.expand(N, -1, -1)
+
+                        t: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
+                        grouped_pool: TensorType["datapoints": "new_batch_size", "num_features"] = torch.cat([z,t], dim=1)
+
+                        dists: List[MultitaskMultivariateNormalType[("chunked"), ("new_batch_size", "num_cat")]] = get_gp_output(grouped_pool, model_wrapper)
+
+                        joint_entropy_mvn(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
+                        if self.params.smoke_test:
+                            print(joint_entropy_result)
+
+                        # Then we compute the batchbald objective
+
+                        shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
+                        print(shared_conditinal_entropies)
+
+                        scores_N = joint_entropy_result.detach().cpu()
+
+                        scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                        scores_N[candidate_indices] = -float("inf")
+
+                        candidate_score, candidate_index = scores_N.max(dim=0)
+                        
+                        candidate_indices.append(candidate_index.item())
+                        candidate_scores.append(candidate_score.item())
+                    if self.params.smoke_test:
+                        efficent_candidate_indices = candidate_indices.copy()
+                        efficent_candidate_scores = candidate_scores.copy()
+                        candidate_indices = []
+                        candidate_scores = []
+                    
+                if not efficent or self.params.smoke_test:
+                    # We use the BatchBALD Redux as a comparision, this does not scale to larger pool sizes.
+                    pool_expanded: TensorType[1, "datapoints", "num_features"] = pool[None,:,:]
+                    joint_distribution_list: List[MultitaskMultivariateNormalType[(1), ("datapoints", "num_cat")]] = get_gp_output(pool_expanded, model_wrapper)
+                    assert(len(joint_distribution_list) == 1)
+                    joint_distribution: MultitaskMultivariateNormalType = joint_distribution_list[0]
+                    log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([samples]))).logits).squeeze(1)).permute(1,0,2)
+                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, samples) 
+                    candidate_indices = batch.indices
+                    candidate_scores = batch.scores
+
+                    if self.params.smoke_test:
+                        redux_candidate_indices = candidate_indices.copy()
+                        redux_candidate_scores = candidate_scores.copy()
+
                 
+                if self.params.smoke_test:
+                    print("Efficent")
+                    print(efficent_candidate_indices)
+                    print(efficent_candidate_scores)
+
+                    print("Redux")
+                    print(redux_candidate_indices)
+                    print(redux_candidate_scores)
                 Method.log_batch(dataset.get_indexes(candidate_indices), tb_logger, self.current_aquisition)
                 dataset.move(candidate_indices)
 
