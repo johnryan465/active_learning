@@ -34,6 +34,7 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument('--num_aquisitions', default=10, type=int)
     parser.add_argument('--initial_per_class', default=2, type=int)
     parser.add_argument('--use_progress', default=True, type=bool)
+    parser.add_argument('--smoke_test', default=False, type=bool)
     parser.add_argument('--data_path', default="./data", type=str)
 
     methods = ["batchbald", "bald", "random"]
@@ -78,13 +79,15 @@ def parse_dataset(args: argparse.Namespace) -> DatasetParams:
         dataset_params = DatasetParams(
             path=args.data_path,
             batch_size=args.batch_size,
-            num_repetitions=args.num_repetitions
+            num_repetitions=args.num_repetitions,
+            smoke_test=args.smoke_test
         )
     else:
         dataset_params = DatasetParams(
             path=args.data_path,
             batch_size=args.batch_size,
-            num_repetitions=args.num_repetitions
+            num_repetitions=args.num_repetitions,
+            smoke_test=args.smoke_test
         )
     return dataset_params
 
@@ -96,22 +99,25 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=250,
+            samples=2000,
             use_cuda=use_cuda,
-            var_reduction=False
+            var_reduction=False,
+            smoke_test=args.smoke_test
         )
     elif args.method == MethodName.bald:
         method_params = BALDParams(
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=1
+            samples=1,
+            smoke_test=args.smoke_test
         )
     else:
         method_params = RandomParams(
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
+            smoke_test=args.smoke_test
         )
     return method_params
 
