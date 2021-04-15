@@ -188,27 +188,24 @@ def join_rank_2(candidate_dist: MultitaskMultivariateNormalType[(),("batch_size"
     # For each of the datapoints and the candidate batch we want to compute the low rank tensor
     # The order of the candidate datapoints must be maintained and used carefully
     # First we will do this very slowly.
-    num_cats = 10
+    batch_size = candidate_dist.event_shape[0]
+    num_cats = candidate_dist.event_shape[1]
+    num_datapoints = rank_2_dists.batch_shape[0]
     distributions = []
     cov = rank_2_dists.covariance_matrix
-    mean = rank_2_dists.mean
-    for datapoint in tqdm(range(rank_2_dists.batch_shape[0]), desc="Joining", leave=False):
-        # Assumtion, the first value in the sample is the candidate value (TODO): check this is correct
-        # We only need to collect the mean once
-        covars = []
-        self_covar = None
-        m = None
-        for candidate in range(0, rank_2_dists.batch_shape[1]):
-            # We wish to take the lower value 
-            covars.append(cov[datapoint,candidate, :num_cats, num_cats:]) # K(C, D)
-            if candidate == 0:
-                self_covar = cov[datapoint, candidate, num_cats:, num_cats:]
-                m = mean[datapoint, candidate, 1, :]
 
-        cross_mat = torch.cat(covars, dim=1)
-        new_mean = torch.cat( [candidate_dist.mean, m[None,:] ], dim=0)
-        new_covar = candidate_dist.lazy_covariance_matrix.cat_rows(cross_mat, self_covar)
-        new_dist = MultitaskMultivariateNormal(new_mean, new_covar).expand([1])
+    item_means = rank_2_dists.mean[:,1,1,:].unsqueeze(1)
+    candidate_means = candidate_dist.mean[None,:,:].expand(num_datapoints, -1, -1)
+    mean_tensor = torch.cat([candidate_means, item_means], dim=1)
+
+    expanded_batch_covar = candidate_dist.lazy_covariance_matrix.expand(num_datapoints, batch_size*num_cats, batch_size*num_cats)
+    self_covar_tensor = cov[:, 0, num_cats:, num_cats:]
+    cross_mat = torch.cat(torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
+    covar_tensor = expanded_batch_covar.cat_rows(cross_mat, self_covar_tensor)
+    group_size = 256
+    for start in tqdm(range(0, num_datapoints, group_size), desc="Joining", leave=False):
+        end = min((start + group_size), num_datapoints)
+        new_dist = MultitaskMultivariateNormal(mean_tensor[start:end], covar_tensor[start:end])
         distributions.append(new_dist)
     return distributions
 
@@ -280,11 +277,16 @@ class BatchBALD(UncertainMethod):
                         else:
                             candidate_points: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
 
-
+                            # Add random sampling for larger aquisition sizes
                             # We can cache the size 2 distributions between the aquisitions (TODO)
                             # We can keep the current batch distribution from the prevoius aquisition (TODO)
                             # We perform rank-1 updates to the covariance and mean to get the new distributions 
                             # If we are performing variance reduction we could possible even make this cheaper
+
+                            # Things to improve performance
+                            # 1) caching of the feature tensors
+                            # 2) don't recompute the distributions of things we have already calculated
+                            # 3) Use much cleverer matrix ops on the join_rank_2 function
 
                             expanded_candidate_features: TensorType[1, "current_batch_size", 1, "num_features"] = (pool[candidate_indices])[None,:,None,:]
                             repeated_candidate_features: TensorType["datapoints", "current_batch_size", 1, "num_features"] = expanded_candidate_features.expand(N, -1, -1, -1)
@@ -293,7 +295,7 @@ class BatchBALD(UncertainMethod):
                             combined_features: TensorType["datapoints", "current_batch_size", 2, "num_features"] = torch.cat([repeated_candidate_features, repeated_pool_features], dim=2)
                             chunked_dist: List[MultitaskMultivariateNormalType[ ("datapoints", "current_batch_size"), (2, "num_cat")]] = get_gp_output(combined_features, model_wrapper)
                             size_2_dists: MultitaskMultivariateNormalType[ ("datapoints", "current_batch_size"), (2, "num_cat")] = combine_mtmvns(chunked_dist)
-                            dists: List[MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")]] = join_rank_2(current_batch_dist, size_2_dists) 
+                            dists: List[MultitaskMultivariateNormalType[ ("chunked"), ("new_batch_size", "num_cat")]] = join_rank_2(current_batch_dist, size_2_dists) 
 
                         joint_entropy_mvn(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
                         if self.params.smoke_test:
