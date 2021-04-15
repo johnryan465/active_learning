@@ -5,7 +5,17 @@ from typing import Annotated, Any, Generic, List, NoReturn, Type, TypeVar
 from torchtyping import TensorType, patch_typeguard
 from torchtyping.utils import frozendict
 
-_AnnotatedType = type(Annotated[MultivariateNormal, ...])
+import ast
+import inspect
+import types
+import functools
+from typing import List, Any
+from typeguard import check_type
+from torchtyping import patch_typeguard
+from ast import Expr, Call, Name, Load, Constant, Subscript, Return, Load, fix_missing_locations
+import copy
+import __future__
+import re
 T = TypeVar("T")
 
 # This is similar to torchtyping, with annotations but currently without any of the clever shape checking ... yet
@@ -53,6 +63,11 @@ def create_type(base_cls) -> Type:
                 ),
             ]
     return DistributionType
+
+
+
+patch_typeguard()
+
 
 # This flag enables to toggle between dumb annotations which vscode can understand and the runtime checking
 # Having it set to a constant lets the static analysiser select the code path designed for it
