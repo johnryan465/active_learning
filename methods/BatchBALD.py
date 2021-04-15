@@ -187,7 +187,7 @@ def compute_conditional_entropy_mvn(distributions: List[MultitaskMultivariateNor
 def join_rank_2(candidate_dist: MultitaskMultivariateNormalType[(),("batch_size", "num_cat")], rank_2_dists: MultitaskMultivariateNormalType[("datapoints","batch_size"), (2, "num_cat")]) -> List[MultitaskMultivariateNormalType[("chunked"),("new_batch_size","num_cat")]]:
     # For each of the datapoints and the candidate batch we want to compute the low rank tensor
     # The order of the candidate datapoints must be maintained and used carefully
-    # First we will do this very slowly.
+    # Need to wrap this in toma
     batch_size = candidate_dist.event_shape[0]
     num_cats = candidate_dist.event_shape[1]
     num_datapoints = rank_2_dists.batch_shape[0]
@@ -202,6 +202,7 @@ def join_rank_2(candidate_dist: MultitaskMultivariateNormalType[(),("batch_size"
     self_covar_tensor = cov[:, 0, num_cats:, num_cats:]
     cross_mat = torch.cat(torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
     covar_tensor = expanded_batch_covar.cat_rows(cross_mat, self_covar_tensor)
+    
     group_size = 256
     for start in tqdm(range(0, num_datapoints, group_size), desc="Joining", leave=False):
         end = min((start + group_size), num_datapoints)
@@ -262,7 +263,7 @@ class BatchBALD(UncertainMethod):
 
                         joint_entropy_result: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
 
-                        if i <= 1:
+                        if True:
                             # We get the current selected datapoints and broadcast them together with
                             # the pool
                             z: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
