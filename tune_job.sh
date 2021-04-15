@@ -8,5 +8,5 @@ export CONDA_PKGS_DIRS=/scratch/$USER/conda_pkgs/scratch-ssd/oatml/scripts/run_l
 /scratch-ssd/oatml/miniconda3/bin/conda-env update -f environment.yml
 source /scratch-ssd/oatml/miniconda3/bin/activate active_learning
 pip install batchbald_redux==2.0.5 --no-deps
-pip install gpytorch
-python tune.py --data_path /scratch-ssd/oatml/data
+pip install gpytorch==1.4.1
+python tune.py --data_path /scratch-ssd/ug18jr/data
