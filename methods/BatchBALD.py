@@ -192,7 +192,7 @@ def join_rank_2(candidate_dist: MultitaskMultivariateNormalType[(),("batch_size"
     distributions = []
     cov = rank_2_dists.covariance_matrix
     mean = rank_2_dists.mean
-    for datapoint in range(0, rank_2_dists.batch_shape[0]):
+    for datapoint in tqdm(range(rank_2_dists.batch_shape[0]), desc="Joining", leave=False):
         # Assumtion, the first value in the sample is the candidate value (TODO): check this is correct
         # We only need to collect the mean once
         covars = []
@@ -210,7 +210,7 @@ def join_rank_2(candidate_dist: MultitaskMultivariateNormalType[(),("batch_size"
         new_covar = candidate_dist.lazy_covariance_matrix.cat_rows(cross_mat, self_covar)
         new_dist = MultitaskMultivariateNormal(new_mean, new_covar).expand([1])
         distributions.append(new_dist)
-    return combine_mtmvns(distributions)
+    return distributions
 
 
 class BatchBALD(UncertainMethod):
