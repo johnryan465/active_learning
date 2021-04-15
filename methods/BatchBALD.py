@@ -226,7 +226,7 @@ class BatchBALD(UncertainMethod):
                 candidate_indices = []
                 candidate_scores = []
                 samples = self.params.samples
-                efficent = False
+                efficent = True
                 num_cat = 10
                 feature_size = 512
 
@@ -287,22 +287,14 @@ class BatchBALD(UncertainMethod):
                             # If we are performing variance reduction we could possible even make this cheaper
 
                             expanded_candidate_features: TensorType[1, "current_batch_size", 1, "num_features"] = (pool[candidate_indices])[None,:,None,:]
-                            print(1)
                             repeated_candidate_features: TensorType["datapoints", "current_batch_size", 1, "num_features"] = expanded_candidate_features.expand(N, -1, -1, -1)
-                            print(2)
                             expanded_pool_features: TensorType["datapoints", 1, 1, "num_features"] = pool[:, None, None, :]
-                            print(3)
                             repeated_pool_features: TensorType["datapoints", "current_batch_size", 1, "num_features"] = expanded_pool_features.expand(-1, i, -1, -1)
-                            print(4)
                             combined_features: TensorType["datapoints", "current_batch_size", 2, "num_features"] = torch.cat([repeated_candidate_features, repeated_pool_features], dim=2)
-                            print(5)
                             chunked_dist: List[MultitaskMultivariateNormalType[ ("datapoints", "current_batch_size"), (2, "num_cat")]] = get_gp_output(combined_features, model_wrapper)
                             size_2_dists: MultitaskMultivariateNormalType[ ("datapoints", "current_batch_size"), (2, "num_cat")] = combine_mtmvns(chunked_dist)
-
-                            print(6)
                             dists: List[MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")]] = join_rank_2(current_batch_dist, size_2_dists) 
 
-                        print(7)
                         joint_entropy_mvn(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
                         if self.params.smoke_test:
                             print(joint_entropy_result)
