@@ -48,7 +48,7 @@ def combine_mtmvns(mvns) -> MultitaskMultivariateNormalType:
         *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
     )
     covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
-    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
+    return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_lazy, interleaved=False)
 
 
 # We compute the joint entropy of the distributions
