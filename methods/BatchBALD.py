@@ -317,6 +317,7 @@ class BatchBALD(UncertainMethod):
                         del scores_N
                         del joint_entropy_result
                         del shared_conditinal_entropies
+                        del dists
 
                         candidate_indices.append(candidate_index.item())
                         candidate_scores.append(candidate_score.item())
