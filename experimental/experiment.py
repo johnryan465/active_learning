@@ -28,8 +28,10 @@ def debug_gpu():
     tensor_count = 0
     for obj in gc.get_objects():
         try:
-            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            # print(obj.__name__)
+            if torch.is_tensor(obj):# or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
                 tensor_count = tensor_count + 1
+                print(type(obj), obj.size())
         except:
             pass
     print(f'Count of tensors = {tensor_count}.')

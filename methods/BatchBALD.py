@@ -23,6 +23,7 @@ from tqdm import tqdm
 from dataclasses import dataclass
 from toma import toma
 import string
+import gc
 
 
 
@@ -95,8 +96,8 @@ def joint_entropy_mvn(distributions: List[MultivariateNormalType], likelihood, p
 def chunked_distribution(name: str, distributions: List[MultivariateNormalType], func: Callable, output: TensorType["N": ...]) -> None:
     N = output.shape[0]
     len_d = len(distributions)
-    @toma.batch(initial_batchsize=len_d)
-    def compute(batchsize: int, distributions: List[MultivariateNormalType]):
+    @toma.execute.batch(len_d)
+    def compute(batchsize: int):
         pbar = tqdm(total=N, desc=name, leave=False)
         start = 0
         end = 0
@@ -105,10 +106,11 @@ def chunked_distribution(name: str, distributions: List[MultivariateNormalType],
             end = start + distribution.batch_shape[0]
             g = func(distribution)
             output[start:end].copy_(g)
+            del g
             pbar.update(end - start)
             start = end
             pbar.close()
-    compute(distributions) #type: ignore
+    # compute(distributions) #type: ignore
 
 # Gets the pool from the dataset as a tensor
 @typechecked
