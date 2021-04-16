@@ -108,8 +108,21 @@ class Driver:
             pbar.attach(evaluator)
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
-        # tune.report(iteration=iteration, mean_loss=test_log_lines[-1]['loss'], accuracy=test_log_lines[-1]['accuracy'])
-        best_model = model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint), dataset)
+        best_epoch = 0
+        best_accuracy = float('-inf')
+        for i in range(len(test_log_lines)):
+            if test_log_lines[i]['accuracy'] > best_accuracy:
+                best_epoch = i
+                best_accuracy = test_log_lines[i]['accuracy']
+        tune.report(iteration=iteration, mean_loss=test_log_lines[best_epoch]['loss'], accuracy=test_log_lines[best_epoch]['accuracy'])
+        with torch.no_grad():  
+            best_model = model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint), dataset)
+            del model_wrapper
+            if torch.cuda.is_available():
+                print(torch.cuda.memory_allocated())
+                print(torch.cuda.memory_reserved())
+                torch.cuda.empty_cache()
+
         saving_handler.save_handler.remove(saving_handler.last_checkpoint)
         if training_params.epochs > 0:
             IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
