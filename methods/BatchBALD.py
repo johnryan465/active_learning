@@ -202,7 +202,7 @@ def join_rank_2(candidate_dist: MultitaskMultivariateNormalType[(),("batch_size"
     self_covar_tensor = cov[:, 0, num_cats:, num_cats:]
     cross_mat = torch.cat(torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
     covar_tensor = expanded_batch_covar.cat_rows(cross_mat, self_covar_tensor)
-    
+
     group_size = 256
     for start in tqdm(range(0, num_datapoints, group_size), desc="Joining", leave=False):
         end = min((start + group_size), num_datapoints)
@@ -272,8 +272,8 @@ class BatchBALD(UncertainMethod):
 
                             t: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
                             grouped_pool: TensorType["datapoints", "new_batch_size", "num_features"] = torch.cat([z,t], dim=1)
-
                             dists: List[MultitaskMultivariateNormalType[("chunked"), ("new_batch_size", "num_cat")]] = get_gp_output(grouped_pool, model_wrapper)
+                            del grouped_pool
                         
                         else:
                             candidate_points: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
@@ -314,6 +314,10 @@ class BatchBALD(UncertainMethod):
 
                         candidate_score, candidate_index = scores_N.max(dim=0)
                         
+                        del scores_N
+                        del joint_entropy_result
+                        del shared_conditinal_entropies
+
                         candidate_indices.append(candidate_index.item())
                         candidate_scores.append(candidate_score.item())
                         
@@ -352,6 +356,10 @@ class BatchBALD(UncertainMethod):
                 dataset.move(candidate_indices)
 
                 self.current_aquisition += 1
+                if torch.cuda.is_available():
+                    print(torch.cuda.memory_allocated())
+                    print(torch.cuda.memory_reserved())
+                    torch.cuda.empty_cache()
 
             else:
                 raise NotImplementedError("BatchBALD")
