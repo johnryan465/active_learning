@@ -1,3 +1,4 @@
+from ray.tune.schedulers.async_hyperband import ASHAScheduler
 from ray.tune.suggest.suggestion import ConcurrencyLimiter
 from experimental.experiment import Experiment
 from experimental.experiment_params import ExperimentParams
@@ -62,13 +63,20 @@ if __name__ == "__main__":
         domain="euclidean")
 
     df_search = ConcurrencyLimiter(df_search, max_concurrent=4)
-
+    scheduler = ASHAScheduler(
+        time_attr='training_iteration',
+        max_t=70,
+        brackets=1,
+        grace_period=10,
+        reduction_factor=3
+    )
 
     analysis = tune.run(
         create_training_function(args.data_path),
         metric="accuracy",
         mode="max",
         search_alg=df_search,
+        scheduler=scheduler,
         num_samples=10,
         resources_per_trial={'gpu': 1},
         config={
