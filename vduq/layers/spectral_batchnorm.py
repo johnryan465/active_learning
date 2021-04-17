@@ -59,7 +59,7 @@ class _SpectralBatchNorm(_NormBase):
 
         # if lipschitz of the operation is greater than coeff, then we want to divide the input by a constant to
         # force the overall lipchitz factor of the batch norm to be exactly coeff
-        lipschitz_factor = torch.max(lipschitz / self.coeff, torch.ones_like(lipschitz))
+        lipschitz_factor = torch.max(torch.div(lipschitz, self.coeff), torch.ones_like(lipschitz))
 
         weight = weight / lipschitz_factor
 

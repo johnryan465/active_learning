@@ -38,7 +38,7 @@ class SpectralNormFC(SpectralNorm):
 
         sigma = torch.dot(u, torch.mv(weight_mat, v))
         # soft normalization: only when sigma larger than coeff
-        factor = torch.max(torch.ones(1).to(weight.device), sigma / self.coeff)
+        factor = torch.max(torch.ones(1).to(weight.device), torch.div(sigma, self.coeff))
         weight = weight / factor
 
         # for logging

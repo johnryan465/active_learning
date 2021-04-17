@@ -1,4 +1,4 @@
-from marshmallow_dataclass import dataclass
+from dataclasses import dataclass
 
 from methods.method_params import MethodParams
 from .method import Method
