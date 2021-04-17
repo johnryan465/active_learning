@@ -1,3 +1,4 @@
+from ray.tune.suggest.suggestion import ConcurrencyLimiter
 from experimental.experiment import Experiment
 from experimental.experiment_params import ExperimentParams
 from datasets.activelearningdataset import DatasetName
@@ -59,6 +60,9 @@ if __name__ == "__main__":
     df_search = DragonflySearch(
         optimizer="bandit",
         domain="euclidean")
+
+    df_search = ConcurrencyLimiter(df_search, max_concurrent=4)
+
 
     analysis = tune.run(
         create_training_function(args.data_path),
