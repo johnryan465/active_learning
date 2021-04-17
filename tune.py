@@ -4,6 +4,7 @@ from datasets.activelearningdataset import DatasetName
 from utils.parser import parse_dataset, parse_model, parse_training, parse_method
 import ray
 from ray import tune
+from ray.tune.suggest.dragonfly import DragonflySearch
 from argparse import Namespace
 import argparse
 import uuid
@@ -55,19 +56,26 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', default="./data", type=str)
     args = parser.parse_args()
     ray.init(include_dashboard=False)
+
+    df_search = DragonflySearch(
+        optimizer="bandit",
+        domain="euclidean",
+        metric="accuracy",
+        mode="max")
+
     analysis = tune.run(
         create_training_function(args.data_path),
+        search_alg=df_search,
         resources_per_trial={'gpu': 1},
-        num_samples=4,
         config={
-            "lr": tune.grid_search([0.03]),
-            "dropout": tune.grid_search([0.0]),
-            "method": tune.grid_search(["batchbald"]),
-            "coeff": tune.grid_search([9]),
-            "batch_size": tune.grid_search([64]),
-            "starting_size": tune.choice([2]),
-            "num_aquisitions": tune.grid_search([70]),
-            "var_opt": tune.grid_search([-1])
+            "lr": tune.qloguniform(5e-4, 1e-1, 5e-4),
+            "dropout": 0.0,
+            "method": "batchbald",
+            "coeff": tune.uniform(6, 12),
+            "batch_size": 64,
+            "starting_size": 2,
+            "num_aquisitions": 70,
+            "var_opt": -1
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
