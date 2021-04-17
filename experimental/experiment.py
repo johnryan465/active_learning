@@ -85,11 +85,11 @@ class Experiment:
         iteration = 0
         while(not self.method.complete()):
             ts = time.time()
-            self.model.initialize(self.dataset)
             name = self.name + "_" + str(iteration) + str(ts)
             tb_logger = TensorboardLogger(flush_secs=1, log_dir="logs/" + name)
             self.model = Driver.train(name, iteration, self.training_params, self.model, self.dataset, tb_logger)
             self.method.acquire(self.model, self.dataset, tb_logger)
             self.model.prepare(self.bs)
+            self.model.initialize(self.dataset)
             tb_logger.close()
             iteration = iteration + 1

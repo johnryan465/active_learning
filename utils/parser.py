@@ -58,7 +58,8 @@ def init_parser() -> argparse.ArgumentParser:
                 q.add_argument('--dropout', default=0.0, type=float)
                 q.add_argument('--lr', default=0.01, type=float)
                 q.add_argument('--var_opt', default=-1, type=float)
-                q.add_argument('--coeff', default=3, type=float)
+                q.add_argument('--coeff', default=9, type=float)
+                q.add_argument('--n_inducing_points', default=10, type=int)
             else:
                 q.add_argument('--dropout', default=0, type=float)
         method_parsers[method] = p
@@ -129,7 +130,7 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
             kernel='RBF',
             num_classes=10,
             ard=-1,
-            n_inducing_points=10,
+            n_inducing_points=args.n_inducing_points,
             lengthscale_prior=False,
             separate_inducing_points=False,
             distribution="choskey"
