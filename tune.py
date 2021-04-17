@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     df_search = ConcurrencyLimiter(df_search, max_concurrent=4)
     scheduler = ASHAScheduler(
-        time_attr='training_iteration',
+        time_attr='iteration',
         max_t=70,
         brackets=1,
         grace_period=10,
