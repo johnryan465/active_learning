@@ -70,7 +70,7 @@ if __name__ == "__main__":
         mode="max",
         search_alg=df_search,
         num_samples=10,
-        # resources_per_trial={'gpu': 1},
+        resources_per_trial={'gpu': 1},
         config={
             "lr": tune.loguniform(5e-4, 1e-1),
             "dropout": 0.0,
