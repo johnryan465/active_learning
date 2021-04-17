@@ -12,12 +12,11 @@ import uuid
 
 def create_training_function(path):
     def training_function(config):
-
         # Hyperparameters
-        lr = config["lr"]
+        lr = config["point"][0]
         dropout = config["dropout"]
         method = config["method"]
-        coeff = config["coeff"]
+        coeff = config["point"][1]
         batch_size = config["batch_size"]
         var_opt = config["var_opt"]
         starting_size = config["starting_size"]
@@ -53,22 +52,23 @@ def create_training_function(path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run experiments for active learning")
-    parser.add_argument('--data_path', default="./data", type=str)
+    parser.add_argument('--data_path', default="/tmp/data", type=str)
     args = parser.parse_args()
     ray.init(include_dashboard=False)
 
     df_search = DragonflySearch(
         optimizer="bandit",
-        domain="euclidean",
-        metric="accuracy",
-        mode="max")
+        domain="euclidean")
 
     analysis = tune.run(
         create_training_function(args.data_path),
+        metric="accuracy",
+        mode="max",
         search_alg=df_search,
-        resources_per_trial={'gpu': 1},
+        num_samples=10,
+        # resources_per_trial={'gpu': 1},
         config={
-            "lr": tune.qloguniform(5e-4, 1e-1, 5e-4),
+            "lr": tune.loguniform(5e-4, 1e-1),
             "dropout": 0.0,
             "method": "batchbald",
             "coeff": tune.uniform(6, 12),
