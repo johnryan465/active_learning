@@ -81,7 +81,7 @@ if __name__ == "__main__":
         num_samples=50,
         resources_per_trial={'gpu': 1},
         config={
-            "lr": tune.loguniform(5e-4, 1e-1),
+            "lr": tune.loguniform(5e-4, 3e-2),
             "dropout": 0.0,
             "method": "batchbald",
             "coeff": tune.uniform(6, 12),
