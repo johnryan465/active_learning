@@ -45,7 +45,7 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
         f_X_samples.numpy(), n_inducing_points
     )
     initial_lengthscale = _get_initial_lengthscale(f_X_samples)
-
+    print(initial_inducing_points.size(), initial_lengthscale)
     return initial_inducing_points, initial_lengthscale
 
 
@@ -96,7 +96,7 @@ class GP(ApproximateGP):
                 n_inducing_points, batch_shape=batch_shape
             )
         else:
-            variational_distribution = gpytorch.variational.NaturalVariationalDistribution(
+            variational_distribution = gpytorch.variational.TrilNaturalVariationalDistribution(
                 n_inducing_points, batch_shape=batch_shape
             )
 

@@ -78,7 +78,7 @@ if __name__ == "__main__":
         mode="max",
         search_alg=df_search,
         scheduler=scheduler,
-        num_samples=10,
+        num_samples=50,
         resources_per_trial={'gpu': 1},
         config={
             "lr": tune.loguniform(5e-4, 1e-1),
