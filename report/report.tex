@@ -1,6 +1,6 @@
 \documentclass[12pt, a4paper]{report}
 \input{Packages.tex}
-\hypersetup{pdftitle = Thesis, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
+\hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \pagestyle{fancy}
 \rhead{Christ Church}
@@ -41,7 +41,6 @@ Trinity 2021
 \pagenumbering{roman}
 
 
-
 \thispagestyle{empty}
 \begin{abstract}
 
@@ -78,7 +77,7 @@ The aims of this report is to
     \item Compare these methods in a reproducible and standardised fashion
     \item Extend and combine some of these approaches with other ML research to improve Active Learning performance in certain situations.
 \end{itemize}
-\section{Thesis Outline}
+\section{Project Report Outline}
 The remainder of this report is organised as follows:
 \begin{itemize}
     \item[] \textbf{Chapter} \hyperref[Chap2]{\textbf{2}} --- Defines active learning, and introduces the different active learning methods from the literature.
@@ -86,7 +85,7 @@ The remainder of this report is organised as follows:
     \item[] \textbf{Chapter} \hyperref[Chap4]{\textbf{4}} --- introduces Gaussian Process based models
     \item[] \textbf{Chapter} \hyperref[Chap5]{\textbf{5}} --- Combines BatchBALD and GPC
 \end{itemize}
-
+>
 
 \chapter{Active Learning Methods}
 \label{Chap2}
@@ -138,19 +137,61 @@ We can cite an article as an example \cite{kirsch2019batchbald}.
 \chapter{Gaussian Process Based Models}
 \label{Chap4}
 
-Gaussian Processes are a powerful statistical model which 
 
+\section{Gaussian Processes}
+Definition: "A Gaussian processes is a collection of random variables, any finite number of which have a joint Gaussian distribution" from \cite[]{rasmussen2003gaussian}
+
+We can completely define a Gaussian Process by giving a mean, and covariance function.
+
+Gaussian Processes have a number of useful properties such as being closed under conditioning and marginalisation.
+
+For the covariance function to define a valid MVN for all inputs the covariance function must be positive definite.
+
+A positive definite kernel function can be represented by a feature space where the value of the kernel between 2 values can be computed by taking the inner product of the feature space of the 2 values.
+
+Certain kernel functions such as the radial basis kernel, is represented by an infinite dimensional feature space. This infinite dimensional feature space enables it to model arbitarily complex functions. Polynomial or linear kernels do not enable this level of expressibility.
+
+We can use Bayes rule to update the covariance and mean function from our prior, to the postior given noisy of exact data. The complexity of doing this (given arbitary kernels) is bounded by matrix inversion and  multiplication of a matrix of size of the number of datapoints in which we are using. The complexity of which is sub cubic, however in general the matrix multiplication algorithms we use practically are of the cubic variety).
+
+This can be done as follows: 
+
+(TODO) put update equations.
+
+\subsection{Scaling to large data}
+
+Unlike other methods we use often in machine learning, such as neural networks which have linear complexity in the size of the dataset we have superlinear complexity.
+
+\subsubsection{Inducing Points}
+
+In inducing point models, we instead of using all of the datapoints in our model. We instead use a smaller number of datapoints as an approximation to the true model. Various approaches exist for selecting the points we keep in our approximation.
+
+One of the most sucessful approaches is to treat these inducing points as model parameters which we attempt to learn by minimising some objective.
+
+Minimising the evidence lower bound (ELBO) is a common and principled object for this task.
+
+Minimising this objective minimises the KL Divergence between the true output distribution and the approximate distribution we are learning.
+
+\subsubsection{Random Fixed Features}
 
 \section{Gaussian Process Classification}
 
+
+To use Gaussian Processes for classification we have several issues to overcome.
+
+The output of a Gaussian Process is a MVN, this is a continous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
+
+We can in theory use any link function to convert a sample from our MVN in $R^n$ to a sample over the simplex, different link functions have different properties computationally and statistically.
+
+\subsection{Link Functions}
+
 The link function between the latent function (our GP) and the output of our classifier is again another parameter of the model.
 
-\subsection{Logit}
+\subsubsection{Logit}
 
 The logit is the standard link function for the vast majority of GPC use cases. The use of the logit implicitly makes our GPC model obey the independence of irrelevant alternatives axiom from decision theory. 
 
 
-\subsection{Probit}
+\subsubsection{Probit}
 
 
 
@@ -160,6 +201,8 @@ vDUQ / DUQ \cite{vanamersfoort2020uncertainty} are a recent approach which enabl
 
 \chapter{Combination}
 \label{Chap5}
+
+\section{Investigation of Exact Computation}
 
 If we use Probit as our link function the joint entropy can be computed exactly (unlike in the general case), however the complexity of this exact computation is very high.
 
@@ -187,6 +230,16 @@ After performing this transformation we have a standard orthant integral which w
 
 
 However the number of dimensions which we are performing this integration over is (number of variables) * (number of categories - 1). With the exponential complexity this an infeasible method of computation.
+
+
+\section{Sampling}
+
+Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which relie on sampling.
+
+In comparision with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our postior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
+The complexity of performing this is cubic in the size of the pool, this complexity is unacceptably high as we are often working with quite large pool sizes.
+
+This means that we can not use the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to make some improvements in this aspect.
 
 \chapter{Methodology}
 \label{Chap6}
