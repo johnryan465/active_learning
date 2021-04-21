@@ -22,19 +22,7 @@ import gc
 import sys
 import torch
 
-def debug_gpu():
-    # Debug out of memory bugs.
-    # tensor_list = []
-    tensor_count = 0
-    for obj in gc.get_objects():
-        try:
-            # print(obj.__name__)
-            if torch.is_tensor(obj):# or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                tensor_count = tensor_count + 1
-                print(type(obj), obj.size())
-        except:
-            pass
-    print(f'Count of tensors = {tensor_count}.')
+
 
 # This is responsible for actually creating and executing an experiment
 

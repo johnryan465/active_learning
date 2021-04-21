@@ -11,7 +11,21 @@ import torch
 from tqdm import tqdm
 from toma import toma
 import string
+import gc
 
+def debug_gpu():
+    # Debug out of memory bugs.
+    # tensor_list = []
+    tensor_count = 0
+    for obj in gc.get_objects():
+        try:
+            # print(obj.__name__)
+            if torch.is_tensor(obj):# or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                tensor_count = tensor_count + 1
+                print(type(obj), obj.size())
+        except:
+            pass
+    print(f'Count of tensors = {tensor_count}.')
 
 @typechecked
 def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalType, func: Callable, output: TensorType["N": ...]) -> None:
@@ -44,22 +58,32 @@ class MVNJointEntropy:
 
     # This enables us to recompute only outputs of size 2 for our next aquisition
     @typechecked
-    def join_rank_2(self, rank_2_dists: MultitaskMultivariateNormalType[("datapoints","batch_size"), (2, "num_cat")]) -> MultitaskMultivariateNormalType[("N"),("new_batch_size","num_cat")]:
+    def join_rank_2(self) -> MultitaskMultivariateNormalType[("N"),("new_batch_size","num_cat")]:
         # For each of the datapoints and the candidate batch we want to compute the low rank tensor
         # The order of the candidate datapoints must be maintained and used carefully
         # Need to wrap this in toma
+
+        rank_2_dists = self.rank_2_distributions
+
         batch_size = self.current_batch_dist.event_shape[0]
         num_cats = self.current_batch_dist.event_shape[1]
-        num_datapoints = rank_2_dists.batch_shape[0]
-        cov = rank_2_dists.covariance_matrix
+        num_datapoints = rank_2_dists[0].batch_shape[0]
+        if len(rank_2_dists) == 1:
+            cov = rank_2_dists[0].lazy_covariance_matrix
+        else:
+            cov = cat( [d.lazy_covariance_matrix for d in rank_2_dists], dim=1 )
 
-        item_means = rank_2_dists.mean[:,1,1,:].unsqueeze(1)
-        candidate_means = self.current_batch_dist.mean[None,:,:].expand(num_datapoints, -1, -1)
-        mean_tensor = torch.cat([candidate_means, item_means], dim=1)
+        # The means will be the same for each datapoint
+        item_means = rank_2_dists[0].mean[:,0,1,:].unsqueeze(1)
+        candidate_means = (self.current_batch_dist.mean).expand(num_datapoints, -1, -1)
+        mean_tensor = cat([candidate_means, item_means], dim=1)
+
+        cov = cov.evaluate()
 
         expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand(num_datapoints, batch_size*num_cats, batch_size*num_cats)
-        self_covar_tensor = cov[:, 0, num_cats:, num_cats:]
-        cross_mat = torch.cat(torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
+        self_covar_tensor = cov[:, 0 , num_cats:, num_cats:]
+        cross_mat = cat( torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
+        # debug_gpu()
         covar_tensor = expanded_batch_covar.cat_rows(cross_mat, self_covar_tensor)
 
         return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
@@ -72,13 +96,23 @@ class MVNJointEntropy:
 
         if not all(m.event_shape == mvns[0].event_shape for m in mvns[1:]):
             raise ValueError("All MultivariateNormals must have the same event shape")
-        mean = cat([mvn.mean for mvn in mvns], dim=0)
 
-        covar_blocks_lazy = CatLazyTensor(
-            *[mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device
-        )
-        covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
-        return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=False)
+        def expand(tensor):
+            if torch.is_tensor(tensor):
+                return tensor.unsqueeze(0)
+            else:
+                return tensor._expand_batch((1,))
+        # We will create a batchshape if it doesn't already exist
+        if len(mvns[0].batch_shape) == 0:
+            mean = cat([ expand(mvn.mean) for mvn in mvns], dim=0)
+            covar_blocks_lazy = cat([expand(mvn.lazy_covariance_matrix) for mvn in mvns], dim=0, output_device=mean.device)
+            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
+        
+        else:
+            mean = cat([ mvn.mean for mvn in mvns], dim=0)
+            covar_blocks_lazy = cat([mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device)
+            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
+        return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=True)
 
     @typechecked
     def add_new(self, new_batch: MultitaskMultivariateNormalType, rank_2_combinations: MultitaskMultivariateNormalType) -> None:
@@ -93,8 +127,8 @@ class MVNJointEntropy:
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        S = 100
-        E = 10000 // S
+        S = 200
+        E = 20000 // S
         per_samples = S
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t

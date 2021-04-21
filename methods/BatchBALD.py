@@ -50,13 +50,13 @@ def get_features(inputs: TensorType["datapoints", "channels", "x", "y"], feature
     N = inputs.shape[0]
     pool = torch.empty((N, feature_size))
     pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
-    @toma.execute.chunked(inputs, 1024)
+    @toma.execute.chunked(inputs, N)
     def compute(inputs, start: int, end: int):
         with torch.no_grad():
             if torch.cuda.is_available():
                 inputs = inputs.cuda()
             tmp = model_wrapper.model.feature_extractor.forward(inputs).detach()
-            pool[start:end].copy_(tmp)
+            pool[start:end].copy_(tmp, non_blocking=True)
         pbar.update(end - start)
     pbar.close()
     return pool
@@ -71,7 +71,7 @@ def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], mode
         dists = []
         N = features.shape[0]
         pbar = tqdm(total=N, desc="GP", leave=False)
-        @toma.execute.chunked(features, 256)
+        @toma.execute.chunked(features, N)
         def compute(features, start: int, end: int):
             if torch.cuda.is_available():
                 features = features.cuda()
@@ -153,7 +153,7 @@ class BatchBALD(UncertainMethod):
                         # We first calculate the aquisition by itself first.
 
                         joint_entropy_result: TensorType["datapoints"] = torch.empty(N, dtype=torch.double, pin_memory=self.params.use_cuda)
-                        if True:
+                        if i == 0:
                             # We get the current selected datapoints and broadcast them together with
                             # the pool
                             z: TensorType["current_batch_size", "num_features"] = pool[candidate_indices]
@@ -177,23 +177,15 @@ class BatchBALD(UncertainMethod):
                             # 2) don't recompute the distributions of things we have already calculated
                             # 3) Use much cleverer matrix ops on the join_rank_2 function
 
-                            expanded_candidate_features: TensorType[1, "current_batch_size", 1, "num_features"] = (pool[candidate_indices])[None,:,None,:]
-                            repeated_candidate_features: TensorType["datapoints", "current_batch_size", 1, "num_features"] = expanded_candidate_features.expand(N, -1, -1, -1)
-                            expanded_pool_features: TensorType["datapoints", 1, 1, "num_features"] = pool[:, None, None, :]
-                            repeated_pool_features: TensorType["datapoints", "current_batch_size", 1, "num_features"] = expanded_pool_features.expand(-1, i, -1, -1)
-                            combined_features: TensorType["datapoints", "current_batch_size", 2, "num_features"] = torch.cat([repeated_candidate_features, repeated_pool_features], dim=2)
-                            size_2_dists: MultitaskMultivariateNormalType[ ("datapoints", "current_batch_size"), (2, "num_cat")] = get_gp_output(combined_features, model_wrapper)
-
-                            dists: MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")] = joint_entropy_class.join_rank_2(size_2_dists) 
+                            dists: MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")] = joint_entropy_class.join_rank_2() 
 
                         joint_entropy_class.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
-                        if self.params.smoke_test:
-                            print(joint_entropy_result)
+                        # if self.params.smoke_test:
+                        #     print(joint_entropy_result)
 
                         # Then we compute the batchbald objective
 
                         shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
-                        print(shared_conditinal_entropies)
 
                         scores_N = joint_entropy_result.detach().cpu()
 
@@ -210,9 +202,13 @@ class BatchBALD(UncertainMethod):
                         candidate_indices.append(candidate_index.item())
                         candidate_scores.append(candidate_score.item())
                         
-                        current_batch_dist = get_gp_output(pool[candidate_indices], model_wrapper)
+                        current_batch_dist: MultitaskMultivariateNormalType[ (1, 1), (2, "num_cat")] = get_gp_output( (pool[candidate_indices])[None,:,:], model_wrapper)
+                        expanded_pool_features: TensorType["datapoints", 1, 1, "num_features"] = pool[:, None, None, :]
+                        new_candidate_features: TensorType["datapoints", 1, 1, "num_features"] = ((pool[candidate_index])[None, None, None, :]).expand(N, -1, -1, -1)
+                        joint_features: TensorType["datapoints", 1, 2, "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=2)
+                        new_rank_2: MultitaskMultivariateNormalType[ ("datapoints", 1), (2, "num_cat")] = get_gp_output(joint_features, model_wrapper)
 
-                        # joint_entropy_class = joint_entropy_class.add_new(current_batch_dist, new_rank_2)
+                        joint_entropy_class.add_new(current_batch_dist, new_rank_2)
 
                     if self.params.smoke_test:
                         efficent_candidate_indices = candidate_indices.copy()
@@ -226,8 +222,8 @@ class BatchBALD(UncertainMethod):
                     # joint_distribution_list: MultitaskMultivariateNormalType[(1), ("datapoints", "num_cat")] = get_gp_output(pool_expanded, model_wrapper)
                     # assert(len(joint_distribution_list) == 1)
                     joint_distribution: MultitaskMultivariateNormalType = get_gp_output(pool_expanded, model_wrapper)
-                    log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
-                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 10000) 
+                    log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([500]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
+                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 500) 
                     candidate_indices = batch.indices
                     candidate_scores = batch.scores
 
