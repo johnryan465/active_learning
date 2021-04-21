@@ -11,8 +11,9 @@ from batchbald_redux.batchbald import get_bald_batch
 from datasets.activelearningdataset import DatasetUtils
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 import torch
-from .BatchBALD import get_pool, get_features, compute_conditional_entropy_mvn, joint_entropy_mvn, get_gp_output
+from .BatchBALD import get_pool, get_features, compute_conditional_entropy_mvn, get_gp_output
 from utils.typing import TensorType, MultitaskMultivariateNormalType, MultivariateNormalType
+from .mvn_joint_entropy import MVNJointEntropy
 
 @dataclass
 class BALDParams(MethodParams):
@@ -75,8 +76,9 @@ class BALD(UncertainMethod):
 
             dists = get_gp_output(grouped_pool, model_wrapper)
             joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
+            joint_entropy_class = MVNJointEntropy(None, samples)
 
-            joint_entropy_mvn(dists, model_wrapper.likelihood, samples, num_cat, joint_entropy_result)
+            joint_entropy_class.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result)
 
             # Then we compute the batchbald objective
 
