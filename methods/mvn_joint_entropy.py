@@ -50,7 +50,7 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
                     covar = covar.all_to("cuda")
                 else:
                     covar = covar.cuda()
-                    
+
             dist = MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar)
             g = func(dist)
             output[start:end].copy_(g, non_blocking=True)
@@ -67,6 +67,35 @@ class MVNJointEntropy:
         self.current_batch_dist = current_batch_dist
         self.samples = samples
         self.rank_2_distributions = []
+
+    @staticmethod
+    def chunked_cat_rows(A, B, C):
+        N = A.shape[0]
+        output = None
+        chunks = []
+        @toma.execute.batch(N)
+        def compute(batchsize: int):
+            pbar = tqdm(total=N, desc="Cat Rows", leave=False)
+            start = 0
+            end = 0
+            chunks.clear()
+            for i in range(0, N, batchsize):
+                end = min(start+batchsize, N)
+                A_ = A[start:end]
+                B_ = B[start:end]
+                C_ = C[start:end]
+                
+                chunk = A_.cat_rows(B_, C_)
+                chunks.append(chunk)
+                pbar.update(end - start)
+                start = end
+            pbar.close()
+            
+        if len(chunks) > 1:
+            output = cat(chunks, dim=0)
+        else:
+            output = chunks[0]
+        return output
 
     # This enables us to recompute only outputs of size 2 for our next aquisition
     @typechecked
@@ -92,11 +121,11 @@ class MVNJointEntropy:
 
         cov = cov.evaluate()
 
-        expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand(num_datapoints, batch_size*num_cats, batch_size*num_cats)
+        expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [num_datapoints] + list(self.current_batch_dist.lazy_covariance_matrix.shape[1:]))
         self_covar_tensor = cov[:, 0 , num_cats:, num_cats:]
         cross_mat = cat( torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
         # debug_gpu()
-        covar_tensor = expanded_batch_covar.cat_rows(cross_mat, self_covar_tensor)
+        covar_tensor = MVNJointEntropy.chunked_cat_rows(expanded_batch_covar, cross_mat, self_covar_tensor)
 
         return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
 
