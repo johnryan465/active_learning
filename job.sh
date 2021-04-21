@@ -11,4 +11,4 @@ export CONDA_PKGS_DIRS=/scratch/$USER/conda_pkgs
 source /scratch-ssd/oatml/miniconda3/bin/activate active_learning
 pip install batchbald_redux==2.0.5 --no-deps
 pip install gpytorch==1.4.1
-python main.py --name log_image --description "BatchBALD vDUQ" --initial_per_class 2 --smoke_test True --aquisition_size 10 batchbald --batch_size 64 --epochs 1 vduq --lr 0.001 --coeff 9
+python main.py --name log_image --description "BatchBALD vDUQ" --initial_per_class 2  --aquisition_size 10 batchbald --batch_size 64 --epochs 1 vduq --lr 0.001 --coeff 9
