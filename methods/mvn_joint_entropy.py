@@ -41,8 +41,16 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
             mean = distribution.mean[start:end]
             covar = distribution.lazy_covariance_matrix[start:end]
             if torch.cuda.is_available():
-                mean = mean.cuda()
-                covar = covar.cuda()
+                if(isinstance(mean, CatLazyTensor)):
+                    mean = mean.all_to("cuda")
+                else:
+                    mean = mean.cuda()
+
+                if(isinstance(covar, CatLazyTensor)):
+                    covar = covar.all_to("cuda")
+                else:
+                    covar = covar.cuda()
+                    
             dist = MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar)
             g = func(dist)
             output[start:end].copy_(g, non_blocking=True)
