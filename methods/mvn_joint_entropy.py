@@ -40,9 +40,13 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
             end = min(start+batchsize, outer_batch_size)
             mean = distribution.mean[start:end]
             covar = distribution.lazy_covariance_matrix[start:end]
+            if torch.cuda.is_available():
+                mean = mean.cuda()
+                covar = covar.cuda()
             dist = MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar)
             g = func(dist)
             output[start:end].copy_(g, non_blocking=True)
+            del distribution
             del g
             pbar.update(end - start)
             start = end
@@ -145,6 +149,8 @@ class MVNJointEntropy:
                 base_samples = samples.detach().clone()
                 base_samples = base_samples[:,None,:,:]
                 base_samples = base_samples.expand(-1, distribution.batch_shape[0], -1, -1)
+                if torch.cuda.is_available():
+                    base_samples = base_samples.cuda()
                 l: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(base_samples=base_samples)).probs
             else:
                 l: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs

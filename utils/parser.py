@@ -102,7 +102,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             initial_size=args.initial_per_class,
             samples=5000,
             use_cuda=use_cuda,
-            var_reduction=True,
+            var_reduction=False,
             smoke_test=args.smoke_test
         )
     elif args.method == MethodName.bald:
