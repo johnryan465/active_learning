@@ -46,7 +46,7 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
             dist = MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar)
             g = func(dist)
             output[start:end].copy_(g, non_blocking=True)
-            del distribution
+            del dist
             del g
             pbar.update(end - start)
             start = end
