@@ -87,16 +87,14 @@ class WideResNet(nn.Module):
         def wrapped_conv(input_size, in_c, out_c, kernel_size, stride):
             padding = 1 if kernel_size == 3 else 0
 
-            conv = nn.Conv2d(in_c, out_c, kernel_size,
-                             stride, padding, bias=False)
+            conv = nn.Conv2d(in_c, out_c, kernel_size, stride, padding, bias=False)
 
             if not spectral_normalization:
                 return conv
             if kernel_size == 1:
                 # use spectral norm fc, because bound are
                 # tight for 1x1 convolutions
-                wrapped_conv = spectral_norm_fc(conv, coeff,
-                                                n_power_iterations)
+                wrapped_conv = spectral_norm_fc(conv, coeff, n_power_iterations)
             else:
                 # Otherwise use spectral norm conv, with loose bound
                 input_dim = (in_c, input_size, input_size)
@@ -115,15 +113,11 @@ class WideResNet(nn.Module):
         strides = [1, 1, 2, 2]
         input_sizes = 32 // np.cumprod(strides)
 
-        self.conv1 = wrapped_conv(
-            input_sizes[0], channels, nStages[0], 3, strides[0])
+        self.conv1 = wrapped_conv(input_sizes[0], channels, nStages[0], 3, strides[0])
 
-        self.layer1 = self._wide_layer(nStages[0:2], n,
-                                       strides[1], input_sizes[1])
-        self.layer2 = self._wide_layer(nStages[1:3], n,
-                                       strides[2], input_sizes[2])
-        self.layer3 = self._wide_layer(nStages[2:4], n, strides[3],
-                                       input_sizes[3])
+        self.layer1 = self._wide_layer(nStages[0:2], n, strides[1], input_sizes[0])
+        self.layer2 = self._wide_layer(nStages[1:3], n, strides[2], input_sizes[1])
+        self.layer3 = self._wide_layer(nStages[2:4], n, strides[3], input_sizes[2])
 
         self.bn1 = self.wrapped_bn(nStages[3])
 
@@ -133,11 +127,9 @@ class WideResNet(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out",
-                                        nonlinearity="relu")
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out",
-                                        nonlinearity="relu")
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                 nn.init.constant_(m.bias, 0)
 
     def _wide_layer(self, channels, num_blocks, stride, input_size):
