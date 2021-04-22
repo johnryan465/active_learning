@@ -69,9 +69,9 @@ class DatasetWrapper(ActiveLearningDataset):
         self.bs = config.batch_size
 
         if config.smoke_test:
-            self.trainset = Subset(train_dataset, list(range(0,200)))
-            self.testset = Subset(test_dataset, list(range(0,200))) # test_dataset
-            self.sampler_size = 2000
+            self.trainset = Subset(train_dataset, list(range(0,100)))
+            self.testset = Subset(test_dataset, list(range(0,100))) # test_dataset
+            self.sampler_size = 4000
         else:
             self.trainset = train_dataset
             self.testset = test_dataset
@@ -110,7 +110,7 @@ class DatasetWrapper(ActiveLearningDataset):
         ts = Subset(
             self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask == 0).squeeze()))
         return ts
-
+    
     # This method and related ones should take inputs in the range
     # 0 - poolsize instead of 0 - dataset size
     def move(self, idxs: Indexes) -> None:

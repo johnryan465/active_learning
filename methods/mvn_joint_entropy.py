@@ -58,7 +58,7 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
             del g
             pbar.update(end - start)
             start = end
-            pbar.close()
+        pbar.close()
 
 # This is a class which allows to calculate the JointEntropy of GPs
 # In GPytorch
@@ -168,8 +168,8 @@ class MVNJointEntropy:
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        S = 200
-        E = 20000 // S
+        S = 300
+        E = 100
         per_samples = S
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
@@ -225,9 +225,13 @@ class MVNJointEntropy:
             choices_expanded: TensorType["N", "S", "S", "D", "E"] = choices[:,None,:,:,:].expand(-1, per_samples, -1, -1, -1)
 
             w: TensorType["N", "S", "S", "D", "E"] = torch.gather(likelihood_expanded, 4, choices_expanded)
+            del choices
+            del choices_expanded
             # g: TensorType["N", "S", "E"] = torch.prod(w, 2)
+            # print(w.shape)
             p: TensorType["N", "S", "S", "E"] = torch.exp(torch.sum(torch.log(w), dim=3))
 
+            del w
             # The mean needs to be rescaled
             p: TensorType["N", "S", "S * E"] = p.reshape((N,S,-1 ))
             p: TensorType["N", "S * E"] = torch.mean(p, 1) 

@@ -47,6 +47,7 @@ def init_parser() -> argparse.ArgumentParser:
         p.add_argument('--dataset', default=DatasetName.mnist, type=DatasetName)
         p.add_argument('--num_repetitions', default=1, type=int)
         p.add_argument('--model_index', default=0, type=int)
+        p.add_argument('--var_reduction', default=False, type=bool)
         p.set_defaults(method=method)
         nestedsubpraser = p.add_subparsers(dest='model')
         for model in models:
@@ -102,7 +103,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             initial_size=args.initial_per_class,
             samples=5000,
             use_cuda=use_cuda,
-            var_reduction=False,
+            var_reduction=args.var_reduction,
             smoke_test=args.smoke_test
         )
     elif args.method == MethodName.bald:

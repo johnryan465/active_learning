@@ -144,9 +144,11 @@ class BatchBALD(UncertainMethod):
 
                     features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
                     ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
-                    conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
+                    conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 20000).cpu()
                     current_batch_dist: MultitaskMultivariateNormalType[ (), ("current_batch_size", "num_cat")] = None
                     joint_entropy_class = MVNJointEntropy(current_batch_dist, samples)
+
+                    print(conditional_entropies_N)
 
                     for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                         # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -188,10 +190,11 @@ class BatchBALD(UncertainMethod):
                         shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
                         scores_N = joint_entropy_result.detach().cpu()
+                        # print(scores_N)
 
                         scores_N -= conditional_entropies_N + shared_conditinal_entropies
                         scores_N[candidate_indices] = -float("inf")
-
+                        # print(scores_N)
                         candidate_score, candidate_index = scores_N.max(dim=0)
                         
                         del scores_N
@@ -222,8 +225,8 @@ class BatchBALD(UncertainMethod):
                     # joint_distribution_list: MultitaskMultivariateNormalType[(1), ("datapoints", "num_cat")] = get_gp_output(pool_expanded, model_wrapper)
                     # assert(len(joint_distribution_list) == 1)
                     joint_distribution: MultitaskMultivariateNormalType = get_gp_output(pool_expanded, model_wrapper)
-                    log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([500]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
-                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 500) 
+                    log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([100]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
+                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 10000) 
                     candidate_indices = batch.indices
                     candidate_scores = batch.scores
 
@@ -236,10 +239,16 @@ class BatchBALD(UncertainMethod):
                     print("Efficent")
                     print(efficent_candidate_indices) # type: ignore
                     print(efficent_candidate_scores) # type: ignore
+                    for idx in efficent_candidate_indices: # type: ignore
+                        _, y = dataset.get_pool_tensor()[idx] # type: ignore
+                        print(y)
 
                     print("Redux")
                     print(redux_candidate_indices) # type: ignore
                     print(redux_candidate_scores) # type: ignore
+                    for idx in redux_candidate_indices: # type: ignore
+                        _, y = dataset.get_pool_tensor()[idx] # type: ignore
+                        print(y)
                 Method.log_batch(dataset.get_indexes(candidate_indices), tb_logger, self.current_aquisition)
                 dataset.move(candidate_indices)
 
