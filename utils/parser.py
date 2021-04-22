@@ -101,7 +101,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=500,
+            samples=100,
             use_cuda=use_cuda,
             var_reduction=args.var_reduction,
             smoke_test=args.smoke_test

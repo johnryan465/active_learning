@@ -168,8 +168,8 @@ class MVNJointEntropy:
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        E = 100000 // S
-        per_samples = S // D
+        E = 10000 // S
+        per_samples = S # // D
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
 
@@ -238,7 +238,7 @@ class MVNJointEntropy:
             p: TensorType["N"] = torch.mean(p, 1) 
             return p
             
-        if S * (C**D)  <= 10000:            
+        if True: # S * (C**D)  <= 10000:            
             chunked_distribution("Joint Entropy", distribution, exact, output)
         else:
             chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
