@@ -29,7 +29,7 @@ def create_training_function(path):
         # aquisition
         args = Namespace(
             data_path=path,
-            aquisition_size=4, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
+            aquisition_size=7, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
             epochs=500, initial_per_class=starting_size, smoke_test=False, var_reduction=False, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, var_opt=var_opt, n_inducing_points=n_inducing_points,
             num_repetitions=4, name='vduq_bb_tuning', num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff)
 
@@ -66,9 +66,9 @@ if __name__ == "__main__":
     df_search = ConcurrencyLimiter(df_search, max_concurrent=2)
     scheduler = ASHAScheduler(
         time_attr='iteration',
-        max_t=70,
+        max_t=40,
         brackets=1,
-        grace_period=10,
+        grace_period=5,
         reduction_factor=3
     )
 
@@ -81,10 +81,10 @@ if __name__ == "__main__":
         num_samples=50,
         resources_per_trial={'gpu': 1},
         config={
-            "lr": tune.loguniform(5e-4, 3e-2),
+            "lr": tune.loguniform(5e-4, 1e-1),
             "dropout": 0.0,
             "method": "batchbald",
-            "coeff": tune.uniform(6, 12),
+            "coeff": tune.uniform(6, 18),
             "batch_size": 64,
             "starting_size": 2,
             "num_aquisitions": 70,
