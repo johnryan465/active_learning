@@ -168,9 +168,8 @@ class MVNJointEntropy:
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        S = 300
-        E = 100
-        per_samples = S
+        E = 100000 // S
+        per_samples = S // D
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
 
@@ -233,7 +232,7 @@ class MVNJointEntropy:
 
             del w
             # The mean needs to be rescaled
-            p: TensorType["N", "S", "S * E"] = p.reshape((N,S,-1 ))
+            p: TensorType["N", "S", "S * E"] = p.reshape((N,per_samples,-1 ))
             p: TensorType["N", "S * E"] = torch.mean(p, 1) 
             p: TensorType["N", "S * E"] = - torch.log(p)
             p: TensorType["N"] = torch.mean(p, 1) 
