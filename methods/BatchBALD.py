@@ -23,6 +23,7 @@ from toma import toma
 
 from .mvn_joint_entropy import MVNJointEntropy, chunked_distribution
 
+import torch.autograd.profiler as profiler
 
 
 @dataclass
@@ -113,10 +114,12 @@ class BatchBALD(UncertainMethod):
             if isinstance(model_wrapper, vDUQ):
                 candidate_indices = []
                 candidate_scores = []
+                redux_candidate_indices = []
+                redux_candidate_scores = []
                 samples = self.params.samples
                 efficent = True
                 num_cat = 10
-                feature_size = 512
+                feature_size = 256
 
                 inputs: TensorType["datapoints","channels","x","y"] = get_pool(dataset)
                 N = inputs.shape[0]
@@ -146,7 +149,7 @@ class BatchBALD(UncertainMethod):
                     ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
                     conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
                     current_batch_dist: MultitaskMultivariateNormalType[ (), ("current_batch_size", "num_cat")] = None
-                    joint_entropy_class = MVNJointEntropy(current_batch_dist, samples)
+                    joint_entropy_class = None
 
                     print(conditional_entropies_N)
 
@@ -181,7 +184,7 @@ class BatchBALD(UncertainMethod):
 
                             dists: MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")] = joint_entropy_class.join_rank_2() 
 
-                        joint_entropy_class.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
+                        MVNJointEntropy.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
                         # if self.params.smoke_test:
                         #     print(joint_entropy_result)
 
@@ -211,15 +214,18 @@ class BatchBALD(UncertainMethod):
                         joint_features: TensorType["datapoints", 1, 2, "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=2)
                         new_rank_2: MultitaskMultivariateNormalType[ ("datapoints", 1), (2, "num_cat")] = get_gp_output(joint_features, model_wrapper)
 
-                        joint_entropy_class.add_new(current_batch_dist, new_rank_2)
+                        if i == 0:
+                            joint_entropy_class = MVNJointEntropy(current_batch_dist, new_rank_2, samples)
+                        else:
+                            joint_entropy_class.add_new(current_batch_dist, new_rank_2)
 
                     if self.params.smoke_test:
                         efficent_candidate_indices = candidate_indices.copy()
                         efficent_candidate_scores = candidate_scores.copy()
-                        candidate_indices = []
-                        candidate_scores = []
+                        # candidate_indices = []
+                        # candidate_scores = []
                     
-                if not efficent or self.params.smoke_test:
+                if False:
                     # We use the BatchBALD Redux as a comparision, this does not scale to larger pool sizes.
                     pool_expanded: TensorType[1, "datapoints", "num_features"] = pool[None,:,:]
                     # joint_distribution_list: MultitaskMultivariateNormalType[(1), ("datapoints", "num_cat")] = get_gp_output(pool_expanded, model_wrapper)
@@ -260,6 +266,7 @@ class BatchBALD(UncertainMethod):
 
             else:
                 raise NotImplementedError("BatchBALD")
+
 
     def initialise(self, dataset: ActiveLearningDataset) -> None:
         DatasetUtils.balanced_init(dataset, self.params.initial_size)

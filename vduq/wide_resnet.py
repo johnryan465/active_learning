@@ -26,7 +26,7 @@ class WideBasic(nn.Module):
         self.conv1 = wrapped_conv(input_size, in_c, out_c, 3, stride)
 
         self.bn2 = wrapped_batchnorm(out_c)
-        self.conv2 = wrapped_conv(input_size // stride, out_c, out_c, 3, 1)
+        self.conv2 = wrapped_conv( (input_size // stride) + (input_size % stride), out_c, out_c, 3, 1)
 
         self.dropout_rate = dropout_rate
         if dropout_rate > 0:

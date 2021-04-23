@@ -32,12 +32,14 @@ class SpectralNormConv(SpectralNorm):
                     # print(module.name)
                     # print(weight.shape)
                     # print(u.view(self.out_shape).shape)
+                    # We want the shape to be preserved so the output padding must be used carefully
+                    output_padding = (stride[0] - 1, stride[1] - 1) if (self.input_dim[-1] % 2 == 0) else (0, 0)
                     v_s = conv_transpose2d(
                         u.view(self.out_shape),
                         weight,
                         stride=stride,
                         padding=padding,
-                        output_padding=(stride[0] - 1, stride[1] - 1),
+                        output_padding=output_padding,
                     )
                     # print(v_s.shape)
                     # print(v.shape)

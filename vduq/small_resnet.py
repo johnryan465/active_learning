@@ -112,14 +112,14 @@ class MNISTResNet(nn.Module):
 
         self.wrapped_conv = wrapped_conv
 
-        nStages = [64, 64, 128, 256, 512]
-        strides = [1, 2, 2, 2, 2]
-        input_sizes = 32 // np.cumprod(strides)
+        strides = [1, 1, 2, 2, 2]
+        nStages = 64 * np.cumprod(strides) #[64, 128, 256, 512, 1024]
+        layer_size = [2, 2, 2, 2]
+        input_sizes = image_size // np.cumprod(strides)
 
         n = 1  # layer_size
-        num_blocks = len(nStages)
-        self.conv1 = self.wrapped_conv(
-            input_sizes[0], channels, nStages[0], 7, strides[0], padding=3)
+        num_blocks = len(layer_size)
+        self.conv1 = self.wrapped_conv(image_size, 1, 64, 7, 2, padding=3)
 
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
@@ -127,11 +127,13 @@ class MNISTResNet(nn.Module):
         # Layers are connected together with convolutions which reduce the spatial dimensions
         self.layers = nn.ModuleList()
 
-        for i in range(0, num_blocks - 1):
-            self.layers.append(self._layer(nStages[i: i+2], n, strides[i+1], input_sizes[i+1]))
+        # for i in range(0, num_blocks):
+        self.layers.append(self._layer(nStages[0: 2], n, strides[1], 14))
+        self.layers.append(self._layer(nStages[1: 3], n, strides[2], 14))
+        self.layers.append(self._layer(nStages[2: 4], n, strides[3], 7))
 
         # print(self.layers)
-        self.bn1 = self.wrapped_bn(nStages[num_blocks - 1])
+        self.bn1 = self.wrapped_bn(nStages[0])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.num_classes = num_classes
         if num_classes is not None:
@@ -174,9 +176,10 @@ class MNISTResNet(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
+        out = F.relu(self.bn1(out))
+        # out = self.maxpool(out)
         for layer in self.layers:
             out = layer(out)
-        out = F.relu(self.bn1(out))
         out = self.avgpool(out)
         out = out.flatten(1)
 

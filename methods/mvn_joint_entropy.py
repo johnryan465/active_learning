@@ -63,10 +63,15 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
 # This is a class which allows to calculate the JointEntropy of GPs
 # In GPytorch
 class MVNJointEntropy:
-    def __init__(self, current_batch_dist: MultitaskMultivariateNormalType, samples: int) -> None:
-        self.current_batch_dist = current_batch_dist
+    def __init__(self, current_batch_dist: MultitaskMultivariateNormalType, rank_2_distributions: MultitaskMultivariateNormalType, samples: int) -> None:
+        cov = rank_2_distributions.lazy_covariance_matrix.evaluate()
+        self.num_cats = rank_2_distributions.event_shape[1]
+        self.current_batch_dist = current_batch_dist # We replace this on adding variables
         self.samples = samples
-        self.rank_2_distributions = []
+        self.rank_2_distributions_mean = rank_2_distributions.mean[:,0,1,:].unsqueeze(1)  # This wont change
+        self.self_covar_tensor = cov[:, 0 , self.num_cats:, self.num_cats:]               # This wont change
+        self.cross_mat = cat( torch.unbind(cov[:, :, :self.num_cats, self.num_cats:], dim=1), dim=-1) # We will concat
+        self.num_datapoints = rank_2_distributions.batch_shape[0]
 
     @staticmethod
     def chunked_cat_rows(A, B, C):
@@ -103,27 +108,14 @@ class MVNJointEntropy:
         # For each of the datapoints and the candidate batch we want to compute the low rank tensor
         # The order of the candidate datapoints must be maintained and used carefully
         # Need to wrap this in toma
-
-        rank_2_dists = self.rank_2_distributions
-
-        batch_size = self.current_batch_dist.event_shape[0]
-        num_cats = self.current_batch_dist.event_shape[1]
-        num_datapoints = rank_2_dists[0].batch_shape[0]
-        if len(rank_2_dists) == 1:
-            cov = rank_2_dists[0].lazy_covariance_matrix
-        else:
-            cov = cat( [d.lazy_covariance_matrix for d in rank_2_dists], dim=1 )
-
         # The means will be the same for each datapoint
-        item_means = rank_2_dists[0].mean[:,0,1,:].unsqueeze(1)
-        candidate_means = (self.current_batch_dist.mean).expand(num_datapoints, -1, -1)
+        item_means = self.rank_2_distributions_mean
+        candidate_means = (self.current_batch_dist.mean).expand(self.num_datapoints, -1, -1)
         mean_tensor = cat([candidate_means, item_means], dim=1)
 
-        cov = cov.evaluate()
-
-        expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [num_datapoints] + list(self.current_batch_dist.lazy_covariance_matrix.shape[1:]))
-        self_covar_tensor = cov[:, 0 , num_cats:, num_cats:]
-        cross_mat = cat( torch.unbind(cov[:,:, :num_cats, num_cats:], dim=1), dim=-1)
+        expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [self.num_datapoints] + list(self.current_batch_dist.lazy_covariance_matrix.shape[1:]))
+        self_covar_tensor = self.self_covar_tensor
+        cross_mat = self.cross_mat
         # debug_gpu()
         covar_tensor = MVNJointEntropy.chunked_cat_rows(expanded_batch_covar, cross_mat, self_covar_tensor)
 
@@ -157,12 +149,16 @@ class MVNJointEntropy:
 
     @typechecked
     def add_new(self, new_batch: MultitaskMultivariateNormalType, rank_2_combinations: MultitaskMultivariateNormalType) -> None:
+        # When we are adding a new point, we update the batch
+        # And we updated the cross_mat
+        cov = rank_2_combinations.lazy_covariance_matrix.evaluate()
         self.current_batch_dist = new_batch
-        self.rank_2_distributions.append(rank_2_combinations)
+        self.cross_mat = cat( [self.cross_mat, cov[:, 0, :self.num_cats, self.num_cats:]], dim=-1) 
 
     # We compute the joint entropy of the distributions
+    @staticmethod
     @typechecked
-    def compute(self, distribution: MultivariateNormalType, likelihood, S: int, output: TensorType["N"], variance_reduction: bool = False) -> None:
+    def compute(distribution: MultivariateNormalType, likelihood, S: int, output: TensorType["N"], variance_reduction: bool = False) -> None:
         # We can exactly compute a larger sized exact distribution
         # As the task batches are independent we can chunk them
         D = distribution.event_shape[0]
@@ -238,7 +234,7 @@ class MVNJointEntropy:
             p: TensorType["N"] = torch.mean(p, 1) 
             return p
             
-        if True: # S * (C**D)  <= 10000:            
+        if S * (C**D)  <= 10000:            
             chunked_distribution("Joint Entropy", distribution, exact, output)
         else:
             chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
