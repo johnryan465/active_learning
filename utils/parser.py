@@ -37,17 +37,25 @@ def init_parser() -> argparse.ArgumentParser:
     parser.add_argument('--smoke_test', default=False, type=bool)
     parser.add_argument('--data_path', default="./data", type=str)
 
-    methods = ["batchbald", "bald", "random"]
-    models = ["vduq", "bnn"]
+    methods = ["entropy", "batchbald", "bald", "random"]
+    models = ["vduq", "bnn", "dnn"]
     method_parsers = {}
     for method in methods:
         p = subprasers.add_parser(method)
+        if method == "entropy":
+            p.add_argument('--var_reduction', default=False, type=bool)
+        elif method == "batchbald":
+            p.add_argument('--var_reduction', default=False, type=bool)
+        elif method == "bald":
+            p.add_argument('--var_reduction', default=False, type=bool)
+        elif method == "random":
+            pass
         p.add_argument('--batch_size', type=int, required=True)
         p.add_argument('--epochs', default=100, type=int, required=True)
         p.add_argument('--dataset', default=DatasetName.mnist, type=DatasetName)
         p.add_argument('--num_repetitions', default=1, type=int)
         p.add_argument('--model_index', default=0, type=int)
-        p.add_argument('--var_reduction', default=False, type=bool)
+        
         p.set_defaults(method=method)
         nestedsubpraser = p.add_subparsers(dest='model')
         for model in models:
@@ -61,8 +69,14 @@ def init_parser() -> argparse.ArgumentParser:
                 q.add_argument('--var_opt', default=-1, type=float)
                 q.add_argument('--coeff', default=9, type=float)
                 q.add_argument('--n_inducing_points', default=10, type=int)
+            elif model == "bnn":
+                q.add_argument('--dropout', default=0.0, type=float)
+                q.add_argument('--lr', default=0.01, type=float)
+            elif model == "dnn":
+                q.add_argument('--dropout', default=0.0, type=float)
+                q.add_argument('--lr', default=0.01, type=float)
             else:
-                q.add_argument('--dropout', default=0, type=float)
+                pass
         method_parsers[method] = p
 
     return parser

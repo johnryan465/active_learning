@@ -38,8 +38,8 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
         end = 0
         for i in range(0, outer_batch_size, batchsize):
             end = min(start+batchsize, outer_batch_size)
-            mean = distribution.mean[start:end]
-            covar = distribution.lazy_covariance_matrix[start:end]
+            mean = distribution.mean[start:end].clone()
+            covar = distribution.lazy_covariance_matrix[start:end].clone()
             if torch.cuda.is_available():
                 if(isinstance(mean, CatLazyTensor)):
                     mean = mean.all_to("cuda")
@@ -52,6 +52,8 @@ def chunked_distribution(name: str, distribution: MultitaskMultivariateNormalTyp
                     covar = covar.cuda()
 
             dist = MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar)
+            del mean
+            del covar
             g = func(dist)
             output[start:end].copy_(g, non_blocking=True)
             del dist
@@ -117,7 +119,7 @@ class MVNJointEntropy:
         self_covar_tensor = self.self_covar_tensor
         cross_mat = self.cross_mat
         # debug_gpu()
-        covar_tensor = MVNJointEntropy.chunked_cat_rows(expanded_batch_covar, cross_mat, self_covar_tensor)
+        covar_tensor = MVNJointEntropy.chunked_cat_rows(expanded_batch_covar, cross_mat, self_covar_tensor).cpu()
 
         return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
 
@@ -206,31 +208,30 @@ class MVNJointEntropy:
                 base_samples = base_samples[:,None,:,:]
                 base_samples = base_samples.expand(-1, distribution.batch_shape[0], -1, -1)
                 likelihood_samples: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(base_samples=base_samples)).probs
+                del base_samples
             else:
                 likelihood_samples: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
 
             likelihood_samples: TensorType["N", "S", "D", "C"] = torch.transpose(likelihood_samples, 0, 1)
-            likelihood_expanded: TensorType["N", "S", "S", "D", "C"] = likelihood_samples[:,:,None,:,:].expand(-1, -1, per_samples, -1, -1)
             l_shape = likelihood_samples.shape
+            likelihood_samples: TensorType["N * S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
             # Instead of using einsum we will sample from the possible 
             # indexes, we wish to keep the same for each datapoints samples
-            y: TensorType["N * S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
-            choices: TensorType["N * S * D", "E"] = torch.multinomial(y, E, replacement=True)
+            choices: TensorType["N * S * D", "E"] = torch.multinomial(likelihood_samples, E, replacement=True)
             choices: TensorType["N", "S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
-            choices_expanded: TensorType["N", "S", "S", "D", "E"] = choices[:,None,:,:,:].expand(-1, per_samples, -1, -1, -1)
-
-            w: TensorType["N", "S", "S", "D", "E"] = torch.gather(likelihood_expanded, 4, choices_expanded)
+            likelihood_samples: TensorType["N", "S", "S", "D", "C"] = (likelihood_samples.reshape(l_shape))[:,:,None,:,:].expand(-1, -1, per_samples, -1, -1)
+            choices: TensorType["N", "S", "S", "D", "E"] = choices[:,None,:,:,:].expand(-1, per_samples, -1, -1, -1)
+            p: TensorType["N", "S", "S", "D", "E"] = torch.gather(likelihood_samples, 4, choices)
             del choices
-            del choices_expanded
-            # g: TensorType["N", "S", "E"] = torch.prod(w, 2)
-            # print(w.shape)
-            p: TensorType["N", "S", "S", "E"] = torch.exp(torch.sum(torch.log(w), dim=3))
+            del likelihood_samples
 
-            del w
+            p: TensorType["N", "S", "S", "D", "E"] = torch.log(p, out=p)
+            p: TensorType["N", "S", "S", "E"] = torch.sum(p, dim=3)
+            p: TensorType["N", "S", "S", "E"] = torch.exp(p, out=p)
             # The mean needs to be rescaled
             p: TensorType["N", "S", "S * E"] = p.reshape((N,per_samples,-1 ))
             p: TensorType["N", "S * E"] = torch.mean(p, 1) 
-            p: TensorType["N", "S * E"] = - torch.log(p)
+            p: TensorType["N", "S * E"] = - torch.log(p, out=p)
             p: TensorType["N"] = torch.mean(p, 1) 
             return p
             
