@@ -61,7 +61,7 @@ class ActiveLearningDataset(ABC):
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
 class DatasetWrapper(ActiveLearningDataset):
-    num_workers = 4
+    num_workers = 1
     
     def __init__(self, train_dataset: VisionDataset,
                  test_dataset: VisionDataset, config: DatasetParams) -> None:
@@ -69,8 +69,8 @@ class DatasetWrapper(ActiveLearningDataset):
         self.bs = config.batch_size
 
         if config.smoke_test:
-            self.trainset = Subset(train_dataset, list(range(0,100)))
-            self.testset = Subset(test_dataset, list(range(0,100))) # test_dataset
+            self.trainset = Subset(train_dataset, list(range(0,500)))
+            self.testset = Subset(test_dataset, list(range(0,500))) # test_dataset
             self.sampler_size = 4000
         else:
             self.trainset = train_dataset

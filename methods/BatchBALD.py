@@ -1,18 +1,13 @@
-from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
-from torch import distributions
-from torch.distributions.normal import Normal
-from torch.tensor import Tensor
+from methods.utils import get_pool
 from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
 from models.vduq import vDUQ
 from datasets.activelearningdataset import ActiveLearningDataset
 from methods.method import UncertainMethod, Method
 from methods.method_params import MethodParams
-from batchbald_redux.batchbald import get_batchbald_batch, CandidateBatch
-from batchbald_redux import joint_entropy
+from batchbald_redux.batchbald import get_batchbald_batch
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 
-from typing import Annotated, Callable, Generic, List, NewType, Tuple, Type, TypeVar, Union
 from typeguard import check_type, typechecked
 from utils.typing import MultitaskMultivariateNormalType, MultivariateNormalType, TensorType
 
@@ -23,7 +18,6 @@ from toma import toma
 
 from .mvn_joint_entropy import MVNJointEntropy, chunked_distribution
 
-import torch.autograd.profiler as profiler
 
 
 @dataclass
@@ -31,20 +25,10 @@ class BatchBALDParams(MethodParams):
     samples: int
     use_cuda: bool
     var_reduction: bool = True
+    efficent: bool = True
 
 
 # \sigma_{BatchBALD} ( {x_1, ..., x_n}, p(w)) = H(y_1, ..., y_n) - E_{p(w)} H(y | x, w)
-
-
-# Gets the pool from the dataset as a tensor
-@typechecked
-def get_pool(dataset: ActiveLearningDataset) -> TensorType["datapoints", "channels", "x", "y"]:
-    inputs = []
-    for x, _ in tqdm(dataset.get_pool_tensor(), desc="Loading pool", leave=False):
-        inputs.append(x)
-    inputs = torch.stack(inputs, dim=0)
-    return inputs
-
 
 @typechecked
 def get_features(inputs: TensorType["datapoints", "channels", "x", "y"], feature_size: int, model_wrapper: vDUQ) -> TensorType["datapoints", "num_features"]:
@@ -117,7 +101,7 @@ class BatchBALD(UncertainMethod):
                 redux_candidate_indices = []
                 redux_candidate_scores = []
                 samples = self.params.samples
-                efficent = True
+                efficent = self.params.efficent
                 num_cat = 10
                 feature_size = 256
 
@@ -185,8 +169,6 @@ class BatchBALD(UncertainMethod):
                             dists: MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")] = joint_entropy_class.join_rank_2() 
 
                         MVNJointEntropy.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
-                        # if self.params.smoke_test:
-                        #     print(joint_entropy_result)
 
                         # Then we compute the batchbald objective
 
