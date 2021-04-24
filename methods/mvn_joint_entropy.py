@@ -160,14 +160,13 @@ class MVNJointEntropy:
     # We compute the joint entropy of the distributions
     @staticmethod
     @typechecked
-    def compute(distribution: MultivariateNormalType, likelihood, S: int, output: TensorType["N"], variance_reduction: bool = False) -> None:
+    def compute(distribution: MultivariateNormalType, likelihood, per_samples: int, total_samples: int, output: TensorType["N"], variance_reduction: bool = False) -> None:
         # We can exactly compute a larger sized exact distribution
         # As the task batches are independent we can chunk them
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        E = 10000 // S
-        per_samples = S # // D
+        E = total_samples // (per_samples * D) # We could reduce the number of samples here to allow better scaling with bigger datapoints
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
 
@@ -235,7 +234,7 @@ class MVNJointEntropy:
             p: TensorType["N"] = torch.mean(p, 1) 
             return p
             
-        if S * (C**D)  <= 10000:            
+        if (C**D) >= E:            
             chunked_distribution("Joint Entropy", distribution, exact, output)
         else:
             chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
