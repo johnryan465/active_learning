@@ -166,6 +166,7 @@ class MVNJointEntropy:
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
+        per_samples = per_samples // D
         E = total_samples // (per_samples * D) # We could reduce the number of samples here to allow better scaling with bigger datapoints
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
