@@ -45,7 +45,6 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
         f_X_samples.numpy(), n_inducing_points
     )
     initial_lengthscale = _get_initial_lengthscale(f_X_samples)
-    print(initial_inducing_points.size(), initial_lengthscale)
     return initial_inducing_points, initial_lengthscale
 
 
