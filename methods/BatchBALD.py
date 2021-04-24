@@ -1,3 +1,5 @@
+from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
+from gpytorch.lazy.cat_lazy_tensor import CatLazyTensor
 from methods.utils import get_pool
 from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
@@ -64,7 +66,23 @@ def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], mode
             dists.append(d)
             pbar.update(end - start)
         pbar.close()
-        return MVNJointEntropy.combine_mtmvns(dists)
+        # We want to keep things off the GPU
+        dist = MVNJointEntropy.combine_mtmvns(dists)
+        mean_cpu = dist.mean
+        cov_cpu = dist.lazy_covariance_matrix
+        if torch.cuda.is_available():
+            if(isinstance(mean_cpu, CatLazyTensor)):
+                mean_cpu = mean_cpu.all_to("cpu")
+            else:
+                mean_cpu = mean_cpu.cpu()
+
+            if(isinstance(cov_cpu, CatLazyTensor)):
+                cov_cpu = cov_cpu.all_to("cuda")
+            else:
+                cov_cpu = cov_cpu.cuda()
+        mean_cpu = dist.mean.cpu()
+        cov_cpu = dist.lazy_covariance_matrix.cpu()
+        return MultitaskMultivariateNormal(mean=mean_cpu, covariance_matrix=cov_cpu)
 
 
 @typechecked
