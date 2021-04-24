@@ -168,7 +168,7 @@ class BatchBALD(UncertainMethod):
 
                             dists: MultitaskMultivariateNormalType[ ("datapoints"), ("new_batch_size", "num_cat")] = joint_entropy_class.join_rank_2() 
 
-                        MVNJointEntropy.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
+                        MVNJointEntropy.compute(dists, model_wrapper.likelihood, 100, samples, joint_entropy_result, variance_reduction=self.params.var_reduction)
 
                         # Then we compute the batchbald objective
 
