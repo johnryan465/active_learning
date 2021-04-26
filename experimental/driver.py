@@ -120,8 +120,8 @@ class Driver:
                 best_model = model_wrapper.load_state_dict(torch.load(saving_handler.last_checkpoint), dataset)
                 del model_wrapper
                 if torch.cuda.is_available():
-                    print(torch.cuda.memory_allocated())
-                    print(torch.cuda.memory_reserved())
+                    # print(torch.cuda.memory_allocated())
+                    # print(torch.cuda.memory_reserved())
                     torch.cuda.empty_cache()
             IO.dict_to_csv(train_log_lines, 'experiments/' + exp_name + '/train-' + str(iteration) + '.csv')
             IO.dict_to_csv(test_log_lines, 'experiments/' + exp_name + '/test-' + str(iteration) + '.csv')
