@@ -498,7 +498,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
         self.num_points = self.num_points + 1
-        self.create_samples(2000, 10)
+        self.create_samples(100, 500)
 
 
     # We call this function to create the samples for the batch distribution
@@ -581,7 +581,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        per_samples = 100
+        per_samples = 50
 
         # We are sampling more over the batch than than the candiadate points
         @typechecked
@@ -618,4 +618,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
         print("output")
         print(output)
-        return self.r2c.expand_to_full_pool(output)
+        o = self.r2c.expand_to_full_pool(output)
+        print(o)
+        return o
