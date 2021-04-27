@@ -123,7 +123,7 @@ class BatchBALD(UncertainMethod):
                 efficent = self.params.efficent
                 num_cat = 10
                 feature_size = 256
-                use_bb_redux = False # self.params.smoke_test
+                use_bb_redux = self.params.smoke_test
 
                 inputs: TensorType["datapoints","channels","x","y"] = get_pool(dataset)
                 N = inputs.shape[0]
@@ -140,10 +140,10 @@ class BatchBALD(UncertainMethod):
                 
 
                 joint_entropy_class: GPCJointEntropy
-                if False:
-                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper. likelihood)
-                else:
-                    joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, samples, 10, N)
+                if True:
+                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, samples, 10, N)
+                if self.params.smoke_test:
+                    joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, samples, 10, N)
                 
                 # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
                 # which is computationaly prohibative (has complexity related to the pool size)
@@ -157,10 +157,10 @@ class BatchBALD(UncertainMethod):
 
                 features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
                 ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
-                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 10000).cpu()
+                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 100000).cpu()
                 
 
-                print(conditional_entropies_N)
+                # print(conditional_entropies_N)
 
                 for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                     # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -189,15 +189,21 @@ class BatchBALD(UncertainMethod):
                     rank2dist: Rank2Next = Rank2Next(dists)
                     if i > 0:
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
-
+                        # if self.params.smoke_test:
+                        #    joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
+                    # if self.params.smoke_test:
+                    #    # joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
+                    #    difference = torch.flatten(joint_entropy_result_ - joint_entropy_result)
+                    #    print(torch.std(difference))
+                    #    print(torch.mean(difference))
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
                     scores_N = joint_entropy_result.detach().cpu()
                     # scores_N[candidate_indices] = -float("inf")
 
-                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                    # scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
                     print(scores_N)
 

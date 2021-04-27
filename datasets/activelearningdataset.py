@@ -69,8 +69,8 @@ class DatasetWrapper(ActiveLearningDataset):
         self.bs = config.batch_size
 
         if config.smoke_test:
-            self.trainset = Subset(train_dataset, list(range(0,500)))
-            self.testset = Subset(test_dataset, list(range(0,500))) # test_dataset
+            self.trainset = Subset(train_dataset, list(range(0,100)))
+            self.testset = Subset(test_dataset, list(range(0,100))) # test_dataset
             self.sampler_size = 4000
         else:
             self.trainset = train_dataset

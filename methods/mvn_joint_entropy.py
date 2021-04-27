@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from gpytorch.distributions import distribution
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
-from gpytorch.lazy.non_lazy_tensor import lazify
+from gpytorch.lazy.non_lazy_tensor import NonLazyTensor, lazify
 from torch import distributions
 
 from gpytorch.lazy import CatLazyTensor, BlockDiagLazyTensor, cat
@@ -56,7 +56,6 @@ class Rank2Next:
 # For it to be invertible we need non zero eigenvalues, the eigenvalues of (C - B^T A^{-1} B) must be non zero
 # For the candidate_indexes we will replace the self covariance with I*scalar with a large positive scalar
 class Rank2Combine:
-    large_scalar = 100000
     def __init__(self, pool_size: int) -> None:
         self.candidates: List[Rank2Next] = []
         self.candidate_indexes: List[int] = []
@@ -260,7 +259,7 @@ class MVNJointEntropy(GPCJointEntropy):
         # Get the cross correlation between the previous batches and the selected point
         if self.num_points == 0:
             _mean = rank2.get_mean()[selected_point].unsqueeze(0)
-            _covar = rank2.get_self_covar()[selected_point]
+            _covar = NonLazyTensor(rank2.get_self_covar()[selected_point])
         else:
             compressed_selected_point = self.r2c.to_compressed_index(selected_point)
             cross_mat: TensorType["C", 1, "D"] = self.r2c.get_point_cross_mat(selected_point)
@@ -270,7 +269,7 @@ class MVNJointEntropy(GPCJointEntropy):
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
-        _covar = BlockDiagLazyTensor(lazify(_covar), block_dim=-3)
+        _covar = BlockDiagLazyTensor(_covar, block_dim=-3)
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
@@ -416,7 +415,6 @@ class MVNJointEntropy(GPCJointEntropy):
         return self.r2c.expand_to_full_pool(output)
 
 
-
 class LowMemMVNJointEntropy(GPCJointEntropy):
     # The difference between this class and the one above is that we are first sampling from current
     # batch, and using this to create conditional distirubitons for each of our new datapoints.
@@ -432,25 +430,107 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
     # 
     # 1) The conditional distributions covariance is independent of the particular batch sample
     # 2) The means are not
-    # 
+    # ["N", "L", "C", "B"]
     # Given a function sample and a conditional distribution we wish to compute the entropy
     # The function sample is a (D * C) tensor
     # The distribution is a 1*C normal distribution
     # We sample the current batch distribution w times. we can use the same gather mat
-
-    def __init__(self,  likelihood) -> None:
-        self.batch_dist: MultitaskMultivariateNormalType = None
+    def __init__(self, likelihood, samples: int, num_cat: int, pool_size: int, variance_reduction: bool = False) -> None:
+        self.samples: int = samples
         self.likelihood = likelihood
-        self.log_probs: TensorType = None
-        self.samples: TensorType = None
-   
+        self.variance_reduction = variance_reduction
+        self.num_cat: int = num_cat
+        # We create the batch dist as a MVN with a 0 dim size
+        self.current_batch_dist: MultitaskMultivariateNormalType = MultitaskMultivariateNormal(mean=torch.zeros(0, num_cat), covariance_matrix=torch.eye(0))
+        self.pool_size: int = pool_size
+        self.num_points: int  = 0
+        self.r2c: Rank2Combine = Rank2Combine(self.pool_size)
+        self.used_points = []
+
+    # This enables us to recompute only outputs of size 2 for our next aquisition
+    @typechecked
+    def join_rank_2(self, rank2: Rank2Next) -> MultitaskMultivariateNormalType[("N"),("new_batch_size","num_cat")]:
+        # For each of the datapoints and the candidate batch we want to compute the low rank tensor
+        # The order of the candidate datapoints must be maintained and used carefully
+        # Need to wrap this in toma
+        # The means will be the same for each datapoint
+        if self.num_points > 0:
+            item_means = self.r2c.get_mean().unsqueeze(1)
+            N = item_means.shape[0]
+            candidate_means = (self.current_batch_dist.mean)[None,:,:].expand(N, -1, -1)
+            mean_tensor = cat([candidate_means, item_means], dim=1)
+
+            expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.shape))
+            self.self_covar_tensor = self.r2c.get_self_covar()
+            cross_mat = self.r2c.get_cross_mat()
+            # We need to not compute the covariance between points and themselves
+            covar_tensor = Rank2Combine.chunked_cat_rows(expanded_batch_covar, cross_mat, self.self_covar_tensor)
+        
+        else:
+            item_means = rank2.get_mean().unsqueeze(1)
+            N = item_means.shape[0]
+            candidate_means = (self.current_batch_dist.mean)[None,:,:].expand(N, -1, -1)
+            mean_tensor = cat([candidate_means, item_means], dim=1)
+
+            expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.shape))
+            covar_tensor = self.self_covar_tensor = rank2.get_self_covar()
+        covar_tensor = BlockDiagLazyTensor(lazify(covar_tensor), block_dim=-3)
+        return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
+
+    @typechecked
+    def add_variables(self, rank2: Rank2Next, selected_point: int) -> None:
+        # When we are adding a new point, we update the batch
+        # Get the cross correlation between the previous batches and the selected point
+        if self.num_points == 0:
+            _mean = rank2.get_mean()[selected_point].unsqueeze(0)
+            _covar = lazify(rank2.get_self_covar()[selected_point])
+        else:
+            compressed_selected_point = self.r2c.to_compressed_index(selected_point)
+            cross_mat: TensorType["C", 1, "D"] = self.r2c.get_point_cross_mat(selected_point)
+            self_cov: TensorType["C", 1, 1] = self.r2c.get_self_covar()[compressed_selected_point]
+            new_mean: TensorType[1, "C"] = self.r2c.get_mean()[compressed_selected_point].unsqueeze(0)
+
+            # Next we update the current distribution
+            _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
+            _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
+        _covar = BlockDiagLazyTensor(lazify(_covar), block_dim=-3)
+        self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
+        self.r2c.add(rank2, selected_point)
+        self.used_points.append(selected_point)
+        self.num_points = self.num_points + 1
+        self.create_samples(2000, 10)
+
 
     # We call this function to create the samples for the batch distribution
+    # We use r2c and the current batch dist to create the samples and conditional distributions
     def create_samples(self, sum_samples: int, batch_samples: int) -> None:
-        distribution = self.batch_dist
+        distribution = self.current_batch_dist
         likelihood = self.likelihood
         likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([batch_samples]))).probs
-        self.samples = likelihood_samples
+
+
+        # The covariance is independent of the function valuees
+        # covar = sigma_YY - sigma_{YX} sigma_{XX}^{-1} sigma_{XY}
+        sigma_YY: TensorType["N", "C", 1, 1] = self.r2c.get_self_covar()
+        sigma_YX: TensorType["N", "C", 1, "D"] = self.r2c.get_cross_mat()
+        sigma_XX: TensorType["C", "D", "D"] = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.evaluate()
+        sigma_XX_inv: TensorType["C", "D", "D"] = torch.inverse(sigma_XX)
+
+        N = sigma_YY.shape[0]
+
+        conditional_cov: TensorType["N", "C", 1, 1] = sigma_YY - (sigma_YX @ sigma_XX_inv @ torch.transpose( sigma_YX, -1, -2))
+
+        #  mean = mu_Y + sigma_YX sigma_XX^{-1} (X - mu_x)
+        # We want to expand the batch dist mean and covariance so we can broadcast in number of samples
+        mu_Y: TensorType["N", "S", "C", 1] = (self.r2c.get_mean()[:,None,:,None].expand(-1, batch_samples, -1, -1))
+        mu_X: TensorType["N", "S", "C", "D"] = torch.transpose(self.current_batch_dist.mean[None, None, :, :].expand(N, batch_samples, -1, -1), -1, -2)
+        X: TensorType["N", "S", "C", "D"] = torch.transpose(likelihood_samples[None,:,:,:].expand(N ,-1, -1, -1), -1, -2)
+
+        tmp_vector: TensorType["N", "S", "C", "D", 1] = (X - mu_X).unsqueeze(-1)
+
+        # We can let pytorch auto broadcast the matrix multiplication
+        tmp_matrix: TensorType["N", "S", "C", "D" ,"D"] = (sigma_YX @ sigma_XX_inv).unsqueeze(1).expand(-1, batch_samples, -1, -1, -1)
+        conditional_mean: TensorType["N", "S", "C", 1, 1] = mu_Y.unsqueeze(-1) + (tmp_matrix @ tmp_vector)
 
         l_shape = likelihood_samples.shape
         likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
@@ -459,100 +539,83 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         choices: TensorType["S * D", "E"] = torch.multinomial(likelihood_samples, sum_samples, replacement=True)
         choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
         likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
-        p: TensorType["S", "D", "E"] = torch.gather(likelihood_samples, 2, choices)
-        p: TensorType["S", "D", "E"] = torch.log(p, out=p)
-        p: TensorType["S", "E"] = torch.sum(p, dim=1) # For each of the samples we have a random sample of log probs
+
+
+        likelihood_samples: TensorType["S", "S", "D", "C"] = likelihood_samples[:,None,:,:].expand(-1, batch_samples, -1, -1)
+        choices: TensorType["S", "S", "D", "E"] = choices[None,:,:,:].expand(batch_samples, -1, -1, -1)
+        p: TensorType["S", "S", "D", "E"] = torch.gather(likelihood_samples, 3, choices)
+
+
+        p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
+        p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
+        p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
+
+        conditional_cov: TensorType["N", "S", "C", 1, 1] = conditional_cov[:,None,:,:,:].expand(-1, batch_samples, -1, -1 , -1)
+        conditional_mean: TensorType["N", "S", "C", 1] = conditional_mean.squeeze(-1)
+        self.conditional_mean = conditional_mean
+        self.conditional_cov = BlockDiagLazyTensor(NonLazyTensor(conditional_cov), block_dim=-3)
+        self.conditional_dist = MultitaskMultivariateNormal(mean=self.conditional_mean, covariance_matrix=self.conditional_cov, interleaved=True)
         self.log_probs = p
 
-    # We create the conditional distirbutions for each datapoint and each sample of the batch distribution
-    # Y|X = N( mu_Y + sigma_YX sigma_XX^{-1} (X - mu_x), sigma_YY - sigma_{YX} sigma_{XX}^{-1} sigma_{XY} )
-    # def create_conditional(self) -> None:
-    #    # We should create (pool_size * batch_samples)
-    #    for item in pool:
-    #        for sample in samples:
-    @typechecked
-    def add_variables(self, rank2: Rank2Next) -> None:
-        # When we are adding a new point, we update the batch
-        # And we updated the cross_mat
-        pass
-
-    # We compute the joint entropy of the GPC with the current batch
     @typechecked
     def compute(self) -> TensorType[1]:
-        p = self.log_probs
-        p: TensorType["S", "E"] = torch.exp(p, out=p)
-        p: TensorType["N", "S * E"] = torch.mean(p, 1) 
-        p: TensorType["N", "S * E"] = - torch.log(p, out=p)
-        p: TensorType[1] = torch.mean(p, 1) 
-        return p
+        return MVNJointEntropy._compute_single(self.current_batch_dist, self.likelihood, self.samples, self.samples)
+
 
     @typechecked
-    def compute_single(self) -> TensorType[1]:
-        pass
-
-    @staticmethod
-    @typechecked
-    def _compute(distribution: MultivariateNormalType, likelihood, per_samples: int, total_samples: int, output: TensorType["N"]) -> None:
+    def compute_batch(self, rank2: Rank2Next) -> TensorType["N"]:
         # We can exactly compute a larger sized exact distribution
         # As the task batches are independent we can chunk them
+        # If we haven't added any variables yet, the coditional doesn't exist yet, but we have
+        # nothing to conditon on. We have only 1 "sample", which has a probability of 1
+        if self.num_points == 0:
+            means: TensorType["N", 1, "C"] = rank2.get_mean()[:, None,:, None]
+            covar: TensorType["N", 1, "C", 1, 1] = rank2.get_self_covar().unsqueeze(1)
+            covar = BlockDiagLazyTensor(lazify(covar), block_dim=-3)
+            distribution = MultitaskMultivariateNormal(mean=means, covariance_matrix=covar)
+            log_p = torch.tensor([[0]]) # log(1) = 0
+        else:
+            distribution = self.conditional_dist
+            log_p = self.log_probs
+
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        per_samples = per_samples // D
-        E = total_samples // (per_samples * D) # We could reduce the number of samples here to allow better scaling with bigger datapoints
-        t = string.ascii_lowercase[:D]
-        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
+        per_samples = 100
 
-        @typechecked
-        def exact(distribution: MultivariateNormalType) -> TensorType["N"]:
-            l: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
-
-            l: TensorType["N", "S", "D", "C"] = torch.transpose(l, 0, 1)
-            j: List[TensorType["N", "S", "C"]] = list(torch.unbind(l, dim=-2))
-            # This is where the stupid amount of memory happens
-            g: TensorType["N", "S", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
-            g: TensorType["N", "S", "E"] = torch.flatten(g, start_dim=2)
-            g: TensorType["N", "E"] = torch.mean(g, 1)
-            #
-            g: TensorType["N", "E"] = - g * torch.log(g)
-            g: TensorType["N"] = torch.sum(g, 1)
-            return g
-
+        # We are sampling more over the batch than than the candiadate points
         @typechecked
         def sampled(distribution: MultivariateNormalType) -> TensorType["N"]:
+            # We have L samples from the batch distribution
+            # We have B samples from the sum of the batch distribution
+            # We have P samples from the conditional distribution
+            P = per_samples
+            # We have N points on the distribution
+            # We have E samples from the sum of the conditional
             N = distribution.batch_shape[0]
-            likelihood_samples: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
+            likelihood_samples: TensorType["P", "N", "L", "C"] = (self.likelihood(distribution.sample(sample_shape=torch.Size([P]))).probs).squeeze(-2)
 
-            likelihood_samples: TensorType["N", "S", "D", "C"] = torch.transpose(likelihood_samples, 0, 1)
-            l_shape = likelihood_samples.shape
-            likelihood_samples: TensorType["N * S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
-            # Instead of using einsum we will sample from the possible 
-            # indexes, we wish to keep the same for each datapoints samples
-            choices: TensorType["N * S * D", "E"] = torch.multinomial(likelihood_samples, E, replacement=True)
-            choices: TensorType["N", "S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
-            likelihood_samples: TensorType["N", "S", "S", "D", "C"] = (likelihood_samples.reshape(l_shape))[:,:,None,:,:].expand(-1, -1, per_samples, -1, -1)
-            choices: TensorType["N", "S", "S", "D", "E"] = choices[:,None,:,:,:].expand(-1, per_samples, -1, -1, -1)
-            p: TensorType["N", "S", "S", "D", "E"] = torch.gather(likelihood_samples, 4, choices)
-            del choices
-            del likelihood_samples
+            likelihood_samples: TensorType["N", "P", "L", "C"] = torch.transpose(likelihood_samples, 0, 1)
+            p_y: TensorType["N", "L", "C"] = torch.mean(likelihood_samples, dim=1)
+            batch_p: TensorType["L", "B"] = log_p.exp()
+            p_expanded: TensorType["N", "L", "C", 1] = p_y.unsqueeze(-1)
+            batch_p_expanded: TensorType["L", 1, "B"] = batch_p.unsqueeze(-2)
+            # As we are not sampling from the indexes of the conditional, we need to rescale
+            # to make it an accurate estimator
+            # The individual probabilites are accurate
+            # Without reweighting we would get H(X,Y) = - \sum_X \sum_Y p(x) log p(x,y) 
+            # p(x)p(y|x) = p(x,y)
+            p: TensorType["N", "L", "C", "B"] = p_expanded * batch_p_expanded
+            p: TensorType["N", "C", "B"] = torch.mean(p, dim=1) # p(x,y)
+            batch_p: TensorType["B"] = torch.mean(batch_p, dim = 0)# p(x)
 
-            p: TensorType["N", "S", "S", "D", "E"] = torch.log(p, out=p)
-            p: TensorType["N", "S", "S", "E"] = torch.sum(p, dim=3)
-            p: TensorType["N", "S", "S", "E"] = torch.exp(p, out=p)
-            # The mean needs to be rescaled
-            p: TensorType["N", "S", "S * E"] = p.reshape((N,per_samples,-1 ))
-            p: TensorType["N", "S * E"] = torch.mean(p, 1) 
-            p: TensorType["N", "S * E"] = - torch.log(p, out=p)
+            p: TensorType["N", "B"] = torch.sum(- (p / batch_p) * torch.log(p), dim = 1)
+            # p: TensorType["N", "B"] = p / batch_p
             p: TensorType["N"] = torch.mean(p, 1) 
             return p
-            
-        if (C**D) <= E:            
-            chunked_distribution("Joint Entropy", distribution, exact, output)
-        else:
-            chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
-
-    @typechecked
-    def compute_batch(self, rank_2_combinations: Rank2Next) -> TensorType["N"]:
-        # When we are adding a new point, we update the batch
-        # And we updated the cross_mat
-        pass
+        
+        output = torch.zeros(N)
+        chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
+        print("output")
+        print(output)
+        return self.r2c.expand_to_full_pool(output)
