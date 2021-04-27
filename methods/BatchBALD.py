@@ -68,7 +68,7 @@ def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], mode
             pbar.update(end - start)
         pbar.close()
         # We want to keep things off the GPU
-        dist = MVNJointEntropy.combine_mtmvns(dists)
+        dist = GPCJointEntropy.combine_mtmvns(dists)
         mean_cpu = dist.mean
         cov_cpu = dist.lazy_covariance_matrix
         if torch.cuda.is_available():
@@ -123,7 +123,7 @@ class BatchBALD(UncertainMethod):
                 efficent = self.params.efficent
                 num_cat = 10
                 feature_size = 256
-                use_bb_redux = self.params.smoke_test
+                use_bb_redux = False # self.params.smoke_test
 
                 inputs: TensorType["datapoints","channels","x","y"] = get_pool(dataset)
                 N = inputs.shape[0]
@@ -157,7 +157,7 @@ class BatchBALD(UncertainMethod):
 
                 features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
                 ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
-                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
+                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 10000).cpu()
                 
 
                 print(conditional_entropies_N)
@@ -195,10 +195,11 @@ class BatchBALD(UncertainMethod):
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
                     scores_N = joint_entropy_result.detach().cpu()
-                    print(scores_N)
+                    # scores_N[candidate_indices] = -float("inf")
 
                     scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
+                    print(scores_N)
 
                     candidate_score, candidate_index = scores_N.max(dim=0)
                     

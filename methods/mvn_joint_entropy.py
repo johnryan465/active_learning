@@ -98,7 +98,7 @@ class Rank2Combine:
         return output
 
     def to_compressed_index(self, idx: int) -> int:
-        return torch.cumsum(self.pool_mask, dim=0)[idx] - 1
+        return int(torch.cumsum(self.pool_mask, dim=0)[idx].item()) - 1
 
     @staticmethod
     def chunked_cat_rows(A, B, C):
@@ -164,14 +164,14 @@ class GPCJointEntropy(ABC):
         # We will create a batchshape if it doesn't already exist
         if len(mvns[0].batch_shape) == 0:
             mean = cat([ expand(mvn.mean) for mvn in mvns], dim=0)
-            covar_blocks_lazy = cat([expand(mvn.lazy_covariance_matrix) for mvn in mvns], dim=0, output_device=mean.device)
-            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
+            covar_blocks_lazy = cat([expand(mvn.lazy_covariance_matrix.base_lazy_tensor) for mvn in mvns], dim=0, output_device=mean.device)
+            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=-3)
         
         else:
             mean = cat([ mvn.mean for mvn in mvns], dim=0)
-            covar_blocks_lazy = cat([mvn.lazy_covariance_matrix for mvn in mvns], dim=0, output_device=mean.device)
-            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=0)
-        return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_blocks_lazy, interleaved=True)
+            covar_blocks_lazy = cat([mvn.lazy_covariance_matrix.base_lazy_tensor for mvn in mvns], dim=0, output_device=mean.device)
+            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=-3)
+        return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_lazy, interleaved=True)
 
 
 @typechecked
@@ -470,9 +470,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
     #    # We should create (pool_size * batch_samples)
     #    for item in pool:
     #        for sample in samples:
-                
-
-
     @typechecked
     def add_variables(self, rank2: Rank2Next) -> None:
         # When we are adding a new point, we update the batch
