@@ -491,8 +491,13 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         # When we are adding a new point, we update the batch
         # Get the cross correlation between the previous batches and the selected point
         if self.num_points == 0:
-            _mean = rank2.get_mean()[selected_point].unsqueeze(0)
-            _covar = lazify(rank2.get_self_covar()[selected_point])
+            new_mean = rank2.get_mean()[selected_point].unsqueeze(0)
+            self_cov = lazify(rank2.get_self_covar()[selected_point])
+            if torch.cuda.is_available():
+                new_mean = new_mean.cuda()
+                self_cov = self_cov.cuda()
+            _mean = new_mean
+            _covar = self_cov
         else:
             compressed_selected_point = self.r2c.to_compressed_index(selected_point)
             cross_mat: TensorType["C", 1, "D"] = self.r2c.get_point_cross_mat(selected_point)
