@@ -476,7 +476,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             if torch.cuda.is_available():
                 new_mean = new_mean.cuda()
                 cross_mat = cross_mat.cuda()
-                self_cov = cross_mat.cuda()
+                self_cov = self_cov.cuda()
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov).evaluate()
@@ -543,26 +543,19 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
         likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
         
-        if True:
-            choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
-            likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
+        choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
+        likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
 
 
-            likelihood_samples: TensorType["S", "S", "D", "C"] = likelihood_samples[:,None,:,:].expand(-1, batch_samples, -1, -1)
-            choices: TensorType["S", "S", "D", "E"] = choices[None,:,:,:].expand(batch_samples, -1, -1, -1)
-            p: TensorType["S", "S", "D", "E"] = torch.gather(likelihood_samples, 3, choices)
+        likelihood_samples: TensorType["S", "S", "D", "C"] = likelihood_samples[:,None,:,:].expand(-1, batch_samples, -1, -1)
+        choices: TensorType["S", "S", "D", "E"] = choices[None,:,:,:].expand(batch_samples, -1, -1, -1)
+        p: TensorType["S", "S", "D", "E"] = torch.gather(likelihood_samples, 3, choices)
 
 
-            p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
-            p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
-            p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
-        else:
-            p: TensorType["S", "D", "E"] = torch.gather(likelihood_samples, 2, choices)
+        p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
+        p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
+        p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
 
-
-            p: TensorType["S", "D", "E"] = torch.log(p, out=p)
-            p: TensorType["S", "E"] = torch.sum(p, dim=1) # For each of the samples we have a random sample of log probs
-            # p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
 
         conditional_cov: TensorType["N", "S", "C", 1, 1] = conditional_cov[:,None,:,:,:].expand(-1, batch_samples, -1, -1 , -1)
         conditional_mean: TensorType["N", "S", "C", 1] = conditional_mean.squeeze(-1)
