@@ -152,7 +152,7 @@ class BatchBALD(UncertainMethod):
 
                 joint_entropy_class: GPCJointEntropy
                 if True:
-                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 50, 50, 50, 10, N)
+                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 10, 1000, 10, 10, N)
                     # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
                 if self.params.smoke_test:
                     joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
@@ -202,8 +202,8 @@ class BatchBALD(UncertainMethod):
                     rank2dist: Rank2Next = Rank2Next(dists)
                     if i > 0:
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
-                        if self.params.smoke_test:
-                           joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
+                        # if self.params.smoke_test:
+                        #   joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
                     if self.params.smoke_test:
                         expanded_pool_features: TensorType["datapoints", 1, "num_features"] = pool[:, None, :]
@@ -213,17 +213,17 @@ class BatchBALD(UncertainMethod):
 
                         # Here we check that the distribuiton we get from combining 
                         # check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
-                        joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
-                        simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 2000)
-                        print("Simple")
-                        print(simple_joint_entropy_result)
+                        # joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
+                        # simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 2000)
+                        # print("Simple")
+                        # print(simple_joint_entropy_result)
                         print("Low Memory")
                         print(joint_entropy_result)
-                        print("Rank 2 combine only")
-                        print(joint_entropy_result_)
-                        difference = torch.flatten(joint_entropy_result_ - joint_entropy_result)
-                        print(torch.std(difference))
-                        print(torch.mean(difference))
+                        # print("Rank 2 combine only")
+                        # print(joint_entropy_result_)
+                        # difference = torch.flatten(joint_entropy_result_ - joint_entropy_result)
+                        # print(torch.std(difference))
+                        # print(torch.mean(difference))
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
@@ -231,7 +231,14 @@ class BatchBALD(UncertainMethod):
                     # scores_N[candidate_indices] = -float("inf")
 
                     # scores_N -= conditional_entropies_N + shared_conditinal_entropies
-                    scores_N[candidate_indices] = -float("inf")
+                    scores_N[candidate_indices] = -scores_N[candidate_indices]
+
+                    order = torch.argsort(scores_N)
+                    print("Scores")
+                    for idx in order:
+                        _, y = dataset.get_pool_tensor()[idx]
+                        print(idx, scores_N[idx], y)
+
                     # print(scores_N)
 
                     candidate_score, candidate_index = scores_N.max(dim=0)

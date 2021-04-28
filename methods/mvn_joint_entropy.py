@@ -480,14 +480,12 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov).evaluate()
-        print(_covar.device)
         if torch.cuda.is_available():
             _mean = _mean.cuda()
             _covar = BlockInterleavedLazyTensor(lazify(_covar).cuda(), block_dim=-3)
         else:
             _covar = BlockInterleavedLazyTensor(lazify(_covar), block_dim=-3)
-        print(_mean)
-        print(_covar.evaluate())
+
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
@@ -500,9 +498,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
     def create_samples(self, sum_samples: int, batch_samples: int) -> None:
         distribution = self.current_batch_dist
         likelihood = self.likelihood
-        print(distribution.mean)
-
-        print(distribution.lazy_covariance_matrix.evaluate())
 
         likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([batch_samples]))).probs
 
@@ -519,7 +514,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         conditional_cov: TensorType["N", "C", 1, 1] = sigma_YY - (sigma_YX @ sigma_XX_inv @ torch.transpose( sigma_YX, -1, -2))
 
         #  mean = mu_Y + sigma_YX sigma_XX^{-1} (X - mu_x)
-        # We want to expand the batch dist mean and covariance so we can broadcast in number of samples
+        # We want to expand the batch dist mean and covariance so we can broadcast in numbesumr of samples
         mu_Y: TensorType["N", "S", "C", 1] = (self.r2c.get_mean()[:,None,:,None].expand(-1, batch_samples, -1, -1))
         mu_X: TensorType["N", "S", "C", "D"] = torch.transpose(self.current_batch_dist.mean[None, None, :, :].expand(N, batch_samples, -1, -1), -1, -2)
         X: TensorType["N", "S", "C", "D"] = torch.transpose(likelihood_samples[None,:,:,:].expand(N ,-1, -1, -1), -1, -2)
@@ -603,6 +598,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
         per_samples = self.per_sample
+        E = 10
 
         # We are sampling more over the batch than than the candiadate points
         @typechecked
@@ -621,24 +617,33 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
 
             # print(sample)
             likelihood_samples: TensorType["P", "N", "L", "C"] = (self.likelihood(sample).probs).squeeze(-2)
-
             likelihood_samples: TensorType["N", "P", "L", "C"] = torch.transpose(likelihood_samples, 0, 1)
-            p_y: TensorType["N", "L", "C"] = torch.mean(likelihood_samples, dim=1)
-            batch_p: TensorType["L", "B"] = log_p.exp()
-            p_expanded: TensorType["N", "L", "C", 1] = p_y.unsqueeze(-1)
-            batch_p_expanded: TensorType["L", 1, "B"] = batch_p.unsqueeze(-2)
-            # As we are not sampling from the indexes of the conditional, we need to rescale
-            # to make it an accurate estimator
-            # The individual probabilites are accurate
-            # Without reweighting we would get H(X,Y) = - \sum_X \sum_Y p(x) log p(x,y) 
-            # p(x)p(y|x) = p(x,y)
-            p: TensorType["N", "L", "C", "B"] = p_expanded * batch_p_expanded
-            p: TensorType["N", "C", "B"] = torch.mean(p, dim=1) # p(x,y)
-            batch_p: TensorType["B"] = torch.mean(batch_p, dim = 0)# p(x)
+            p_y: TensorType["N", "L", "P", "C"] = torch.transpose(likelihood_samples, 1, 2)
+            # p_y: TensorType["N", "L", "C"] = torch.mean(likelihood_samples, dim=1)
+            p_shape = p_y.shape
+            p_y: TensorType["N * L * P", "C"] = torch.reshape(p_y, (-1, p_shape[-1]))
 
-            p: TensorType["N", "B"] = torch.sum(- (p / batch_p) * torch.log(p), dim = 1)
-            # p: TensorType["N", "B"] = p / batch_p
-            p: TensorType["N"] = torch.mean(p, 1) 
+            choices: TensorType["N * L * P", "E"] = torch.multinomial(p_y, E, replacement=True)
+            choices: TensorType["N", "L", "P", "E"] = choices.reshape( list(p_shape[:-1]) + [-1])
+            p_y: TensorType["N", "L", "P", "C"]= p_y.reshape(p_shape)
+
+            p_samples: TensorType["N", "L", "P", "P", "C"] = p_y[:,:,:,None,:].expand(-1, -1, -1, P, -1)
+            choices: TensorType["N", "L", "P", "P", "E"] = choices[:,:,None,:,:].expand(-1, -1, P, -1, -1)
+            p_y: TensorType["N", "L", "P", "P", "E"] = torch.gather(p_samples, 4, choices)
+            p_y: TensorType["N", "L", "P", "E"] = torch.mean(p_y, dim=2)
+            p_y: TensorType["N", "L", "P * E"] = torch.flatten(p_y, start_dim=2)
+
+
+            batch_p: TensorType["L", "B"] = log_p.exp()
+            p_expanded: TensorType["N", "L", "P*E", 1] = p_y.unsqueeze(-1)
+            batch_p_expanded: TensorType["L", 1, "B"] = batch_p.unsqueeze(-2)
+            
+            p: TensorType["N", "L", "P*E", "B"] = p_expanded * batch_p_expanded
+            p: TensorType["N", "P*E", "B"] = torch.mean(p, dim=1) # p(x,y)
+            p: TensorType["N", "P*E * B"] = torch.flatten(p, start_dim=1)
+
+            p: TensorType["N"] = torch.mean(-torch.log(p), dim = 1)
+
             return p
         
         output = torch.zeros(N)
