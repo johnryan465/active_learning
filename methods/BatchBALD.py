@@ -232,12 +232,7 @@ class BatchBALD(UncertainMethod):
 
                     # scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -scores_N[candidate_indices]
-
-                    order = torch.argsort(scores_N)
-                    print("Scores")
-                    for idx in order:
-                        _, y = dataset.get_pool_tensor()[idx]
-                        print(idx, scores_N[idx], y)
+                    
 
                     # print(scores_N)
 
@@ -245,6 +240,12 @@ class BatchBALD(UncertainMethod):
                     
                     candidate_indices.append(candidate_index.item())
                     candidate_scores.append(candidate_score.item())
+
+                    pool_tensor = dataset.get_pool_tensor()
+                    print("Scores")
+                    for idx in candidate_indices:
+                        _, y = pool_tensor[idx]
+                        print(idx, scores_N[idx], y)
 
                     
 
