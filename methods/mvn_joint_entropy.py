@@ -497,6 +497,9 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
     def create_samples(self, sum_samples: int, batch_samples: int) -> None:
         distribution = self.current_batch_dist
         likelihood = self.likelihood
+        print(distribution.mean)
+
+        print(distribution.lazy_covariance_matrix.evaluate())
 
         likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([batch_samples]))).probs
 
