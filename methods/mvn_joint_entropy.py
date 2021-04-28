@@ -265,6 +265,10 @@ class MVNJointEntropy(GPCJointEntropy):
             cross_mat: TensorType["C", 1, "D"] = self.r2c.get_point_cross_mat(selected_point)
             self_cov: TensorType["C", 1, 1] = self.r2c.get_self_covar()[compressed_selected_point]
             new_mean: TensorType[1, "C"] = self.r2c.get_mean()[compressed_selected_point].unsqueeze(0)
+            if torch.cuda.is_available():
+                new_mean = new_mean.cuda()
+                cross_mat = cross_mat.cuda()
+                self_cov = cross_mat.cuda()
 
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
