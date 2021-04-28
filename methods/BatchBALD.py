@@ -85,6 +85,20 @@ def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], mode
         # cov_cpu = dist.lazy_covariance_matrix.cpu()
         return MultitaskMultivariateNormal(mean=mean_cpu, covariance_matrix=cov_cpu)
 
+def check_equal_dist(dist_1: MultitaskMultivariateNormal, dist_2: MultitaskMultivariateNormal) -> None:
+    dist_1_mean = dist_1.mean
+    dist_1_cov = dist_1.lazy_covariance_matrix.base_lazy_tensor.evaluate()
+
+    dist_2_mean = dist_2.mean
+    dist_2_cov = dist_2.lazy_covariance_matrix.base_lazy_tensor.evaluate()
+
+    assert(dist_1_mean.shape == dist_2_mean.shape)
+    assert(torch.allclose(dist_1_mean, dist_2_mean))
+
+    assert(dist_1_cov.shape == dist_2_cov.shape)
+    assert(torch.allclose(dist_1_cov, dist_2_cov))
+
+
 
 @typechecked
 def compute_conditional_entropy_mvn(distribution: MultitaskMultivariateNormalType[("N"), (1, "num_cats")], likelihood, num_samples : int) -> TensorType["N"]:
@@ -138,9 +152,10 @@ class BatchBALD(UncertainMethod):
 
                 joint_entropy_class: GPCJointEntropy
                 if True:
-                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, samples, 10, N)
+                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 2000, 100, 200, 10, N)
+                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
                 if self.params.smoke_test:
-                    joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, samples, 10, N)
+                    joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
                 
                 # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
                 # which is computationaly prohibative (has complexity related to the pool size)
@@ -191,7 +206,21 @@ class BatchBALD(UncertainMethod):
                            joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
                     if self.params.smoke_test:
+                        expanded_pool_features: TensorType["datapoints", 1, "num_features"] = pool[:, None, :]
+                        new_candidate_features: TensorType["datapoints", 1, "num_features"] = ((pool[candidate_indices])[None, :, :]).expand(N, -1, -1)
+                        joint_features: TensorType["datapoints", "new_batch_size", "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=1)
+                        new_dist = get_gp_output(joint_features, model_wrapper)
+
+                        # Here we check that the distribuiton we get from combining 
+                        check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
                         joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
+                        simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 2000)
+                        print("Simple")
+                        print(simple_joint_entropy_result)
+                        print("Low Memory")
+                        print(joint_entropy_result)
+                        print("Rank 2 combine only")
+                        print(joint_entropy_result_)
                         difference = torch.flatten(joint_entropy_result_ - joint_entropy_result)
                         print(torch.std(difference))
                         print(torch.mean(difference))
@@ -201,7 +230,7 @@ class BatchBALD(UncertainMethod):
                     scores_N = joint_entropy_result.detach().cpu()
                     # scores_N[candidate_indices] = -float("inf")
 
-                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                    # scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
                     # print(scores_N)
 

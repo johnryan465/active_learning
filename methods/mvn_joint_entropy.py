@@ -4,7 +4,7 @@ from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultiv
 from gpytorch.lazy.non_lazy_tensor import NonLazyTensor, lazify
 from torch import distributions
 
-from gpytorch.lazy import CatLazyTensor, BlockDiagLazyTensor, cat
+from gpytorch.lazy import CatLazyTensor, BlockInterleavedLazyTensor, cat
 from torch._C import set_flush_denormal
 from torch.distributions.utils import _standard_normal
 from typing import Callable, List
@@ -65,7 +65,7 @@ class Rank2Combine:
     def add(self, next_rank2: Rank2Next, index: int) -> None:
         self.candidates.append(next_rank2)
         self.candidate_indexes.append(index)
-        self.pool_mask[index] = 0
+        # self.pool_mask[index] = 0
 
     @typechecked
     def get_mean(self) -> TensorType["N", "C"]:
@@ -164,12 +164,12 @@ class GPCJointEntropy(ABC):
         if len(mvns[0].batch_shape) == 0:
             mean = cat([ expand(mvn.mean) for mvn in mvns], dim=0)
             covar_blocks_lazy = cat([expand(mvn.lazy_covariance_matrix.base_lazy_tensor) for mvn in mvns], dim=0, output_device=mean.device)
-            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=-3)
+            covar_lazy = BlockInterleavedLazyTensor(covar_blocks_lazy, block_dim=-3)
         
         else:
             mean = cat([ mvn.mean for mvn in mvns], dim=0)
             covar_blocks_lazy = cat([mvn.lazy_covariance_matrix.base_lazy_tensor for mvn in mvns], dim=0, output_device=mean.device)
-            covar_lazy = BlockDiagLazyTensor(covar_blocks_lazy, block_dim=-3)
+            covar_lazy = BlockInterleavedLazyTensor(covar_blocks_lazy, block_dim=-3)
         return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_lazy, interleaved=True)
 
 
@@ -248,9 +248,9 @@ class MVNJointEntropy(GPCJointEntropy):
             candidate_means = (self.current_batch_dist.mean)[None,:,:].expand(N, -1, -1)
             mean_tensor = cat([candidate_means, item_means], dim=1)
 
-            expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.shape))
+            # expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.shape))
             covar_tensor = self.self_covar_tensor = rank2.get_self_covar()
-        covar_tensor = BlockDiagLazyTensor(lazify(covar_tensor), block_dim=-3)
+        covar_tensor = BlockInterleavedLazyTensor(lazify(covar_tensor), block_dim=-3)
         return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
 
     @typechecked
@@ -269,7 +269,7 @@ class MVNJointEntropy(GPCJointEntropy):
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
-        _covar = BlockDiagLazyTensor(_covar, block_dim=-3)
+        _covar = BlockInterleavedLazyTensor(_covar, block_dim=-3)
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
@@ -278,53 +278,56 @@ class MVNJointEntropy(GPCJointEntropy):
 
     @typechecked
     def compute(self) -> TensorType[1]:
-        return self._compute_single(self.current_batch_dist, self.likelihood, self.samples, self.samples)
+        return self._compute(self.current_batch_dist, self.likelihood, self.samples, self.samples)
 
     @staticmethod
-    def _compute_single(distribution: MultitaskMultivariateNormalType, likelihood, per_samples: int, total_samples: int) -> TensorType[1]:
+    def _compute(distribution: MultitaskMultivariateNormalType, likelihood, per_samples: int, total_samples: int) -> TensorType["N"]:
         # We can exactly compute a larger sized exact distribution
         # As the task batches are independent we can chunk them
         D = distribution.event_shape[0]
         C = distribution.event_shape[1]
+        N = distribution.batch_shape[0]
         per_samples = per_samples
-        E = total_samples // (per_samples * D) # We could reduce the number of samples here to allow better scaling with bigger datapoints
+        E = total_samples # total_samples // (per_samples * D) # We could reduce the number of samples here to allow better scaling with bigger datapoints
         t = string.ascii_lowercase[:D]
-        s =  ','.join(['z' + c for c in list(t)]) + '->' + 'z' + t
+        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
         
         @typechecked
-        def exact(distribution: MultivariateNormalType) -> TensorType["1"]:
-            l: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
-            j: List[TensorType["S", "C"]] = list(torch.unbind(l, dim=-2))
-            g: TensorType["S", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
-            g: TensorType["S", "E"] = torch.flatten(g, start_dim=1)
-            g: TensorType["E"] = torch.mean(g, 0)
-            g: TensorType["E"] = - g * torch.log(g)
-            g: TensorType["1"] = torch.sum(g, 0)
+        def exact(distribution: MultivariateNormalType) -> TensorType["N"]:
+            l: TensorType["S", "N", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
+            l: TensorType["N", "S", "D", "C"] = torch.transpose(l, 0, 1)
+            j: List[TensorType["N", "S", "C"]] = list(torch.unbind(l, dim=-2))
+            g: TensorType["N", "S", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
+            g: TensorType["N", "S", "E"] = torch.flatten(g, start_dim=2)
+            g: TensorType["N", "E"] = torch.mean(g, 1)
+            g: TensorType["N", "E"] = - g * torch.log(g)
+            g: TensorType["N"] = torch.sum(g, 1)
             return g
 
         @typechecked
-        def sampled(distribution: MultivariateNormalType) -> TensorType["1"]:
-            likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs
+        def sampled(distribution: MultivariateNormalType) -> TensorType["N"]:
+            likelihood_samples: TensorType["N", "S", "D", "C"] = torch.transpose(likelihood(distribution.sample(sample_shape=torch.Size([per_samples]))).probs, 0, 1)
             l_shape = likelihood_samples.shape
-            likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
+            N = l_shape[0]
+            likelihood_samples: TensorType["N", "S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
             # Instead of using einsum we will sample from the possible 
             # indexes, we wish to keep the same for each datapoints samples
-            choices: TensorType["S * D", "E"] = torch.multinomial(likelihood_samples, E, replacement=True)
-            choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
-            likelihood_samples: TensorType["S", "S", "D", "C"] = (likelihood_samples.reshape(l_shape))[:,None,:,:].expand( -1, per_samples, -1, -1)
-            choices: TensorType["S", "S", "D", "E"] = choices[None,:,:,:].expand(per_samples, -1, -1, -1)
-            p: TensorType["S", "S", "D", "E"] = torch.gather(likelihood_samples, 3, choices)
+            choices: TensorType["N", "S * D", "E"] = torch.multinomial(likelihood_samples, E, replacement=True)
+            choices: TensorType["N", "S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
+            likelihood_samples: TensorType["N", "S", "S", "D", "C"] = (likelihood_samples.reshape(l_shape))[:,:,None,:,:].expand(-1, -1, per_samples, -1, -1)
+            choices: TensorType["N", "S", "S", "D", "E"] = choices[:,None,:,:,:].expand(-1, per_samples, -1, -1, -1)
+            p: TensorType["N", "S", "S", "D", "E"] = torch.gather(likelihood_samples, 4, choices)
 
-            p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
-            p: TensorType["S", "S", "E"] = torch.sum(p, dim=3)
-            p: TensorType["S", "S", "E"] = torch.exp(p, out=p)
-            p: TensorType["S", "S * E"] = p.reshape((per_samples,-1 ))
-            p: TensorType["S * E"] = torch.mean(p, 1) 
-            p: TensorType["S * E"] = - torch.log(p, out=p)
-            p: TensorType[1] = torch.mean(p, 0) 
+            p: TensorType["N", "S", "S", "D", "E"] = torch.log(p, out=p)
+            p: TensorType["N", "S", "S", "E"] = torch.sum(p, dim=3)
+            p: TensorType["N", "S", "S", "E"] = torch.exp(p, out=p)
+            p: TensorType["N", "S", "S * E"] = p.reshape((N,per_samples,-1 ))
+            p: TensorType["N", "S * E"] = torch.mean(p, 2) 
+            p: TensorType["N", "S * E"] = - torch.log(p, out=p)
+            p: TensorType["N"] = torch.mean(p, 1) 
             return p
         
-        output = torch.zeros(1)
+        output = torch.zeros(N)
         if (C**D) <= E:            
             chunked_distribution("Joint Entropy", distribution, exact, output)
         else:
@@ -340,7 +343,7 @@ class MVNJointEntropy(GPCJointEntropy):
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
         per_samples = self.samples
-        E = 100 # self.samples # We could reduce the number of samples here to allow better scaling with bigger datapoints
+        E = self.samples # We could reduce the number of samples here to allow better scaling with bigger datapoints
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
 
@@ -435,8 +438,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
     # The function sample is a (D * C) tensor
     # The distribution is a 1*C normal distribution
     # We sample the current batch distribution w times. we can use the same gather mat
-    def __init__(self, likelihood, samples: int, num_cat: int, pool_size: int, variance_reduction: bool = False) -> None:
-        self.samples: int = samples
+    def __init__(self, likelihood, sum_samples: int, batch_samples: int, per_samples: int, num_cat: int, pool_size: int, variance_reduction: bool = False) -> None:
         self.likelihood = likelihood
         self.variance_reduction = variance_reduction
         self.num_cat: int = num_cat
@@ -446,6 +448,9 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         self.num_points: int  = 0
         self.r2c: Rank2Combine = Rank2Combine(self.pool_size)
         self.used_points = []
+        self.per_sample: int = per_samples
+        self.batch_samples: int = batch_samples
+        self.sum_samples: int = sum_samples
 
     # This enables us to recompute only outputs of size 2 for our next aquisition
     @typechecked
@@ -474,7 +479,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
 
             expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.shape))
             covar_tensor = self.self_covar_tensor = rank2.get_self_covar()
-        covar_tensor = BlockDiagLazyTensor(lazify(covar_tensor), block_dim=-3)
+        covar_tensor = BlockInterleavedLazyTensor(lazify(covar_tensor), block_dim=-3)
         return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
 
     @typechecked
@@ -493,12 +498,12 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
-        _covar = BlockDiagLazyTensor(lazify(_covar), block_dim=-3)
+        _covar = BlockInterleavedLazyTensor(lazify(_covar), block_dim=-3)
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
         self.num_points = self.num_points + 1
-        self.create_samples(100, 500)
+        self.create_samples(self.sum_samples, self.batch_samples)
 
 
     # We call this function to create the samples for the batch distribution
@@ -536,30 +541,43 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
         # Instead of using einsum we will sample from the possible 
         # indexes, we wish to keep the same for each datapoints samples
+
+        
         choices: TensorType["S * D", "E"] = torch.multinomial(likelihood_samples, sum_samples, replacement=True)
         choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
         likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
+        
+        if True:
+            choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
+            likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
 
 
-        likelihood_samples: TensorType["S", "S", "D", "C"] = likelihood_samples[:,None,:,:].expand(-1, batch_samples, -1, -1)
-        choices: TensorType["S", "S", "D", "E"] = choices[None,:,:,:].expand(batch_samples, -1, -1, -1)
-        p: TensorType["S", "S", "D", "E"] = torch.gather(likelihood_samples, 3, choices)
+            likelihood_samples: TensorType["S", "S", "D", "C"] = likelihood_samples[:,None,:,:].expand(-1, batch_samples, -1, -1)
+            choices: TensorType["S", "S", "D", "E"] = choices[None,:,:,:].expand(batch_samples, -1, -1, -1)
+            p: TensorType["S", "S", "D", "E"] = torch.gather(likelihood_samples, 3, choices)
 
 
-        p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
-        p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
-        p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
+            p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
+            p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
+            p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
+        else:
+            p: TensorType["S", "D", "E"] = torch.gather(likelihood_samples, 2, choices)
+
+
+            p: TensorType["S", "D", "E"] = torch.log(p, out=p)
+            p: TensorType["S", "E"] = torch.sum(p, dim=1) # For each of the samples we have a random sample of log probs
+            # p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
 
         conditional_cov: TensorType["N", "S", "C", 1, 1] = conditional_cov[:,None,:,:,:].expand(-1, batch_samples, -1, -1 , -1)
         conditional_mean: TensorType["N", "S", "C", 1] = conditional_mean.squeeze(-1)
         self.conditional_mean = conditional_mean
-        self.conditional_cov = BlockDiagLazyTensor(NonLazyTensor(conditional_cov), block_dim=-3)
+        self.conditional_cov = BlockInterleavedLazyTensor(NonLazyTensor(conditional_cov), block_dim=-3)
         self.conditional_dist = MultitaskMultivariateNormal(mean=self.conditional_mean, covariance_matrix=self.conditional_cov, interleaved=True)
         self.log_probs = p
 
     @typechecked
     def compute(self) -> TensorType[1]:
-        return MVNJointEntropy._compute_single(self.current_batch_dist, self.likelihood, self.samples, self.samples)
+        return MVNJointEntropy._compute(self.current_batch_dist, self.likelihood, self.per_sample, self.per_sample)
 
 
     @typechecked
@@ -571,7 +589,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         if self.num_points == 0:
             means: TensorType["N", 1, "C"] = rank2.get_mean()[:, None,:, None]
             covar: TensorType["N", 1, "C", 1, 1] = rank2.get_self_covar().unsqueeze(1)
-            covar = BlockDiagLazyTensor(lazify(covar), block_dim=-3)
+            covar = BlockInterleavedLazyTensor(lazify(covar), block_dim=-3)
             distribution = MultitaskMultivariateNormal(mean=means, covariance_matrix=covar)
             log_p = torch.tensor([[0]]) # log(1) = 0
         else:
@@ -583,7 +601,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        per_samples = 50
+        per_samples = self.per_sample
 
         # We are sampling more over the batch than than the candiadate points
         @typechecked
@@ -618,8 +636,8 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         
         output = torch.zeros(N)
         chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
-        print("output")
-        print(output)
+        # print("output")
+        # print(output)
         o = self.r2c.expand_to_full_pool(output)
-        print(o)
+        # print(o)
         return o

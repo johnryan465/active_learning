@@ -115,7 +115,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=1000,
+            samples=500,
             use_cuda=use_cuda,
             var_reduction=args.var_reduction,
             smoke_test=args.smoke_test
@@ -152,7 +152,7 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
         )
 
         nn_params = NNParams(
-            spectral_normalization=True,
+            spectral_normalization=args.spectral_norm,
             dropout_rate=args.dropout,
             coeff=args.coeff,
             n_power_iterations=1,
