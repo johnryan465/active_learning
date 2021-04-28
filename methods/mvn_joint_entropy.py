@@ -543,7 +543,8 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
 
         # We can let pytorch auto broadcast the matrix multiplication
         tmp_matrix: TensorType["N", "S", "C", "D" ,"D"] = (sigma_YX @ sigma_XX_inv).unsqueeze(1).expand(-1, batch_samples, -1, -1, -1)
-        conditional_mean: TensorType["N", "S", "C", 1, 1] = mu_Y.unsqueeze(-1) + (tmp_matrix @ tmp_vector)
+        conditional_mean: TensorType["N", "S", "C", 1, 1] = (tmp_matrix @ tmp_vector)
+        conditional_mean =   mu_Y.unsqueeze(-1) + conditional_mean
 
         l_shape = likelihood_samples.shape
         likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
