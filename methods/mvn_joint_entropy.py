@@ -499,6 +499,10 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
         _covar = BlockInterleavedLazyTensor(lazify(_covar), block_dim=-3)
+        if torch.cuda.is_available():
+            _mean = _mean.cuda()
+            _covar = _covar.cuda()
+        
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
@@ -511,6 +515,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
     def create_samples(self, sum_samples: int, batch_samples: int) -> None:
         distribution = self.current_batch_dist
         likelihood = self.likelihood
+
         likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([batch_samples]))).probs
 
 
