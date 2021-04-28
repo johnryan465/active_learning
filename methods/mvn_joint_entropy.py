@@ -480,9 +480,10 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
             _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
+        print(_covar.device)
         if torch.cuda.is_available():
             _mean = _mean.cuda()
-            _covar = BlockInterleavedLazyTensor(lazify(_covar).cuda(), block_dim=-3).cuda()
+            _covar = BlockInterleavedLazyTensor(lazify(_covar).cuda(), block_dim=-3)
         else:
             _covar = BlockInterleavedLazyTensor(lazify(_covar), block_dim=-3)
         print(_mean)
