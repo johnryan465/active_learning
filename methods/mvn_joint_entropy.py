@@ -615,6 +615,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # We have E samples from the sum of the conditional
             N = distribution.batch_shape[0]
             sample = distribution.sample(sample_shape=torch.Size([P]))
+            assert not torch.isnan(sample).any()
             assert not torch.isnan(distribution.mean).any()
             assert not torch.isnan(distribution.lazy_covariance_matrix.evaluate()).any()
 
