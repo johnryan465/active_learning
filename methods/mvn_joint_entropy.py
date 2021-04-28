@@ -536,6 +536,9 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         mu_X: TensorType["N", "S", "C", "D"] = torch.transpose(self.current_batch_dist.mean[None, None, :, :].expand(N, batch_samples, -1, -1), -1, -2)
         X: TensorType["N", "S", "C", "D"] = torch.transpose(likelihood_samples[None,:,:,:].expand(N ,-1, -1, -1), -1, -2)
 
+        if torch.cuda.is_available():
+            X = X.cuda()
+
         tmp_vector: TensorType["N", "S", "C", "D", 1] = (X - mu_X).unsqueeze(-1)
 
         # We can let pytorch auto broadcast the matrix multiplication
