@@ -538,6 +538,10 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
 
         if torch.cuda.is_available():
             X = X.cuda()
+            mu_Y = mu_Y.cuda()
+            mu_X = mu_X.cuda()
+            sigma_XX_inv = sigma_XX_inv.cuda()
+            sigma_YX = sigma_YX.cuda()
 
         tmp_vector: TensorType["N", "S", "C", "D", 1] = (X - mu_X).unsqueeze(-1)
 
