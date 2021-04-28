@@ -212,7 +212,7 @@ class BatchBALD(UncertainMethod):
                         new_dist = get_gp_output(joint_features, model_wrapper)
 
                         # Here we check that the distribuiton we get from combining 
-                        check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
+                        # check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
                         joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
                         simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 2000)
                         print("Simple")

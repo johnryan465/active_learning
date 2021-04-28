@@ -65,7 +65,7 @@ class Rank2Combine:
     def add(self, next_rank2: Rank2Next, index: int) -> None:
         self.candidates.append(next_rank2)
         self.candidate_indexes.append(index)
-        # self.pool_mask[index] = 0
+        self.pool_mask[index] = 0
 
     @typechecked
     def get_mean(self) -> TensorType["N", "C"]:
