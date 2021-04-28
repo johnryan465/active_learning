@@ -152,7 +152,7 @@ class BatchBALD(UncertainMethod):
 
                 joint_entropy_class: GPCJointEntropy
                 if True:
-                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 2000, 100, 200, 10, N)
+                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 100, 500, 200, 10, N)
                     # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
                 if self.params.smoke_test:
                     joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
