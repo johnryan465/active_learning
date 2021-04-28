@@ -614,7 +614,9 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # We have N points on the distribution
             # We have E samples from the sum of the conditional
             N = distribution.batch_shape[0]
-            likelihood_samples: TensorType["P", "N", "L", "C"] = (self.likelihood(distribution.sample(sample_shape=torch.Size([P]))).probs).squeeze(-2)
+            sample = distribution.sample(sample_shape=torch.Size([P]))
+            print(sample)
+            likelihood_samples: TensorType["P", "N", "L", "C"] = (self.likelihood(sample).probs).squeeze(-2)
 
             likelihood_samples: TensorType["N", "P", "L", "C"] = torch.transpose(likelihood_samples, 0, 1)
             p_y: TensorType["N", "L", "C"] = torch.mean(likelihood_samples, dim=1)
