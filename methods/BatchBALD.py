@@ -154,7 +154,7 @@ class BatchBALD(UncertainMethod):
 
                 features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
                 ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
-                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 100000).cpu()
+                conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
                 print("Cond")
                 # print(conditional_entropies_N)
 
