@@ -485,6 +485,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             _covar = _covar.cuda()
         _covar = BlockInterleavedLazyTensor(lazify(_covar), block_dim=-3)
         print(_mean)
+        print(_covar.evaluate())
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
