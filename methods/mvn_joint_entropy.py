@@ -578,6 +578,8 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             distribution = self.conditional_dist
             log_p = self.log_probs
 
+        if torch.cuda.is_available():
+            log_p = log_p.cuda()
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]

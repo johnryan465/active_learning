@@ -190,7 +190,7 @@ class BatchBALD(UncertainMethod):
                         if self.params.smoke_test:
                            joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
-                    if False: #self.params.smoke_test:
+                    if self.params.smoke_test:
                         joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
                         difference = torch.flatten(joint_entropy_result_ - joint_entropy_result)
                         print(torch.std(difference))
