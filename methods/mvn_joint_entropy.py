@@ -456,36 +456,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         self.batch_samples: int = batch_samples
         self.sum_samples: int = sum_samples
 
-    # This enables us to recompute only outputs of size 2 for our next aquisition
-    @typechecked
-    def join_rank_2(self, rank2: Rank2Next) -> MultitaskMultivariateNormalType[("N"),("new_batch_size","num_cat")]:
-        # For each of the datapoints and the candidate batch we want to compute the low rank tensor
-        # The order of the candidate datapoints must be maintained and used carefully
-        # Need to wrap this in toma
-        # The means will be the same for each datapoint
-        if self.num_points > 0:
-            item_means = self.r2c.get_mean().unsqueeze(1)
-            N = item_means.shape[0]
-            candidate_means = (self.current_batch_dist.mean)[None,:,:].expand(N, -1, -1)
-            mean_tensor = cat([candidate_means, item_means], dim=1)
-
-            expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.shape))
-            self.self_covar_tensor = self.r2c.get_self_covar()
-            cross_mat = self.r2c.get_cross_mat()
-            # We need to not compute the covariance between points and themselves
-            covar_tensor = Rank2Combine.chunked_cat_rows(expanded_batch_covar, cross_mat, self.self_covar_tensor)
-        
-        else:
-            item_means = rank2.get_mean().unsqueeze(1)
-            N = item_means.shape[0]
-            candidate_means = (self.current_batch_dist.mean)[None,:,:].expand(N, -1, -1)
-            mean_tensor = cat([candidate_means, item_means], dim=1)
-
-            expanded_batch_covar = self.current_batch_dist.lazy_covariance_matrix.expand( [N] + list(self.current_batch_dist.lazy_covariance_matrix.shape))
-            covar_tensor = self.self_covar_tensor = rank2.get_self_covar()
-        covar_tensor = BlockInterleavedLazyTensor(lazify(covar_tensor), block_dim=-3)
-        return MultitaskMultivariateNormal(mean=mean_tensor, covariance_matrix=covar_tensor)
-
     @typechecked
     def add_variables(self, rank2: Rank2Next, selected_point: int) -> None:
         # When we are adding a new point, we update the batch
@@ -514,7 +484,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         if torch.cuda.is_available():
             _mean = _mean.cuda()
             _covar = _covar.cuda()
-        
+        print(_mean)
         self.current_batch_dist = MultitaskMultivariateNormal(mean=_mean, covariance_matrix=_covar)
         self.r2c.add(rank2, selected_point)
         self.used_points.append(selected_point)
