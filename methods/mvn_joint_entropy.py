@@ -479,7 +479,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
                 self_cov = cross_mat.cuda()
             # Next we update the current distribution
             _mean = torch.cat( [self.current_batch_dist.mean, new_mean], dim=0)
-            _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov)
+            _covar = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov).evaluate()
         print(_covar.device)
         if torch.cuda.is_available():
             _mean = _mean.cuda()
