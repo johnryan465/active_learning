@@ -81,8 +81,8 @@ def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], mode
                 cov_cpu = cov_cpu.all_to("cuda")
             else:
                 cov_cpu = cov_cpu.cuda()
-        mean_cpu = dist.mean.cpu()
-        cov_cpu = dist.lazy_covariance_matrix.cpu()
+        # mean_cpu = dist.mean.cpu()
+        # cov_cpu = dist.lazy_covariance_matrix.cpu()
         return MultitaskMultivariateNormal(mean=mean_cpu, covariance_matrix=cov_cpu)
 
 
