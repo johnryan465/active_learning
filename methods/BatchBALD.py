@@ -152,10 +152,11 @@ class BatchBALD(UncertainMethod):
 
                 joint_entropy_class: GPCJointEntropy
                 if True:
-                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 10, 1000, 10, 10, N)
+                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 20, 2000, 200, num_cat, N)
                     # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
+                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 500, 10, N)
                 if self.params.smoke_test:
-                    joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
+                    joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, num_cat, N)
                 
                 # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
                 # which is computationaly prohibative (has complexity related to the pool size)
@@ -214,22 +215,33 @@ class BatchBALD(UncertainMethod):
                         # Here we check that the distribuiton we get from combining 
                         # check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
                         # joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
-                        # simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 2000)
-                        # print("Simple")
-                        # print(simple_joint_entropy_result)
+                        simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 4000, 10)
+                        print("Simple")
+                        print(simple_joint_entropy_result)
                         print("Low Memory")
                         print(joint_entropy_result)
                         # print("Rank 2 combine only")
                         # print(joint_entropy_result_)
-                        # difference = torch.flatten(joint_entropy_result_ - joint_entropy_result)
-                        # print(torch.std(difference))
-                        # print(torch.mean(difference))
+                        diff = joint_entropy_result - simple_joint_entropy_result
+                        diff[candidate_indices] = 0
+                        difference = torch.flatten(diff)
+                        # The difference between the 2 methods is minimum at the max value of the low memory
+
+                        indexes = torch.argsort(difference)
+                        pool_tensor = dataset.get_pool_tensor()
+                        print("Scores")
+                        for idx in indexes:
+                            _, y = pool_tensor[idx]
+                            print(idx, difference[idx], y)
+
+                        print(torch.std(difference))
+                        print(torch.mean(difference))
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
                     scores_N = joint_entropy_result.detach().cpu()
 
-                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                    # scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
 
                     # print(scores_N)
@@ -255,15 +267,24 @@ class BatchBALD(UncertainMethod):
                     # assert(len(joint_distribution_list) == 1)
                     joint_distribution: MultitaskMultivariateNormalType = get_gp_output(pool_expanded, model_wrapper)
                     log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
-                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 200000) 
+                    log_probs_N_K_C_: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
+                    batch_ = get_batchbald_batch(log_probs_N_K_C_, batch_size, 60000)
+                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 600000) 
+                    print(batch_)
+                    print(batch)
                     redux_candidate_indices = batch.indices
                     redux_candidate_scores = batch.scores
 
-                    print("Efficent")
-                    print(candidate_indices)
-                    print(candidate_scores)
-                    for idx in candidate_indices:
-                        _, y = dataset.get_pool_tensor()[idx]
+                    # print("Efficent")
+                    # print(candidate_indices)
+                    # print(candidate_scores)
+                    # for idx in candidate_indices:
+                    #     _, y = dataset.get_pool_tensor()[idx]
+                    #     print(y)
+
+                    print("Noisy Redux")
+                    for idx in batch_.indices: # type: ignore
+                        _, y = dataset.get_pool_tensor()[idx] # type: ignore
                         print(y)
 
                     print("Redux")

@@ -346,8 +346,8 @@ class MVNJointEntropy(GPCJointEntropy):
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        per_samples = self.samples
-        E = self.samples # We could reduce the number of samples here to allow better scaling with bigger datapoints
+        per_samples = 5000# self.samples
+        E = 1 #self.samples # We could reduce the number of samples here to allow better scaling with bigger datapoints
         t = string.ascii_lowercase[:D]
         s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
 
@@ -415,10 +415,15 @@ class MVNJointEntropy(GPCJointEntropy):
             return p
         
         output = torch.zeros(N)
-        if (C**D) <= E:            
-            chunked_distribution("Joint Entropy", distribution, exact, output)
-        else:
-            chunked_distribution("Joint Entropy Sampling", distribution, sampled, output)
+        output_2 = torch.zeros(N)
+        # if True: # (C**D) <= E:            
+        chunked_distribution("Joint Entropy", distribution, exact, output)
+        chunked_distribution("Joint Entropy Sampling", distribution, sampled, output_2)
+
+        difference = torch.flatten(output - output_2)
+        print(torch.std(difference))
+        print(torch.mean(difference))
+        print(torch.mean(torch.abs(difference)))
         return self.r2c.expand_to_full_pool(output)
 
 
@@ -531,7 +536,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         # We can let pytorch auto broadcast the matrix multiplication
         tmp_matrix: TensorType["N", "S", "C", "D" ,"D"] = (sigma_YX @ sigma_XX_inv).unsqueeze(1).expand(-1, batch_samples, -1, -1, -1)
         conditional_mean: TensorType["N", "S", "C", 1, 1] = (tmp_matrix @ tmp_vector)
-        conditional_mean =   mu_Y.unsqueeze(-1) + conditional_mean
+        conditional_mean = mu_Y.unsqueeze(-1) + conditional_mean
 
         l_shape = likelihood_samples.shape
         likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
@@ -561,7 +566,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         conditional_mean: TensorType["N", "S", "C", 1] = conditional_mean.squeeze(-1)
         self.conditional_mean = conditional_mean
         self.conditional_cov = BlockInterleavedLazyTensor(NonLazyTensor(conditional_cov), block_dim=-3)
-        self.conditional_dist = MultitaskMultivariateNormal(mean=self.conditional_mean, covariance_matrix=self.conditional_cov, interleaved=True)
+        self.conditional_dist = MultitaskMultivariateNormal(mean=self.conditional_mean, covariance_matrix=self.conditional_cov)
         self.log_probs = p
 
     @typechecked
@@ -590,8 +595,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         D = distribution.event_shape[0]
         N = distribution.batch_shape[0]
         C = distribution.event_shape[1]
-        per_samples = self.per_sample
-        E = 10
+        P = self.per_sample
 
         # We are sampling more over the batch than than the candiadate points
         @typechecked
@@ -599,7 +603,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # We have L samples from the batch distribution
             # We have B samples from the sum of the batch distribution
             # We have P samples from the conditional distribution
-            P = per_samples
             # We have N points on the distribution
             # We have E samples from the sum of the conditional
             N = distribution.batch_shape[0]
@@ -611,31 +614,34 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
             # print(sample)
             likelihood_samples: TensorType["P", "N", "L", "C"] = (self.likelihood(sample).probs).squeeze(-2)
             likelihood_samples: TensorType["N", "P", "L", "C"] = torch.transpose(likelihood_samples, 0, 1)
-            p_y: TensorType["N", "L", "P", "C"] = torch.transpose(likelihood_samples, 1, 2)
-            # p_y: TensorType["N", "L", "C"] = torch.mean(likelihood_samples, dim=1)
-            p_shape = p_y.shape
-            p_y: TensorType["N * L * P", "C"] = torch.reshape(p_y, (-1, p_shape[-1]))
-
-            choices: TensorType["N * L * P", "E"] = torch.multinomial(p_y, E, replacement=True)
-            choices: TensorType["N", "L", "P", "E"] = choices.reshape( list(p_shape[:-1]) + [-1])
-            p_y: TensorType["N", "L", "P", "C"]= p_y.reshape(p_shape)
-
-            p_samples: TensorType["N", "L", "P", "P", "C"] = p_y[:,:,:,None,:].expand(-1, -1, -1, P, -1)
-            choices: TensorType["N", "L", "P", "P", "E"] = choices[:,:,None,:,:].expand(-1, -1, P, -1, -1)
-            p_y: TensorType["N", "L", "P", "P", "E"] = torch.gather(p_samples, 4, choices)
-            p_y: TensorType["N", "L", "P", "E"] = torch.mean(p_y, dim=2)
-            p_y: TensorType["N", "L", "P * E"] = torch.flatten(p_y, start_dim=2)
-
+            del sample
+            p_y: TensorType["N", "L", "C"] = torch.mean(likelihood_samples, dim=1)
+            del likelihood_samples
 
             batch_p: TensorType["L", "B"] = log_p.exp()
-            p_expanded: TensorType["N", "L", "P*E", 1] = p_y.unsqueeze(-1)
+            p_expanded: TensorType["N", "L", "C", 1] = p_y.unsqueeze(-1)
             batch_p_expanded: TensorType["L", 1, "B"] = batch_p.unsqueeze(-2)
             
-            p: TensorType["N", "L", "P*E", "B"] = p_expanded * batch_p_expanded
-            p: TensorType["N", "P*E", "B"] = torch.mean(p, dim=1) # p(x,y)
-            p: TensorType["N", "P*E * B"] = torch.flatten(p, start_dim=1)
+            p: TensorType["N", "L", "C", "B"] = p_expanded * batch_p_expanded
+            p: TensorType["N", "C", "B"] = torch.mean(p, dim=1) # p(x,y)
 
-            p: TensorType["N"] = torch.mean(-torch.log(p), dim = 1)
+            # X is the current batch, Y is the pool point
+            # We can't simply take this as samples from p(x, y) when estimating
+            # Each of the B samples is a sample from p(x)
+            # H(X, y) = E_{p(x,y)} [-log p(x,y)]
+            #         = E_{p(x)} E_{p(y | x)} [-log p(x,y)]
+            # We need to estimate the conditional entropy for each of our samples from p(x)
+            # E_{p(y | x)} [-log p(x,y)] = sum_y p(y | x) (- log p(x,y ) )
+            #                            = sum_y p(x, y) / p(x) *  (- log p(x,y ) )
+            #                            = (sum_y p(x, y) *  (- log p(x,y ))  / p(x) 
+
+            p_x : TensorType["B"] = torch.mean(batch_p, 0)
+            p_x_expanded: TensorType[1, "B"] = p_x[ None, :]
+
+            p: TensorType["N", "C", "B"] = p  * ( - torch.log(p))
+            p: TensorType["N", "B"] = torch.sum(p, 1)
+            p: TensorType["N", "B"] = p / p_x_expanded
+            p: TensorType["N"] = torch.mean(p, dim = 1)
 
             return p
         
