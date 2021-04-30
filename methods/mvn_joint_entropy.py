@@ -518,8 +518,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
 
         likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([batch_samples]))).probs
 
-        self.create_conditional_dist(batch_samples, likelihood_samples)
-
         l_shape = likelihood_samples.shape
         likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
         # Instead of using einsum we will sample from the possible 
@@ -543,44 +541,6 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
         p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
 
         self.log_probs = p
-
-    def create_conditional_dist(self, batch_samples: int, likelihood_samples: TensorType) -> None:
-        # The covariance is independent of the function valuees
-        # covar = sigma_YY - sigma_{YX} sigma_{XX}^{-1} sigma_{XY}
-        sigma_YY: TensorType["N", "C", 1, 1] = self.r2c.get_self_covar()
-        sigma_YX: TensorType["N", "C", 1, "D"] = self.r2c.get_cross_mat()
-        sigma_XX: TensorType["C", "D", "D"] = self.current_batch_dist.lazy_covariance_matrix.base_lazy_tensor.evaluate()
-        sigma_XX_inv: TensorType["C", "D", "D"] = torch.inverse(sigma_XX)
-
-        N = sigma_YY.shape[0]
-        batch_samples = self.batch_samples
-
-        conditional_cov: TensorType["N", "C", 1, 1] = sigma_YY - (sigma_YX @ sigma_XX_inv @ torch.transpose( sigma_YX, -1, -2))
-
-        #  mean = mu_Y + sigma_YX sigma_XX^{-1} (X - mu_x)
-        # We want to expand the batch dist mean and covariance so we can broadcast in numbesumr of samples
-        mu_Y: TensorType["N", "S", "C", 1] = (self.r2c.get_mean()[:,None,:,None].expand(-1, batch_samples, -1, -1))
-        mu_X: TensorType["N", "S", "C", "D"] = torch.transpose(self.current_batch_dist.mean[None, None, :, :].expand(N, batch_samples, -1, -1), -1, -2)
-        X: TensorType["N", "S", "C", "D"] = torch.transpose(likelihood_samples[None,:,:,:].expand(N ,-1, -1, -1), -1, -2)
-
-        if torch.cuda.is_available():
-            X = X.cuda()
-            mu_Y = mu_Y.cuda()
-            mu_X = mu_X.cuda()
-            sigma_XX_inv = sigma_XX_inv.cuda()
-            sigma_YX = sigma_YX.cuda()
-
-        tmp_vector: TensorType["N", "S", "C", "D", 1] = (X - mu_X).unsqueeze(-1)
-
-        # We can let pytorch auto broadcast the matrix multiplication
-        tmp_matrix: TensorType["N", "S", "C", "D" ,"D"] = (sigma_YX @ sigma_XX_inv).unsqueeze(1).expand(-1, batch_samples, -1, -1, -1)
-        conditional_mean: TensorType["N", "S", "C", 1, 1] = (tmp_matrix @ tmp_vector)
-        conditional_mean = mu_Y.unsqueeze(-1) + conditional_mean
-        conditional_cov: TensorType["N", "S", "C", 1, 1] = conditional_cov[:,None,:,:,:].expand(-1, batch_samples, -1, -1 , -1)
-        conditional_mean: TensorType["N", "S", "C", 1] = conditional_mean.squeeze(-1)
-        self.conditional_mean = conditional_mean
-        self.conditional_cov = BlockInterleavedLazyTensor(NonLazyTensor(conditional_cov), block_dim=-3)
-        self.conditional_dist = MultitaskMultivariateNormal(mean=self.conditional_mean, covariance_matrix=self.conditional_cov)
 
     @typechecked
     def compute(self) -> TensorType[1]:
@@ -657,7 +617,7 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
                 if torch.cuda.is_available():
                     conditional_cov = conditional_cov.cuda()
                     conditional_mean = conditional_mean.cuda()
-                    
+
                 conditional_cov = NonLazyTensor(conditional_cov)
                 conditional_cov = BlockInterleavedLazyTensor(conditional_cov, block_dim=-3)
                 distribution = MultitaskMultivariateNormal(mean=conditional_mean, covariance_matrix=conditional_cov)
