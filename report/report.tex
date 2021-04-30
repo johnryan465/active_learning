@@ -115,12 +115,10 @@ This violates a very common assumption that we assume for convergence in many ML
 
 When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over paramatised to begin with become even more so, this can lead to training issues.
 
-\section{}
-\subsection{Random}
-\subsection{}
+\section{Random}
 \section{Uncertainty}
-\subsection{Entropy}
-\subsection{BALD}
+\section{Entropy}
+\section{BALD}
 Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian}.
 
 $${\arg\,\max}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
@@ -283,8 +281,27 @@ As mentioned earlier in the paper sampling a function over the entire pool is co
 We can then use these as a numerical test to valididate that the more computationally efficent methods we develop are giving correct results.
 
 
+\chapter{Experiments}
 
+\section{Replication}
 
+\subsection{Random}
+
+\subsection{BALD}
+
+\subsection{BatchBALD}
+
+\subsection{Predictive Entropy}
+
+\section{DUE}
+
+\subsection{Training on small datasets}
+
+\subsection{BALD}
+
+\subsection{BatchBALD}
+
+\subsection{Predictive Entropy}
 
 
 
