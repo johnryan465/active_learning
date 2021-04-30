@@ -654,7 +654,10 @@ class LowMemMVNJointEntropy(GPCJointEntropy):
 
 
                     conditional_mean: TensorType["BS", "S", "C", 1] = conditional_mean.squeeze(-1)
-                
+                if torch.cuda.is_available():
+                    conditional_cov = conditional_cov.cuda()
+                    conditional_mean = conditional_mean.cuda()
+                    
                 conditional_cov = NonLazyTensor(conditional_cov)
                 conditional_cov = BlockInterleavedLazyTensor(conditional_cov, block_dim=-3)
                 distribution = MultitaskMultivariateNormal(mean=conditional_mean, covariance_matrix=conditional_cov)
