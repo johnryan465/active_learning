@@ -154,7 +154,7 @@ class BatchBALD(UncertainMethod):
                 if True:
                     joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 20, 2000, 200, num_cat, N)
                     # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
-                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 500, 10, N)
+                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 50, 10, N)
                 if self.params.smoke_test:
                     joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, num_cat, N)
                 
@@ -215,27 +215,50 @@ class BatchBALD(UncertainMethod):
                         # Here we check that the distribuiton we get from combining 
                         # check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
                         # joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
-                        simple_joint_entropy_result = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 4000, 10)
-                        print("Simple")
-                        print(simple_joint_entropy_result)
-                        print("Low Memory")
-                        print(joint_entropy_result)
-                        # print("Rank 2 combine only")
-                        # print(joint_entropy_result_)
-                        diff = joint_entropy_result - simple_joint_entropy_result
-                        diff[candidate_indices] = 0
-                        difference = torch.flatten(diff)
-                        # The difference between the 2 methods is minimum at the max value of the low memory
+                        exact, sampled = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 10)
+                        # joint_entropy_result = exact
+                        sampled = joint_entropy_result
+                        # print("Simple")
+                        # print(simple_joint_entropy_result)
+                        # print("Low Memory")
+                        # print(joint_entropy_result)
+                        # # print("Rank 2 combine only")
+                        # # print(joint_entropy_result_)
 
-                        indexes = torch.argsort(difference)
                         pool_tensor = dataset.get_pool_tensor()
-                        print("Scores")
-                        for idx in indexes:
-                            _, y = pool_tensor[idx]
-                            print(idx, difference[idx], y)
 
-                        print(torch.std(difference))
-                        print(torch.mean(difference))
+                        diff_1 = exact - sampled
+                        diff_1[candidate_indices] = 0
+
+
+
+                        per_classes_idx = [ [] for i in range(num_cat)]
+
+                        for idx in range(0, len(pool_tensor)):
+                            _, y = pool_tensor[idx]
+                            per_classes_idx[y].append(idx)
+
+                        # The difference between the 2 methods is minimum at the max value of the low memory
+                        difference = torch.flatten(diff_1)
+
+                        for i in range(num_cat):
+                            print("Class ", i)
+                            class_diff = diff_1[per_classes_idx[i]]
+                            difference = torch.flatten(class_diff)
+                            print(torch.std(difference))
+                            print(torch.mean(difference))
+                        # print(torch.mean(difference))
+                        # print(joint_entropy_result)
+                        # print(sampled)
+                        # print(exact)
+                        # indexes = torch.argsort(difference)
+                        # print("Scores")
+                        # for idx in indexes:
+                        #     _, y = pool_tensor[idx]
+                        #     print(idx, difference[idx], y)
+
+                        # print(torch.std(difference))
+                        # print(torch.mean(difference))
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 

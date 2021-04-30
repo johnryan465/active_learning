@@ -65,6 +65,9 @@ Active Learning is an use
 
 \chapter{Introduction}
 \pagenumbering{arabic}
+
+
+Active learning is BLAH. 
 \section{Motivation}
 
 Active Learning is an active area of Machine Learning where we are trying to select (unlabelled) data points in an attempt to maximise some objective.
@@ -109,7 +112,6 @@ This paramaterisaton of our models is very important, this is an assumption we a
 An important observation is that the dataset we are using for training is (unless performing very simple active learning approaches eg random acquisition) not going to be the same as the true dataset which we are working with. 
 
 This violates a very common assumption that we assume for convergence in many ML methods, and is something worth keeping in mind. This statistical bias is looked at in the following paper \cite{farquhar2021statistical}.
-
 
 When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over paramatised to begin with become even more so, this can lead to training issues.
 
@@ -191,6 +193,7 @@ The link function between the latent function (our GP) and the output of our cla
 The logit is the standard link function for the vast majority of GPC use cases. The use of the logit implicitly makes our GPC model obey the independence of irrelevant alternatives axiom from decision theory. 
 
 
+$$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
 \subsubsection{Probit}
 
 
@@ -241,8 +244,52 @@ The complexity of performing this is cubic in the size of the pool, this complex
 
 This means that we can not use the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to make some improvements in this aspect.
 
+
+\subsection{}
+
+
 \chapter{Methodology}
 \label{Chap6}
+
+All of the experiments referencedx here can easily be replicated using the codebase for this project which is avaiable here.
+
+The code uses the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}.
+
+
+
+\section{Replication}
+
+To begin with replication of some of the experiments in the BatchBALD to valididate the experimental framework and to have points of comparision to work with.
+
+
+
+
+\section{DUE}
+
+\subsection{Model Outline}
+
+
+\subsubsection{Training issues}
+
+When training DUE/vDUQ based models on extremely small datasets, an issue which begins to become apparent is the issue of inducing point initialisation. As feature extractor is randomly initialised, the initial inducing points we get obtain by using standard initial inducing point initialisation procuedures can lead to poor training dynamics.
+
+
+
+
+
+\subsection{Sampling Functions}
+
+As mentioned earlier in the paper sampling a function over the entire pool is computationally prohibative, however we can take a small enough subset of the pool over which we can calculate the joint distribution and take sample function draws.
+We can then use these as a numerical test to valididate that the more computationally efficent methods we develop are giving correct results.
+
+
+
+
+
+
+
+
+
 
 \renewcommand{\bibname}{Bibliography}
 \bibliographystyle{apacite}
