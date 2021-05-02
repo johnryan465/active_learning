@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from methods.estimator_entropy import BBReduxJointEntropyEstimator
+from methods.mvn_joint_entropy import CustomJointEntropy
 from typing import List
 from utils.typing import MultitaskMultivariateNormalType
 
@@ -13,7 +15,6 @@ from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 import torch
 from .BatchBALD import get_pool, get_features, compute_conditional_entropy_mvn, get_gp_output
 from utils.typing import TensorType, MultitaskMultivariateNormalType, MultivariateNormalType
-from .mvn_joint_entropy import MVNJointEntropy
 
 @dataclass
 class BALDParams(MethodParams):
@@ -76,7 +77,7 @@ class BALD(UncertainMethod):
 
             dists = get_gp_output(grouped_pool, model_wrapper)
             joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
-            joint_entropy_class = MVNJointEntropy(None, samples)
+            joint_entropy_class = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
 
             joint_entropy_class.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result)
 

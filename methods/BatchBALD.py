@@ -1,3 +1,5 @@
+from methods.estimator_entropy import BBReduxJointEntropyEstimator, ExactJointEntropyEstimator, SampledJointEntropyEstimator
+from methods.mvn_utils import combine_mtmvns
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 from gpytorch.lazy.cat_lazy_tensor import CatLazyTensor
 from gpytorch.likelihoods import likelihood
@@ -19,7 +21,7 @@ from tqdm import tqdm
 from dataclasses import dataclass
 from toma import toma
 
-from .mvn_joint_entropy import GPCJointEntropy, LowMemMVNJointEntropy, MVNJointEntropy, Rank2Next, chunked_distribution
+from .mvn_joint_entropy import CustomJointEntropy, GPCJointEntropy, Rank2Next, chunked_distribution
 
 
 
@@ -68,7 +70,7 @@ def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], mode
             pbar.update(end - start)
         pbar.close()
         # We want to keep things off the GPU
-        dist = GPCJointEntropy.combine_mtmvns(dists)
+        dist = combine_mtmvns(dists)
         mean_cpu = dist.mean
         cov_cpu = dist.lazy_covariance_matrix
         if torch.cuda.is_available():
@@ -150,13 +152,6 @@ class BatchBALD(UncertainMethod):
                     return
                 
 
-                joint_entropy_class: GPCJointEntropy
-                if True:
-                    joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 20, 2000, 200, num_cat, N)
-                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 1000, 10, N)
-                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 50, 10, N)
-                if self.params.smoke_test:
-                    joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, num_cat, N)
                 
                 # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
                 # which is computationaly prohibative (has complexity related to the pool size)
@@ -172,9 +167,16 @@ class BatchBALD(UncertainMethod):
                 ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
                 conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
                 print("Cond")
-                # print(conditional_entropies_N)
 
-                # print(conditional_entropies_N)
+                joint_entropy_class: GPCJointEntropy
+                if True:
+                    # joint_entropy_class = LowMemMVNJointEntropy(model_wrapper.likelihood, 10, 1000, 1, num_cat, N)
+                    joint_entropy_class = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                    joint_entropy_class_ = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
+                    # joint_entropy_class = MVNJointEntropy(model_wrapper.likelihood, 50, 10, N)
+                if self.params.smoke_test:
+                    pass
+                    # joint_entropy_class_ = MVNJointEntropy(model_wrapper.likelihood, 1000, num_cat, N)
 
                 for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                     # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -203,8 +205,8 @@ class BatchBALD(UncertainMethod):
                     rank2dist: Rank2Next = Rank2Next(dists)
                     if i > 0:
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
-                        # if self.params.smoke_test:
-                        #   joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
+                        if self.params.smoke_test:
+                           joint_entropy_class_.add_variables(rank2dist, previous_aquisition)
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
                     if self.params.smoke_test:
                         expanded_pool_features: TensorType["datapoints", 1, "num_features"] = pool[:, None, :]
@@ -215,9 +217,17 @@ class BatchBALD(UncertainMethod):
                         # Here we check that the distribuiton we get from combining 
                         # check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
                         # joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
-                        exact, sampled = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 2000, 10)
+                        # exact, sampled = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 50000, 10)
+                        # exact2, sampled2 = MVNJointEntropy._compute(new_dist, model_wrapper.likelihood, 50000, 10)
+                        joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
+
+
+                        
+                        # print("Exact", exact)
+                        # print(joint_entropy_result)
+                        # sampled = joint_entropy_result
                         # joint_entropy_result = exact
-                        sampled = joint_entropy_result
+                        # joint_entropy_result = exact
                         # print("Simple")
                         # print(simple_joint_entropy_result)
                         # print("Low Memory")
@@ -227,8 +237,11 @@ class BatchBALD(UncertainMethod):
 
                         pool_tensor = dataset.get_pool_tensor()
 
-                        diff_1 = exact - sampled
+                        diff_1 = joint_entropy_result - joint_entropy_result_
                         diff_1[candidate_indices] = 0
+
+                        print(diff_1)
+                        print(joint_entropy_result_)
 
 
 
@@ -284,14 +297,14 @@ class BatchBALD(UncertainMethod):
 
                 if use_bb_redux:
                     # We use the BatchBALD Redux as a comparision, this does not scale to larger pool sizes.
-                    bb_samples = 1000
+                    bb_samples = 5000
                     pool_expanded: TensorType[1, "datapoints", "num_features"] = pool[None,:,:]
                     # joint_distribution_list: MultitaskMultivariateNormalType[(1), ("datapoints", "num_cat")] = get_gp_output(pool_expanded, model_wrapper)
                     # assert(len(joint_distribution_list) == 1)
                     joint_distribution: MultitaskMultivariateNormalType = get_gp_output(pool_expanded, model_wrapper)
                     log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
                     log_probs_N_K_C_: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
-                    batch_ = get_batchbald_batch(log_probs_N_K_C_, batch_size, 60000)
+                    batch_ = get_batchbald_batch(log_probs_N_K_C_, batch_size, 600000)
                     batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 600000) 
                     print(batch_)
                     print(batch)

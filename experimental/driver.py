@@ -44,7 +44,7 @@ class Driver:
                 metric = Average(output_transform=transform)
                 metric.attach(engine, name)
 
-        output_transform = model_wrapper.get_output_transform()  # metrics['validation']['accuracy']
+        output_transform = model_wrapper.get_output_transform()
 
         metric = Accuracy(output_transform=output_transform)
         metric.attach(evaluator, "accuracy")
@@ -57,8 +57,8 @@ class Driver:
         train_loader = dataset.get_train()
 
         def score_fn(engine):
-            score = engine.state.metrics['accuracy']
-            return score
+            score = engine.state.metrics['loss']
+            return -score
 
         if training_params.patience > 0:
             es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
