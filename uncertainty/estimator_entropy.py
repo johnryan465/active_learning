@@ -305,7 +305,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
     def compute(self) -> TensorType:
         return self._compute(self.batch, self.likelihood, self.samples)
 
-    def compute_batch(self, pool: Rank1Updates]) -> TensorType["N"]:
+    def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
         for i in range(0, N):
