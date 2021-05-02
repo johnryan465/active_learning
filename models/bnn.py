@@ -1,5 +1,5 @@
 from types import FunctionType
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List
 from models.model_params import NNParams, ModelWrapperParams
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.model import UncertainModel
@@ -95,23 +95,7 @@ class BNN(UncertainModel):
         return self.model(input, samples)
 
     def reset(self, dataset: ActiveLearningDataset) -> None:
-        self.model = BNN.model_config[self.training_params.dataset][self.params.model_index](self.nn_params)
-
-        self.parameters = [{
-            "params": self.model.parameters(),
-            "lr": self.training_params.optimizers.optimizer}]
-
-        milestones = [60, 120, 160]
-        self.optimizer = torch.optim.SGD(
-            self.parameters, lr=self.training_params.optimizers.optimizer,
-            momentum=0.9, weight_decay=self.nn_params.weight_decay
-        )
-        if self.training_params.cuda:
-            self.model = self.model.cuda()
-
-        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            self.optimizer, milestones=milestones, gamma=0.2
-        )
+        self.initialize(dataset)
 
     def get_output_transform(self):
         return lambda x: x
@@ -141,3 +125,40 @@ class BNN(UncertainModel):
 
     def prepare(self, batch_size: int) -> None:
         return super().prepare(batch_size)
+
+    def initialize(self, dataset: ActiveLearningDataset) -> None:
+        self.model = BNN.model_config[self.training_params.dataset][self.params.model_index](self.nn_params)
+
+        self.parameters = [{
+            "params": self.model.parameters(),
+            "lr": self.training_params.optimizers.optimizer}]
+
+        milestones = [60, 120, 160]
+        self.optimizer = torch.optim.SGD(
+            self.parameters, lr=self.training_params.optimizers.optimizer,
+            momentum=0.9, weight_decay=self.nn_params.weight_decay
+        )
+        if self.training_params.cuda:
+            self.model = self.model.cuda()
+
+        self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            self.optimizer, milestones=milestones, gamma=0.2
+        )
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "model": self.model.state_dict(),
+            "training_params": self.training_params,
+            "model_params": self.params
+        }
+
+    @classmethod
+    def load_state_dict(cls, state: Dict[str, Any], dataset: ActiveLearningDataset) -> 'vDUQ':
+        params = state['model_params']
+        training_params = state['training_params']
+
+        # We create the new object and then update the weights
+
+        model = BNN(params, training_params, dataset)
+        model.model.load_state_dict(state['model'])
+        return model

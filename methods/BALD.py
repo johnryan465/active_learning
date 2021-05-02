@@ -37,12 +37,11 @@ class BALD(UncertainMethod):
             
             samples = 100
             num_cat = 10
-            feature_size = 512
 
             inputs = get_pool(dataset)
             N = inputs.shape[0]
 
-            pool = get_features(inputs, feature_size, model_wrapper)
+            pool = model_wrapper.get_features(inputs)
 
             model_wrapper.model.eval()
             batch_size = self.params.aquisition_size
@@ -57,7 +56,7 @@ class BALD(UncertainMethod):
 
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
             features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
-            ind_dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = get_gp_output(features_expanded, model_wrapper)
+            ind_dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = model_wrapper.get_gp_output(features_expanded)
             conditional_entropies_N = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
             
             # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -75,11 +74,11 @@ class BALD(UncertainMethod):
             grouped_pool = torch.cat([z,t], dim=1)
             grouped_pool = grouped_pool[:,None,:,:]
 
-            dists = get_gp_output(grouped_pool, model_wrapper)
+            dists = model_wrapper.get_gp_output(grouped_pool)
             joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
             joint_entropy_class = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
 
-            joint_entropy_class.compute(dists, model_wrapper.likelihood, samples, joint_entropy_result)
+            joint_entropy_class.compute_batch(dists)
 
             # Then we compute the batchbald objective
 

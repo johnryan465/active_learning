@@ -1,3 +1,4 @@
+from models.bnn import BNNParams
 from methods.BatchBALD import BatchBALDParams
 from methods.BALD import BALDParams
 from methods.random import RandomParams
@@ -165,6 +166,18 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
             gp_params=gp_params,
             fe_params=nn_params
         )
+    elif args.model == ModelName.bnn:
+
+        nn_params = NNParams(
+            dropout_rate=args.dropout,
+            batchnorm_momentum=0.01,
+            weight_decay=5e-4,
+        )
+
+        model_params = BNNParams(
+            model_index=0,
+            fe_params=nn_params
+        )
     else:
         nn_params = NNParams(
             spectral_normalization=args.spectral_norm,
@@ -186,7 +199,7 @@ def parse_training(args: argparse.Namespace) -> TrainingParams:
     # Parse training params
     opt_params = OptimizerParams(
         optimizer=args.lr,
-        var_optimizer=args.var_opt
+        # var_optimizer=args.var_opt
     )
     training_params = TrainingParams(
         dataset=args.dataset,

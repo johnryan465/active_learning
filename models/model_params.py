@@ -27,9 +27,10 @@ class GPParams(ModelParams):
 
 @dataclass
 class NNParams(ModelParams):
-    spectral_normalization: bool
-    dropout_rate: float
-    coeff: float
-    n_power_iterations: int
     batchnorm_momentum: float
     weight_decay: float
+    dropout_rate: float
+    spectral_normalization: bool = False
+    coeff: float = 9.0
+    n_power_iterations: int = 1
+
