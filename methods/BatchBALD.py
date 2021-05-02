@@ -1,9 +1,9 @@
-from methods.estimator_entropy import BBReduxJointEntropyEstimator, ExactJointEntropyEstimator, SampledJointEntropyEstimator
-from methods.mvn_utils import combine_mtmvns
+from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator, ExactJointEntropyEstimator, SampledJointEntropyEstimator
+from uncertainty.mvn_utils import combine_mtmvns
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 from gpytorch.lazy.cat_lazy_tensor import CatLazyTensor
 from gpytorch.likelihoods import likelihood
-from methods.utils import get_pool
+from utils.utils import get_pool
 from datasets.activelearningdataset import DatasetUtils
 from models.model import UncertainModel
 from models.vduq import vDUQ
@@ -21,7 +21,7 @@ from tqdm import tqdm
 from dataclasses import dataclass
 from toma import toma
 
-from .mvn_joint_entropy import CustomJointEntropy, GPCJointEntropy, Rank2Next, chunked_distribution
+from uncertainty.mvn_joint_entropy import CustomJointEntropy, GPCJointEntropy, Rank2Next, chunked_distribution, compute_conditional_entropy_mvn
 
 
 
@@ -34,88 +34,6 @@ class BatchBALDParams(MethodParams):
 
 
 # \sigma_{BatchBALD} ( {x_1, ..., x_n}, p(w)) = H(y_1, ..., y_n) - E_{p(w)} H(y | x, w)
-
-@typechecked
-def get_features(inputs: TensorType["datapoints", "channels", "x", "y"], feature_size: int, model_wrapper: vDUQ) -> TensorType["datapoints", "num_features"]:
-    N = inputs.shape[0]
-    pool = torch.empty((N, feature_size))
-    pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
-    @toma.execute.chunked(inputs, N)
-    def compute(inputs, start: int, end: int):
-        with torch.no_grad():
-            if torch.cuda.is_available():
-                inputs = inputs.cuda()
-            tmp = model_wrapper.model.feature_extractor.forward(inputs).detach()
-            pool[start:end].copy_(tmp, non_blocking=True)
-        pbar.update(end - start)
-    pbar.close()
-    return pool
-
-
-@typechecked
-def get_gp_output(features: TensorType[ ..., "num_points", "num_features"], model_wrapper: vDUQ) -> MultivariateNormalType[("N"), ("num_points", "num_cats")]:
-    # We need to expand the dimensions of the features so we can broadcast with the GP
-    if len(features.shape) > 2: # we have batches
-        features = features.unsqueeze(-3)
-    with torch.no_grad():
-        dists = []
-        N = features.shape[0]
-        pbar = tqdm(total=N, desc="GP", leave=False)
-        @toma.execute.chunked(features, N)
-        def compute(features, start: int, end: int):
-            if torch.cuda.is_available():
-                features = features.cuda()
-            d = model_wrapper.model.gp(features)
-            dists.append(d)
-            pbar.update(end - start)
-        pbar.close()
-        # We want to keep things off the GPU
-        dist = combine_mtmvns(dists)
-        mean_cpu = dist.mean
-        cov_cpu = dist.lazy_covariance_matrix
-        if torch.cuda.is_available():
-            if(isinstance(mean_cpu, CatLazyTensor)):
-                mean_cpu = mean_cpu.all_to("cpu")
-            else:
-                mean_cpu = mean_cpu.cpu()
-
-            if(isinstance(cov_cpu, CatLazyTensor)):
-                cov_cpu = cov_cpu.all_to("cuda")
-            else:
-                cov_cpu = cov_cpu.cuda()
-        # mean_cpu = dist.mean.cpu()
-        # cov_cpu = dist.lazy_covariance_matrix.cpu()
-        return MultitaskMultivariateNormal(mean=mean_cpu, covariance_matrix=cov_cpu)
-
-def check_equal_dist(dist_1: MultitaskMultivariateNormal, dist_2: MultitaskMultivariateNormal) -> None:
-    dist_1_mean = dist_1.mean
-    dist_1_cov = dist_1.lazy_covariance_matrix.base_lazy_tensor.evaluate()
-
-    dist_2_mean = dist_2.mean
-    dist_2_cov = dist_2.lazy_covariance_matrix.base_lazy_tensor.evaluate()
-
-    assert(dist_1_mean.shape == dist_2_mean.shape)
-    assert(torch.allclose(dist_1_mean, dist_2_mean))
-
-    assert(dist_1_cov.shape == dist_2_cov.shape)
-    assert(torch.allclose(dist_1_cov, dist_2_cov))
-
-
-
-@typechecked
-def compute_conditional_entropy_mvn(distribution: MultitaskMultivariateNormalType[("N"), (1, "num_cats")], likelihood, num_samples : int) -> TensorType["N"]:
-    # The distribution input is a batch of MVNS
-    N = distribution.batch_shape[0]
-    def func(dist: MultitaskMultivariateNormalType) -> TensorType:
-        log_probs_K_n_C = (likelihood(dist.sample(sample_shape=torch.Size([num_samples]))).logits).squeeze()
-        log_probs_n_K_C = log_probs_K_n_C.permute(1, 0, 2)
-        return compute_conditional_entropy(log_probs_N_K_C=log_probs_n_K_C)
-    
-    entropies_N = torch.empty(N, dtype=torch.double)
-    chunked_distribution("Conditional Entropy", distribution, func, entropies_N)
-
-    return entropies_N
-
 
 
 class BatchBALD(UncertainMethod):
@@ -135,13 +53,12 @@ class BatchBALD(UncertainMethod):
                 samples = self.params.samples
                 efficent = self.params.efficent
                 num_cat = 10
-                feature_size = 256
                 use_bb_redux = self.params.smoke_test
 
                 inputs: TensorType["datapoints","channels","x","y"] = get_pool(dataset)
                 N = inputs.shape[0]
 
-                pool: TensorType["datapoints","num_features"] = get_features(inputs, feature_size, model_wrapper)
+                pool: TensorType["datapoints","num_features"] = model_wrapper.get_features(inputs)
 
                 model_wrapper.model.eval()
                 batch_size = self.params.aquisition_size
@@ -164,7 +81,7 @@ class BatchBALD(UncertainMethod):
                 # Instead we will we take advantage of the fact that GP output is a MVN and can be conditioned.
 
                 features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
-                ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = get_gp_output(features_expanded, model_wrapper)
+                ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = model_wrapper.get_gp_output(features_expanded)
                 conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
                 print("Cond")
 
@@ -199,7 +116,7 @@ class BatchBALD(UncertainMethod):
                     expanded_pool_features: TensorType["datapoints", 1, 1, "num_features"] = pool[:, None, None, :]
                     new_candidate_features: TensorType["datapoints", 1, 1, "num_features"] = ((pool[previous_aquisition])[None, None, None, :]).expand(N, -1, -1, -1)
                     joint_features: TensorType["datapoints", 1, 2, "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=2)
-                    dists: MultitaskMultivariateNormalType[ ("datapoints", 1), (2, "num_cat")] = get_gp_output(joint_features, model_wrapper)
+                    dists: MultitaskMultivariateNormalType[ ("datapoints", 1), (2, "num_cat")] = model_wrapper.get_gp_output(joint_features)
 
 
                     rank2dist: Rank2Next = Rank2Next(dists)
@@ -212,7 +129,7 @@ class BatchBALD(UncertainMethod):
                         expanded_pool_features: TensorType["datapoints", 1, "num_features"] = pool[:, None, :]
                         new_candidate_features: TensorType["datapoints", 1, "num_features"] = ((pool[candidate_indices])[None, :, :]).expand(N, -1, -1)
                         joint_features: TensorType["datapoints", "new_batch_size", "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=1)
-                        new_dist = get_gp_output(joint_features, model_wrapper)
+                        new_dist = model_wrapper.get_gp_output(joint_features)
 
                         # Here we check that the distribuiton we get from combining 
                         # check_equal_dist(joint_entropy_class_.join_rank_2(rank2dist), new_dist)
@@ -301,7 +218,7 @@ class BatchBALD(UncertainMethod):
                     pool_expanded: TensorType[1, "datapoints", "num_features"] = pool[None,:,:]
                     # joint_distribution_list: MultitaskMultivariateNormalType[(1), ("datapoints", "num_cat")] = get_gp_output(pool_expanded, model_wrapper)
                     # assert(len(joint_distribution_list) == 1)
-                    joint_distribution: MultitaskMultivariateNormalType = get_gp_output(pool_expanded, model_wrapper)
+                    joint_distribution: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(pool_expanded)
                     log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
                     log_probs_N_K_C_: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
                     batch_ = get_batchbald_batch(log_probs_N_K_C_, batch_size, 600000)

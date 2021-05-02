@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from methods.estimator_entropy import BBReduxJointEntropyEstimator, CurrentBatch, ExactJointEntropyEstimator, MVNJointEntropyEstimator, Rank1Update, SampledJointEntropyEstimator
-from methods.rank2 import Rank2Combine, Rank2Next
-from methods.mvn_utils import chunked_cat_rows, chunked_distribution
+
+from batchbald_redux.batchbald import compute_conditional_entropy
+from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator, CurrentBatch, ExactJointEntropyEstimator, MVNJointEntropyEstimator, Rank1Update, SampledJointEntropyEstimator
+from uncertainty.rank2 import Rank2Combine, Rank2Next
+from uncertainty.mvn_utils import chunked_cat_rows, chunked_distribution
 from gpytorch.distributions import distribution
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 from gpytorch.lazy.non_lazy_tensor import NonLazyTensor, lazify
@@ -64,3 +66,16 @@ class CustomJointEntropy(GPCJointEntropy):
         l_rank1updates: List[Rank1Update] = self.r2c.get_rank_1_updates()
         return self.r2c.expand_to_full_pool(self.estimator.compute_batch(l_rank1updates))
 
+@typechecked
+def compute_conditional_entropy_mvn(distribution: MultitaskMultivariateNormalType[("N"), (1, "num_cats")], likelihood, num_samples : int) -> TensorType["N"]:
+    # The distribution input is a batch of MVNS
+    N = distribution.batch_shape[0]
+    def func(dist: MultitaskMultivariateNormalType) -> TensorType:
+        log_probs_K_n_C = (likelihood(dist.sample(sample_shape=torch.Size([num_samples]))).logits).squeeze()
+        log_probs_n_K_C = log_probs_K_n_C.permute(1, 0, 2)
+        return compute_conditional_entropy(log_probs_N_K_C=log_probs_n_K_C)
+    
+    entropies_N = torch.empty(N, dtype=torch.double)
+    chunked_distribution("Conditional Entropy", distribution, func, entropies_N)
+
+    return entropies_N

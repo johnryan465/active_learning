@@ -1,5 +1,12 @@
 from typing import Any, Callable, Dict
 
+from gpytorch.lazy.cat_lazy_tensor import CatLazyTensor
+from toma import toma
+from tqdm.std import tqdm
+from typeguard import typechecked
+from uncertainty.mvn_utils import combine_mtmvns
+
+from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 
 from uncertainty.fixed_dropout import BayesianModule
 from gpytorch.lazy.lazy_tensor import delazify
@@ -19,7 +26,7 @@ from dataclasses import dataclass
 import gpytorch
 import torch
 from torch.utils.data import TensorDataset
-
+from utils.typing import MultivariateNormalType, TensorType
 
 @dataclass
 class vDUQParams(ModelWrapperParams):
@@ -271,3 +278,55 @@ class   vDUQ(UncertainModel):
         return model
     def reset(self) -> None:
         return super().reset()
+
+    @typechecked
+    def get_features(self, inputs: TensorType["datapoints", "channels", "x", "y"]) -> TensorType["datapoints", "num_features"]:
+        N = inputs.shape[0]
+        feature_size = self.model.feature_extractor.features_size
+        pool = torch.empty((N, feature_size))
+        pbar = tqdm(total=N, desc="Feature Extraction", leave=False)
+        @toma.execute.chunked(inputs, N)
+        def compute(inputs, start: int, end: int):
+            with torch.no_grad():
+                if torch.cuda.is_available():
+                    inputs = inputs.cuda()
+                tmp = self.model.feature_extractor.forward(inputs).detach()
+                pool[start:end].copy_(tmp, non_blocking=True)
+            pbar.update(end - start)
+        pbar.close()
+        return pool
+
+
+    @typechecked
+    def get_gp_output(self, features: TensorType[ ..., "num_points", "num_features"]) -> MultivariateNormalType[("N"), ("num_points", "num_cats")]:
+        # We need to expand the dimensions of the features so we can broadcast with the GP
+        if len(features.shape) > 2: # we have batches
+            features = features.unsqueeze(-3)
+        with torch.no_grad():
+            dists = []
+            N = features.shape[0]
+            pbar = tqdm(total=N, desc="GP", leave=False)
+            @toma.execute.chunked(features, N)
+            def compute(features, start: int, end: int):
+                if torch.cuda.is_available():
+                    features = features.cuda()
+                d = self.model.gp(features)
+                dists.append(d)
+                pbar.update(end - start)
+            pbar.close()
+            # We want to keep things off the GPU
+            dist = combine_mtmvns(dists)
+            mean_cpu = dist.mean
+            cov_cpu = dist.lazy_covariance_matrix
+            if torch.cuda.is_available():
+                if(isinstance(mean_cpu, CatLazyTensor)):
+                    mean_cpu = mean_cpu.all_to("cpu")
+                else:
+                    mean_cpu = mean_cpu.cpu()
+
+                if(isinstance(cov_cpu, CatLazyTensor)):
+                    cov_cpu = cov_cpu.all_to("cuda")
+                else:
+                    cov_cpu = cov_cpu.cuda()
+
+            return MultitaskMultivariateNormal(mean=mean_cpu, covariance_matrix=cov_cpu)

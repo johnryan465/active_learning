@@ -69,6 +69,7 @@ class MNISTResNet(nn.Module):
 
         self.dropout_rate = params.dropout_rate
         self.image_size = image_size
+        self.features_size = 256
 
         coeff = params.coeff
         batchnorm_momentum = params.batchnorm_momentum

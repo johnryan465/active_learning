@@ -98,3 +98,17 @@ def combine_mtmvns(mvns: List[MultitaskMultivariateNormalType]) -> MultitaskMult
         covar_blocks_lazy = cat([mvn.lazy_covariance_matrix.base_lazy_tensor for mvn in mvns], dim=0, output_device=mean.device)
         covar_lazy = BlockInterleavedLazyTensor(covar_blocks_lazy, block_dim=-3)
     return MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar_lazy, interleaved=True)
+
+
+def check_equal_dist(dist_1: MultitaskMultivariateNormal, dist_2: MultitaskMultivariateNormal) -> None:
+    dist_1_mean = dist_1.mean
+    dist_1_cov = dist_1.lazy_covariance_matrix.base_lazy_tensor.evaluate()
+
+    dist_2_mean = dist_2.mean
+    dist_2_cov = dist_2.lazy_covariance_matrix.base_lazy_tensor.evaluate()
+
+    assert(dist_1_mean.shape == dist_2_mean.shape)
+    assert(torch.allclose(dist_1_mean, dist_2_mean))
+
+    assert(dist_1_cov.shape == dist_2_cov.shape)
+    assert(torch.allclose(dist_1_cov, dist_2_cov))

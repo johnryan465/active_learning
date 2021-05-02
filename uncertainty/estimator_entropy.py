@@ -18,11 +18,14 @@ import string
 
 # Here we encapsalate the logic for actually estimating the joint entropy
 
+
 @dataclass
 class Rank1Update:
     mean: TensorType
     covariance: TensorType
     cross_covariance: TensorType
+
+Rank1Updates = List[Rank1Update]
 
 
 @dataclass
@@ -169,7 +172,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         return torch.mean(- torch.log(p))
 
     @typechecked
-    def compute_batch(self, candidates: List[Rank1Update]) -> TensorType["N"]:
+    def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:
         # We can exactly compute a larger sized exact distribution
         # As the task batches are independent we can chunk them
         # If we haven't added any variables yet, the coditional doesn't exist yet, but we have
@@ -238,8 +241,6 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         conditioned_entropy = conditioned_entropy + batch_entropy
         return conditioned_entropy
 
-
-
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
         self.create_samples()
@@ -252,7 +253,6 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
         self.likelihood = likelihood
         self.samples = samples
         super().__init__(batch, likelihood, samples)
-
 
     @staticmethod
     def _compute(batch: CurrentBatch, likelihood, samples: int) -> TensorType:
@@ -270,7 +270,7 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def compute(self) -> TensorType:
         return self._compute(self.batch, self.likelihood, self.samples)
 
-    def compute_batch(self, pool: List[Rank1Update]) -> TensorType["N"]:
+    def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
         for i in range(0, N):
@@ -281,13 +281,13 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
 
+
 class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: int) -> None:
         self.batch = batch
         self.likelihood = likelihood
         self.samples = samples
         super().__init__(batch, likelihood, samples)
-
 
     @staticmethod
     def _compute(batch: CurrentBatch, likelihood, samples: int) -> TensorType:
@@ -305,7 +305,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
     def compute(self) -> TensorType:
         return self._compute(self.batch, self.likelihood, self.samples)
 
-    def compute_batch(self, pool: List[Rank1Update]) -> TensorType["N"]:
+    def compute_batch(self, pool: Rank1Updates]) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
         for i in range(0, N):

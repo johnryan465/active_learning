@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from methods.estimator_entropy import BBReduxJointEntropyEstimator
-from methods.mvn_joint_entropy import CustomJointEntropy
+from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator
+from uncertainty.mvn_joint_entropy import CustomJointEntropy
 from typing import List
 from utils.typing import MultitaskMultivariateNormalType
 
@@ -13,7 +13,7 @@ from batchbald_redux.batchbald import get_bald_batch
 from datasets.activelearningdataset import DatasetUtils
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 import torch
-from .BatchBALD import get_pool, get_features, compute_conditional_entropy_mvn, get_gp_output
+from .BatchBALD import get_pool, compute_conditional_entropy_mvn
 from utils.typing import TensorType, MultitaskMultivariateNormalType, MultivariateNormalType
 
 @dataclass

@@ -2,7 +2,7 @@
 # This class wraps the rank 2 GP outputs we use for updating our joint entropy
 # We are assuming that the covariance matrix is a block interleaved lazy tensor
 # This enables us to perform operations in a way which give better numerical stability
-from methods.estimator_entropy import Rank1Update
+from uncertainty.estimator_entropy import Rank1Update
 from typing import List
 import torch
 from utils.typing import MultitaskMultivariateNormalType, TensorType
