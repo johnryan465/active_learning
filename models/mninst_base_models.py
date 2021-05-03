@@ -18,7 +18,7 @@ class PTMNISTResNet(ResNet, FeatureExtractor):
     def __init__(self, params: NNParams):
         super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=10)
         self.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.fc = nn.Identity()
+        # self.fc = nn.Identity()
 
     def forward(self, x):
         return super(PTMNISTResNet, self).forward(x)
