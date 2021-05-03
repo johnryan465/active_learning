@@ -119,14 +119,14 @@ class MNISTResNet(FeatureExtractor):
 
         # for i in range(0, num_blocks):
         self.layers.append(self._layer(nStages[1: 3], n, strides[2], 14))
-        self.layers.append(self._layer(nStages[2: 4], n, strides[3], 7))
+        # self.layers.append(self._layer(nStages[2: 4], n, strides[3], 7))
 
         # print(self.layers)
-        self.bn1 = self.wrapped_bn(256)
+        self.bn1 = self.wrapped_bn(128)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(256, num_classes)
+            self.linear = nn.Linear(128, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
