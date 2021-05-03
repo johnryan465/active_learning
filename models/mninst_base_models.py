@@ -24,6 +24,23 @@ class PTMNISTResNet(ResNet, FeatureExtractor):
         return super(PTMNISTResNet, self).forward(x)
 
 
+class CNNMNIST(FeatureExtractor):
+    def __init__(self, params: NNParams):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=5)
+        self.fc1 = nn.Linear(1024, 128)
+        self.fc2 = nn.Linear(128, 10)
+
+    def forward(self, input: torch.Tensor):
+        input = F.relu(F.max_pool2d(self.conv1(input), 2))
+        input = F.relu(F.max_pool2d(self.conv2(input), 2))
+        input = input.view(-1, 1024)
+        input = F.relu(self.fc1(input))
+        input = self.fc2(input)
+        input = F.log_softmax(input, dim=1)
+        return input
+
 
 # class BNNMNISTResNet(BayesianModule, FeatureExtractor):
 #     def __init__(self, params: NNParams):
@@ -51,19 +68,21 @@ class PTMNISTResNet(ResNet, FeatureExtractor):
 class MNISTResNet(FeatureExtractor):
     def __init__(self, nn_params: NNParams):
         super().__init__()
+        depth = 10
         channels = 1
         image_size = 28
+        input_size = 28
         num_classes = 10
         params = nn_params
         
-        self.dropout_rate = params.dropout_rate
-        self.image_size = image_size
-        self.features_size = 256
+        assert (depth - 4) % 6 == 0, "Wide-resnet depth should be 6n+4"
 
-        coeff = params.coeff
-        batchnorm_momentum = params.batchnorm_momentum
-        n_power_iterations = params.n_power_iterations
-        spectral_normalization = params.spectral_normalization
+        self.dropout_rate = nn_params.dropout_rate
+        spectral_normalization = nn_params.spectral_normalization
+        coeff = nn_params.coeff
+        n_power_iterations = nn_params.n_power_iterations
+        widen_factor = 1
+        batchnorm_momentum = nn_params.batchnorm_momentum
 
         def wrapped_bn(num_features):
             if spectral_normalization:
@@ -77,20 +96,17 @@ class MNISTResNet(FeatureExtractor):
 
         self.wrapped_bn = wrapped_bn
 
-        def wrapped_conv(input_size, in_c, out_c, kernel_size, stride, padding=None):
-            if padding is None:
-                padding = 1 if kernel_size == 3 else 0
+        def wrapped_conv(input_size, in_c, out_c, kernel_size, stride):
+            padding = 1 if kernel_size == 3 else 0
 
-            conv = nn.Conv2d(in_c, out_c, kernel_size,
-                             stride, padding, bias=False)
+            conv = nn.Conv2d(in_c, out_c, kernel_size, stride, padding, bias=False)
 
             if not spectral_normalization:
                 return conv
+
             if kernel_size == 1:
-                # use spectral norm fc, because bound are
-                # tight for 1x1 convolutions
-                wrapped_conv = spectral_norm_fc(conv, coeff,
-                                                n_power_iterations)
+                # use spectral norm fc, because bound are tight for 1x1 convolutions
+                wrapped_conv = spectral_norm_fc(conv, coeff, n_power_iterations)
             else:
                 # Otherwise use spectral norm conv, with loose bound
                 input_dim = (in_c, input_size, input_size)
@@ -102,45 +118,37 @@ class MNISTResNet(FeatureExtractor):
 
         self.wrapped_conv = wrapped_conv
 
-        strides = [1, 1, 2, 2, 2]
-        nStages = 32 * np.cumprod(strides) #[64, 64, , 512, 1024]
-        layer_size = [2, 2, 2, 2]
-        input_sizes = image_size // np.cumprod(strides)
+        n = (depth - 4) // 6
+        k = widen_factor
 
-        n = 1  # layer_size
-        num_blocks = len(layer_size)
-        self.conv1 = self.wrapped_conv(image_size, 1, 32, 5, 1, padding=3)
+        nStages = [16, 16 * k, 32 * k, 64 * k]
+        strides = [1, 1, 2, 2]
 
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.conv1 = wrapped_conv(input_size, channels, nStages[0], 3, strides[0])
+        self.layer1, input_size = self._wide_layer(
+            nStages[0:2], n, strides[1], input_size
+        )
+        # self.layer2, input_size = self._wide_layer(
+        #     nStages[1:3], n, strides[2], input_size
+        # )
+        # self.layer3, input_size = self._wide_layer(
+        #     nStages[2:4], n, strides[3], input_size
+        # )
 
-        # "layers" are layers in the resnet sense, collections of blocks
-        # Layers are connected together with convolutions which reduce the spatial dimensions
-        self.layers = nn.ModuleList()
+        self.bn1 = self.wrapped_bn(nStages[1])
 
-        # for i in range(0, num_blocks):
-        self.layers.append(self._layer(nStages[1: 3], n, strides[2], 14))
-        # self.layers.append(self._layer(nStages[2: 4], n, strides[3], 7))
-
-        # print(self.layers)
-        self.bn1 = self.wrapped_bn(64)
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(64, num_classes)
+            self.linear = nn.Linear(nStages[1], num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out",
-                                        nonlinearity="relu")
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out",
-                                        nonlinearity="relu")
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                 nn.init.constant_(m.bias, 0)
 
-    def _layer(self, channels, num_blocks, stride, input_size):
-        # We have a possibly different stride as the first one
-        # as we could be at the beginning of a resnet layer where we are projecting
-        # down the number of spatial dimesions
+    def _wide_layer(self, channels, num_blocks, stride, input_size):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
 
@@ -159,16 +167,17 @@ class MNISTResNet(FeatureExtractor):
                 )
             )
             in_c = out_c
-            input_size = input_size // stride
+            input_size = (input_size - 1) // stride + 1
 
-        return nn.Sequential(*layers)
+        return nn.Sequential(*layers), input_size
 
     def forward(self, x):
         out = self.conv1(x)
-        for layer in self.layers:
-            out = layer(out)
+        out = self.layer1(out)
+        # out = self.layer2(out)
+        # out = self.layer3(out)
         out = F.relu(self.bn1(out))
-        out = self.avgpool(out)
+        out = F.avg_pool2d(out, out.shape[-1])
         out = out.flatten(1)
 
         if self.num_classes is not None:

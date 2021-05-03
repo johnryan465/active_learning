@@ -1,4 +1,4 @@
-from models.mninst_base_models import MNISTResNet, PTMNISTResNet
+from models.mninst_base_models import CNNMNIST, MNISTResNet, PTMNISTResNet
 from models.cifar_base_models import CIFARResNet
 from models.base_models import FeatureExtractor, LogSoftmaxModel
 from typing import Any, Callable, Dict, List, Optional
@@ -18,7 +18,7 @@ from dataclasses import dataclass
 class DNN(ModelWrapper):
     model : LogSoftmaxModel
     fe_config = {
-        DatasetName.mnist: [MNISTResNet, PTMNISTResNet],
+        DatasetName.mnist: [MNISTResNet, PTMNISTResNet, CNNMNIST],
         DatasetName.cifar10: [CIFARResNet]
     }
     def __init__(self, params: DNNParams, training_params: TrainingParams, dataset: ActiveLearningDataset) -> None:
