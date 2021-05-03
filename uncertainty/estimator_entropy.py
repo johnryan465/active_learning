@@ -236,8 +236,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
             pbar.close()
         
-        batch_entropy: TensorType = self.compute()
-        conditioned_entropy = output
+        batch_entropy: TensorType = self.compute().cpu()
+        conditioned_entropy = output.cpu()
         conditioned_entropy = conditioned_entropy + batch_entropy
         return conditioned_entropy
 
