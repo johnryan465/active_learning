@@ -1,7 +1,6 @@
 """
 From: https://github.com/jhjacobsen/invertible-resnet
 Which is based on: https://arxiv.org/abs/1811.00995
-
 Soft Spectral Normalization (not enforced, only <= coeff) for Conv2D layers
 Based on: Regularisation of Neural Networks by Enforcing Lipschitz Continuity
     (Gouk et al. 2018)
@@ -28,22 +27,21 @@ class SpectralNormConv(SpectralNorm):
 
         if do_power_iteration:
             with torch.no_grad():
+                output_padding = 0
+                if stride[0] > 1:
+                    # Note: the below does not generalize to stride > 2
+                    output_padding = 1 - self.input_dim[-1] % 2
+
                 for _ in range(self.n_power_iterations):
-                    # print(module.name)
-                    # print(weight.shape)
-                    # print(u.view(self.out_shape).shape)
-                    # We want the shape to be preserved so the output padding must be used carefully
-                    output_padding = (stride[0] - 1, stride[1] - 1) if (self.input_dim[-1] % 2 == 0) else (0, 0)
                     v_s = conv_transpose2d(
-                        u.view(self.out_shape),
+                        u.view(self.output_dim),
                         weight,
                         stride=stride,
                         padding=padding,
                         output_padding=output_padding,
                     )
-                    # print(v_s.shape)
-                    # print(v.shape)
                     v = normalize(v_s.view(-1), dim=0, eps=self.eps, out=v)
+
                     u_s = conv2d(
                         v.view(self.input_dim),
                         weight,
@@ -63,9 +61,7 @@ class SpectralNormConv(SpectralNorm):
         weight_v = weight_v.view(-1)
         sigma = torch.dot(u.view(-1), weight_v)
         # soft normalization: only when sigma larger than coeff
-        factor = torch.max(
-            torch.ones(1, device=weight.device), torch.div(sigma, self.coeff)
-        )
+        factor = torch.max(torch.ones(1, device=weight.device), sigma / self.coeff)
         weight = weight / factor
 
         # for logging
@@ -109,9 +105,12 @@ class SpectralNormConv(SpectralNorm):
             u = conv2d(
                 v.view(input_dim), weight, stride=stride, padding=padding, bias=None
             )
-            fn.out_shape = u.shape
+            fn.output_dim = u.shape
             num_output_dim = (
-                fn.out_shape[0] * fn.out_shape[1] * fn.out_shape[2] * fn.out_shape[3]
+                fn.output_dim[0]
+                * fn.output_dim[1]
+                * fn.output_dim[2]
+                * fn.output_dim[3]
             )
             # overwrite u with random init
             u = normalize(torch.randn(num_output_dim), dim=0, eps=fn.eps)
@@ -131,16 +130,10 @@ class SpectralNormConv(SpectralNorm):
 
 
 def spectral_norm_conv(
-    module,
-    coeff,
-    input_dim,
-    n_power_iterations=1,
-    name="weight",
-    eps=1e-12,
+    module, coeff, input_dim, n_power_iterations=1, name="weight", eps=1e-12,
 ):
     """
     Applies spectral normalization to Convolutions with flexible max norm
-
     Args:
         module (nn.Module): containing convolution module
         input_dim (tuple(int, int, int)): dimension of input to convolution
@@ -150,14 +143,10 @@ def spectral_norm_conv(
         name (str, optional): name of weight parameter
         eps (float, optional): epsilon for numerical stability in
             calculating norms
-
     Returns:
         The original module with the spectral norm hook
-
     Example::
-
         >>> m = spectral_norm_conv(nn.Conv2D(3, 16, 3), (3, 32, 32), 2.0)
-
     """
 
     input_dim_4d = torch.Size([1, input_dim[0], input_dim[1], input_dim[2]])

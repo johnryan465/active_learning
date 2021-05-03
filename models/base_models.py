@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -12,4 +13,5 @@ class LogSoftmaxModel(nn.Module):
         self.feature_extractor = feature_extractor
 
     def forward(self, x):
-        return F.log_softmax(self.feature_extractor(x), dim=1)
+        output = F.log_softmax(self.feature_extractor(x), dim=1)
+        return output

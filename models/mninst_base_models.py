@@ -38,7 +38,7 @@ class CNNMNIST(FeatureExtractor):
         input = input.view(-1, 1024)
         input = F.relu(self.fc1(input))
         input = self.fc2(input)
-        input = F.log_softmax(input, dim=1)
+        # input = F.log_softmax(input, dim=1)
         return input
 
 
@@ -64,13 +64,12 @@ class CNNMNIST(FeatureExtractor):
 
 
 
-
+# We need to reduce the number of parameters in this model
 class MNISTResNet(FeatureExtractor):
     def __init__(self, nn_params: NNParams):
         super().__init__()
-        depth = 10
+        depth = 28
         channels = 1
-        image_size = 28
         input_size = 28
         num_classes = 10
         params = nn_params
@@ -81,7 +80,6 @@ class MNISTResNet(FeatureExtractor):
         spectral_normalization = nn_params.spectral_normalization
         coeff = nn_params.coeff
         n_power_iterations = nn_params.n_power_iterations
-        widen_factor = 1
         batchnorm_momentum = nn_params.batchnorm_momentum
 
         def wrapped_bn(num_features):
@@ -97,7 +95,12 @@ class MNISTResNet(FeatureExtractor):
         self.wrapped_bn = wrapped_bn
 
         def wrapped_conv(input_size, in_c, out_c, kernel_size, stride):
-            padding = 1 if kernel_size == 3 else 0
+            if kernel_size == 3:
+                padding = 1
+            elif kernel_size == 5:
+                padding = 2
+            else:
+                padding = 0
 
             conv = nn.Conv2d(in_c, out_c, kernel_size, stride, padding, bias=False)
 
@@ -118,28 +121,17 @@ class MNISTResNet(FeatureExtractor):
 
         self.wrapped_conv = wrapped_conv
 
-        n = (depth - 4) // 6
-        k = widen_factor
 
-        nStages = [16, 16 * k, 32 * k, 64 * k]
-        strides = [1, 1, 2, 2]
 
-        self.conv1 = wrapped_conv(input_size, channels, nStages[0], 3, strides[0])
-        self.layer1, input_size = self._wide_layer(
-            nStages[0:2], n, strides[1], input_size
-        )
-        # self.layer2, input_size = self._wide_layer(
-        #     nStages[1:3], n, strides[2], input_size
-        # )
-        # self.layer3, input_size = self._wide_layer(
-        #     nStages[2:4], n, strides[3], input_size
-        # )
-
-        self.bn1 = self.wrapped_bn(nStages[1])
+        self.conv1 = wrapped_conv(input_size, channels, 32, 5, 1)
+        self.shortcut1 = wrapped_conv(input_size, channels, 32, 1, 1)
+        self.layer1 = wrapped_conv(input_size, 32, 64, 5, 1)
+        self.shortcut2 = wrapped_conv(input_size, 32, 64, 1, 1)
+        self.bn1 = self.wrapped_bn(64)
 
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(nStages[1], num_classes)
+            self.linear = nn.Linear(1024, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -148,37 +140,18 @@ class MNISTResNet(FeatureExtractor):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
                 nn.init.constant_(m.bias, 0)
 
-    def _wide_layer(self, channels, num_blocks, stride, input_size):
-        strides = [stride] + [1] * (num_blocks - 1)
-        layers = []
-
-        in_c, out_c = channels
-
-        for stride in strides:
-            layers.append(
-                WideBasic(
-                    self.wrapped_conv,
-                    self.wrapped_bn,
-                    input_size,
-                    in_c,
-                    out_c,
-                    stride,
-                    self.dropout_rate,
-                )
-            )
-            in_c = out_c
-            input_size = (input_size - 1) // stride + 1
-
-        return nn.Sequential(*layers), input_size
-
     def forward(self, x):
-        out = self.conv1(x)
-        out = self.layer1(out)
-        # out = self.layer2(out)
-        # out = self.layer3(out)
-        out = F.relu(self.bn1(out))
-        out = F.avg_pool2d(out, out.shape[-1])
+        # print(x.shape)
+        out1 = self.conv1(x)
+        out1 += self.shortcut1(x)
+        out2 = self.layer1(out1)
+        out2 += self.shortcut2(out1)
+        out2 = F.relu(self.bn1(out2))
+        # print(out.shape)
+        out = F.avg_pool2d(out2, 7)
+        # print(out.shape)
         out = out.flatten(1)
+        # print(out.shape)
 
         if self.num_classes is not None:
             out = self.linear(out)
