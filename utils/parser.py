@@ -65,7 +65,7 @@ def init_parser() -> argparse.ArgumentParser:
             q.add_argument('--var_opt', default=-1, type=float)
             q.add_argument('--dropout', default=0.0, type=float)
             q.add_argument('--lr', default=0.01, type=float)
-            q.add_argument('--spectral_norm', default=True, type=bool)
+            q.add_argument('--spectral_norm', default=False, action='store_true')
             q.add_argument('--power_iter', default=1, type=int)
             q.add_argument('--coeff', default=9, type=float)
             q.add_argument('--n_inducing_points', default=10, type=int)
@@ -174,7 +174,7 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
         )
 
         model_params = BNNParams(
-            model_index=0,
+            model_index=args.model_index,
             fe_params=nn_params
         )
     else:
