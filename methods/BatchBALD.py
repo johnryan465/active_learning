@@ -50,6 +50,7 @@ class BatchBALD(UncertainMethod):
             candidate_scores = []
             inputs: TensorType["datapoints","channels","x","y"] = get_pool(dataset)
             N = inputs.shape[0]
+            num_cat = 10
             batch_size = self.params.aquisition_size
             batch_size = min(batch_size, N)
             if isinstance(model_wrapper, vDUQ):

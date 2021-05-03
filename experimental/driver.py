@@ -89,6 +89,7 @@ class Driver:
         @trainer.on(Events.EPOCH_COMPLETED)
         def log_results(trainer):
             line = dict(trainer.state.metrics)
+            print(line)
             line['epoch'] = trainer.state.epoch
             train_log_lines.append(line)
 
@@ -99,6 +100,7 @@ class Driver:
         def eval_results(trainer):
             evaluator.run(test_loader)
             line = dict(evaluator.state.metrics)
+            print(line)
             line['epoch'] = trainer.state.epoch
             test_log_lines.append(line)
 

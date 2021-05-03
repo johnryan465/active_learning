@@ -1,37 +1,22 @@
-from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout, ConsistentMCDropout2d
-from models.model_params import NNParams
-import torch.nn as nn
-import torch.nn.functional as F
-
-import torch
-
-
-from vduq.layers import spectral_norm_conv, spectral_norm_fc
-from vduq.layers import SpectralBatchNorm2d
-from vduq.wide_resnet import WideBasic, WideResNet
-from torchvision.models.resnet import ResNet, BasicBlock
-
-import numpy as np
-
-
-class CIFARResNet(WideResNet):
-    def __init__(self, params: NNParams):
-        super(CIFARResNet, self).__init__(
-            spectral_normalization=params.spectral_normalization,
-            dropout_rate=params.dropout_rate,
-            coeff=params.coeff,
-            channels=3,
-            image_size=32,
-            n_power_iterations=params.n_power_iterations,
-            batchnorm_momentum=params.batchnorm_momentum,
-        )
-
 # A resnet for MNIST as a sanity check comparison to the custom one below
 
 
-class PTMNISTResNet(ResNet):
+
+import numpy as np
+from vduq.layers import spectral_norm_conv, spectral_norm_fc
+from vduq.layers.spectral_batchnorm import SpectralBatchNorm2d
+from vduq.wide_resnet import WideBasic
+from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout, ConsistentMCDropout2d
+from models.model_params import NNParams
+from models.base_models import FeatureExtractor
+from torchvision.models.resnet import ResNet, BasicBlock
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class PTMNISTResNet(ResNet, FeatureExtractor):
     def __init__(self, params: NNParams):
-        super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=512)
+        super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=10)
         self.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.fc = nn.Identity()
 
@@ -39,34 +24,38 @@ class PTMNISTResNet(ResNet):
         return torch.softmax(super(PTMNISTResNet, self).forward(x), dim=-1)
 
 
-class BNNMNISTResNet(BayesianModule):
-    def __init__(self, params: NNParams):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
-        self.conv1_drop = ConsistentMCDropout2d()
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=5)
-        self.conv2_drop = ConsistentMCDropout2d()
-        self.fc1 = nn.Linear(1024, 128)
-        self.fc1_drop = ConsistentMCDropout()
-        self.fc2 = nn.Linear(128, 128)
 
-    def mc_forward_impl(self, input: torch.Tensor):
-        input = F.relu(F.max_pool2d(self.conv1_drop(self.conv1(input)), 2))
-        input = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(input)), 2))
-        input = input.view(-1, 1024)
-        input = F.relu(self.fc1_drop(self.fc1(input)))
-        input = self.fc2(input)
-        # input = F.log_softmax(input, dim=1)
-        return input
+# class BNNMNISTResNet(BayesianModule, FeatureExtractor):
+#     def __init__(self, params: NNParams):
+#         super().__init__()
+#         self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
+#         self.conv1_drop = ConsistentMCDropout2d()
+#         self.conv2 = nn.Conv2d(32, 64, kernel_size=5)
+#         self.conv2_drop = ConsistentMCDropout2d()
+#         self.fc1 = nn.Linear(1024, 128)
+#         self.fc1_drop = ConsistentMCDropout()
+#         self.fc2 = nn.Linear(128, 128)
+
+#     def mc_forward_impl(self, input: torch.Tensor):
+#         input = F.relu(F.max_pool2d(self.conv1_drop(self.conv1(input)), 2))
+#         input = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(input)), 2))
+#         input = input.view(-1, 1024)
+#         input = F.relu(self.fc1_drop(self.fc1(input)))
+#         input = self.fc2(input)
+#         # input = F.log_softmax(input, dim=1)
+#         return input
 
 
-class MNISTResNet(nn.Module):
-    def __init__(self, params: NNParams):
+
+
+class MNISTResNet(FeatureExtractor):
+    def __init__(self, nn_params: NNParams):
         super().__init__()
         channels = 1
         image_size = 28
         num_classes = None
-
+        params = nn_params
+        
         self.dropout_rate = params.dropout_rate
         self.image_size = image_size
         self.features_size = 256
@@ -186,6 +175,5 @@ class MNISTResNet(nn.Module):
 
         if self.num_classes is not None:
             out = self.linear(out)
-            out = F.softmax(out, dim=1)
 
         return out

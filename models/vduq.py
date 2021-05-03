@@ -16,7 +16,8 @@ from models.model import UncertainModel
 from models.training import TrainingParams
 from models.model_params import ModelWrapperParams
 from vduq.dkl import GP, DKL_GP
-from vduq.small_resnet import BNNMNISTResNet, MNISTResNet, PTMNISTResNet, CIFARResNet
+from models.mninst_base_models import MNISTResNet, PTMNISTResNet
+from models.cifar_base_models import CIFARResNet
 from vduq.dkl import initial_values_for_GP
 from gpytorch.mlls import VariationalELBO
 from gpytorch.likelihoods import SoftmaxLikelihood
@@ -34,10 +35,10 @@ class vDUQParams(ModelWrapperParams):
     gp_params: GPParams
 
 
-class   vDUQ(UncertainModel):
+class vDUQ(UncertainModel):
     model : DKL_GP
     fe_config = {
-        DatasetName.mnist: [MNISTResNet, PTMNISTResNet, BNNMNISTResNet],
+        DatasetName.mnist: [MNISTResNet, PTMNISTResNet],
         DatasetName.cifar10: [CIFARResNet]
     }
 
@@ -276,6 +277,7 @@ class   vDUQ(UncertainModel):
         model.model.load_state_dict(state['model'])
         model.likelihood.load_state_dict(state['likelihood'])
         return model
+
     def reset(self) -> None:
         return super().reset()
 

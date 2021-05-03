@@ -34,3 +34,7 @@ class NNParams(ModelParams):
     coeff: float = 9.0
     n_power_iterations: int = 1
 
+@dataclass
+class DNNParams(ModelWrapperParams):
+    nn_params: NNParams
+

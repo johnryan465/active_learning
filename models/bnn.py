@@ -153,7 +153,7 @@ class BNN(UncertainModel):
         }
 
     @classmethod
-    def load_state_dict(cls, state: Dict[str, Any], dataset: ActiveLearningDataset) -> 'vDUQ':
+    def load_state_dict(cls, state: Dict[str, Any], dataset: ActiveLearningDataset) -> 'BNN':
         params = state['model_params']
         training_params = state['training_params']
 

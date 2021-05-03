@@ -1,6 +1,9 @@
-from typing import Callable, Dict, List, Optional
+from models.mninst_base_models import MNISTResNet, PTMNISTResNet
+from models.cifar_base_models import CIFARResNet
+from models.base_models import FeatureExtractor, SoftmaxModel
+from typing import Any, Callable, Dict, List, Optional
 
-from models.model_params import NNParams, ModelWrapperParams
+from models.model_params import NNParams, ModelWrapperParams, DNNParams
 from datasets.activelearningdataset import ActiveLearningDataset, DatasetName
 from models.training import TrainingParams
 from .model import ModelWrapper
@@ -12,31 +15,33 @@ import torch.optim as optim
 from dataclasses import dataclass
 
 
-@dataclass
-class DNNParams(ModelWrapperParams):
-    nn_params: NNParams
-
-
 class DNN(ModelWrapper):
+    model : SoftmaxModel
+    fe_config = {
+        DatasetName.mnist: [MNISTResNet, PTMNISTResNet],
+        DatasetName.cifar10: [CIFARResNet]
+    }
     def __init__(self, params: DNNParams, training_params: TrainingParams, dataset: ActiveLearningDataset) -> None:
         super().__init__()
+        self.params = params
         self.training_params = training_params
-        if training_params.dataset == DatasetName.mnist:
-            self.model = MNISTNet()
-        elif training_params.dataset == DatasetName.cifar10:
-            self.model = CIFAR10Net()
-        else:
-            raise ValueError('Unsupported Dataset')
+
+        feature_extractor = DNN.fe_config[training_params.dataset][params.model_index](params.nn_params)
+
+        self.model = SoftmaxModel(feature_extractor)
 
         if training_params.cuda:
             self.model = self.model.cuda()
 
-        self.paramaters = [{"params": self.model.parameters(), "lr": 0.001}]
-        self.optimizer = optim.SGD(self.paramaters, lr=0.001, momentum=0.9)
+        self.paramaters = [{"params": self.model.parameters(), "lr": training_params.optimizers.optimizer}]
+        self.optimizer = optim.SGD(self.paramaters, lr=training_params.optimizers.optimizer, momentum=0.9)
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def reset(self) -> None:
-        self.net = CIFAR10Net()
+    def reset(self, dataset: ActiveLearningDataset) -> None:
+        self.initialize(dataset)
+
+    def initialize(self, dataset: ActiveLearningDataset) -> None:
+        return super().initialize(dataset)
 
     def get_loss_fn(self):
         return self.loss_fn
@@ -86,17 +91,40 @@ class DNN(ModelWrapper):
             loss.backward()
             optimizer.step()
 
-            return loss.item()
+            return { 'loss': loss.item() }
         return step
 
     def get_output_transform(self) -> Callable:
         return lambda x: x
 
-    def get_training_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
-        return {}
+    def get_training_log_hooks(self):
+        return {
+            'loss': lambda x: x['loss']
+        }
 
-    def get_test_log_hooks(self) -> Dict[str, Callable[[Dict[str, float]], float]]:
-        return {}
+    def get_test_log_hooks(self):
+        return {
+            'accuracy': self.get_output_transform(),
+            'loss': lambda x: x
+        }
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "model": self.model.state_dict(),
+            "training_params": self.training_params,
+            "model_params": self.params
+        }
+
+    @classmethod
+    def load_state_dict(cls, state: Dict[str, Any], dataset: ActiveLearningDataset) -> 'DNN':
+        params = state['model_params']
+        training_params = state['training_params']
+
+        # We create the new object and then update the weights
+
+        model = DNN(params, training_params, dataset)
+        model.model.load_state_dict(state['model'])
+        return model
 
 
 class CIFAR10Net(nn.Module):

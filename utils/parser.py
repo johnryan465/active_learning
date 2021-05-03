@@ -55,27 +55,26 @@ def init_parser() -> argparse.ArgumentParser:
         p.add_argument('--epochs', default=100, type=int, required=True)
         p.add_argument('--dataset', default=DatasetName.mnist, type=DatasetName)
         p.add_argument('--num_repetitions', default=1, type=int)
-        p.add_argument('--model_index', default=0, type=int)
         
         p.set_defaults(method=method)
         nestedsubpraser = p.add_subparsers(dest='model')
         for model in models:
             q = nestedsubpraser.add_parser(model)
             q.set_defaults(model=model)
+            q.add_argument('--model_index', default=0, type=int)
+            q.add_argument('--var_opt', default=-1, type=float)
+            q.add_argument('--dropout', default=0.0, type=float)
+            q.add_argument('--lr', default=0.01, type=float)
+            q.add_argument('--spectral_norm', default=True, type=bool)
+            q.add_argument('--power_iter', default=1, type=int)
+            q.add_argument('--coeff', default=9, type=float)
+            q.add_argument('--n_inducing_points', default=10, type=int)
             if model == "vduq":
-                q.add_argument('--spectral_norm', default=True, type=bool)
-                q.add_argument('--power_iter', default=1, type=int)
-                q.add_argument('--dropout', default=0.0, type=float)
-                q.add_argument('--lr', default=0.01, type=float)
-                q.add_argument('--var_opt', default=-1, type=float)
-                q.add_argument('--coeff', default=9, type=float)
-                q.add_argument('--n_inducing_points', default=10, type=int)
+                pass
             elif model == "bnn":
-                q.add_argument('--dropout', default=0.0, type=float)
-                q.add_argument('--lr', default=0.01, type=float)
+                pass
             elif model == "dnn":
-                q.add_argument('--dropout', default=0.0, type=float)
-                q.add_argument('--lr', default=0.01, type=float)
+                pass
             else:
                 pass
         method_parsers[method] = p
@@ -162,7 +161,7 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
         )
 
         model_params = vDUQParams(
-            model_index=0,
+            model_index=args.model_index,
             gp_params=gp_params,
             fe_params=nn_params
         )
@@ -199,7 +198,7 @@ def parse_training(args: argparse.Namespace) -> TrainingParams:
     # Parse training params
     opt_params = OptimizerParams(
         optimizer=args.lr,
-        # var_optimizer=args.var_opt
+        var_optimizer=args.var_opt
     )
     training_params = TrainingParams(
         dataset=args.dataset,
