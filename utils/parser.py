@@ -206,7 +206,7 @@ def parse_training(args: argparse.Namespace) -> TrainingParams:
         epochs=args.epochs,
         cuda=use_cuda,
         optimizers=opt_params,
-        patience=3,
+        patience=10,
         progress_bar=args.use_progress
     )
     return training_params

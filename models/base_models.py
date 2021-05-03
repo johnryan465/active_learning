@@ -6,10 +6,10 @@ import torch.nn.functional as F
 class FeatureExtractor(nn.Module):
     pass
 
-class SoftmaxModel(nn.Module):
+class LogSoftmaxModel(nn.Module):
     def __init__(self, feature_extractor: FeatureExtractor):
-        super(SoftmaxModel, self).__init__()
+        super(LogSoftmaxModel, self).__init__()
         self.feature_extractor = feature_extractor
 
     def forward(self, x):
-        return F.softmax(self.feature_extractor(x), dim=1)
+        return F.log_softmax(self.feature_extractor(x), dim=1)

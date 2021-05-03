@@ -1,6 +1,6 @@
 from models.mninst_base_models import MNISTResNet, PTMNISTResNet
 from models.cifar_base_models import CIFARResNet
-from models.base_models import FeatureExtractor, SoftmaxModel
+from models.base_models import FeatureExtractor, LogSoftmaxModel
 from typing import Any, Callable, Dict, List, Optional
 
 from models.model_params import NNParams, ModelWrapperParams, DNNParams
@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 
 class DNN(ModelWrapper):
-    model : SoftmaxModel
+    model : LogSoftmaxModel
     fe_config = {
         DatasetName.mnist: [MNISTResNet, PTMNISTResNet],
         DatasetName.cifar10: [CIFARResNet]
@@ -28,14 +28,14 @@ class DNN(ModelWrapper):
 
         feature_extractor = DNN.fe_config[training_params.dataset][params.model_index](params.nn_params)
 
-        self.model = SoftmaxModel(feature_extractor)
+        self.model = LogSoftmaxModel(feature_extractor)
 
         if training_params.cuda:
             self.model = self.model.cuda()
 
         self.paramaters = [{"params": self.model.parameters(), "lr": training_params.optimizers.optimizer}]
         self.optimizer = optim.SGD(self.paramaters, lr=training_params.optimizers.optimizer, momentum=0.9)
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.NLLLoss()
 
     def reset(self, dataset: ActiveLearningDataset) -> None:
         self.initialize(dataset)

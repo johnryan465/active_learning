@@ -128,7 +128,7 @@ class BNN(UncertainModel):
 
     def initialize(self, dataset: ActiveLearningDataset) -> None:
         self.model = BNN.model_config[self.training_params.dataset][self.params.model_index](self.nn_params)
-
+        
         self.parameters = [{
             "params": self.model.parameters(),
             "lr": self.training_params.optimizers.optimizer}]
