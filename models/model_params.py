@@ -33,6 +33,7 @@ class NNParams(ModelParams):
     spectral_normalization: bool = False
     coeff: float = 9.0
     n_power_iterations: int = 1
+    num_classes: int = None # type: ignore
 
 @dataclass
 class DNNParams(ModelWrapperParams):

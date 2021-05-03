@@ -71,7 +71,7 @@ class MNISTResNet(FeatureExtractor):
         depth = 28
         channels = 1
         input_size = 28
-        num_classes = 10
+        num_classes = nn_params.num_classes
         params = nn_params
         
         assert (depth - 4) % 6 == 0, "Wide-resnet depth should be 6n+4"
@@ -147,11 +147,8 @@ class MNISTResNet(FeatureExtractor):
         out2 = self.layer1(out1)
         out2 += self.shortcut2(out1)
         out2 = F.relu(self.bn1(out2))
-        # print(out.shape)
         out = F.avg_pool2d(out2, 7)
-        # print(out.shape)
         out = out.flatten(1)
-        # print(out.shape)
 
         if self.num_classes is not None:
             out = self.linear(out)
