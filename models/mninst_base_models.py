@@ -53,7 +53,7 @@ class MNISTResNet(FeatureExtractor):
         super().__init__()
         channels = 1
         image_size = 28
-        num_classes = None
+        num_classes = 10
         params = nn_params
         
         self.dropout_rate = params.dropout_rate
@@ -103,7 +103,7 @@ class MNISTResNet(FeatureExtractor):
         self.wrapped_conv = wrapped_conv
 
         strides = [1, 1, 2, 2, 2]
-        nStages = 64 * np.cumprod(strides) #[64, 128, 256, 512, 1024]
+        nStages = 64 * np.cumprod(strides) #[64, 64, , 512, 1024]
         layer_size = [2, 2, 2, 2]
         input_sizes = image_size // np.cumprod(strides)
 
@@ -118,16 +118,15 @@ class MNISTResNet(FeatureExtractor):
         self.layers = nn.ModuleList()
 
         # for i in range(0, num_blocks):
-        self.layers.append(self._layer(nStages[0: 2], n, strides[1], 14))
         self.layers.append(self._layer(nStages[1: 3], n, strides[2], 14))
         self.layers.append(self._layer(nStages[2: 4], n, strides[3], 7))
 
         # print(self.layers)
-        self.bn1 = self.wrapped_bn(nStages[0])
+        self.bn1 = self.wrapped_bn(256)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(nStages[num_blocks - 1], num_classes)
+            self.linear = nn.Linear(256, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -166,14 +165,12 @@ class MNISTResNet(FeatureExtractor):
 
     def forward(self, x):
         out = self.conv1(x)
-        out = F.relu(self.bn1(out))
-        # out = self.maxpool(out)
         for layer in self.layers:
             out = layer(out)
+        out = F.relu(self.bn1(out))
         out = self.avgpool(out)
         out = out.flatten(1)
 
         if self.num_classes is not None:
             out = self.linear(out)
-
         return out
