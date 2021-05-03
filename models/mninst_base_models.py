@@ -21,7 +21,7 @@ class PTMNISTResNet(ResNet, FeatureExtractor):
         self.fc = nn.Identity()
 
     def forward(self, x):
-        return torch.softmax(super(PTMNISTResNet, self).forward(x), dim=-1)
+        return super(PTMNISTResNet, self).forward(x)
 
 
 
