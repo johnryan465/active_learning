@@ -52,8 +52,14 @@ class CurrentBatch:
     @staticmethod
     def empty(num_cat: int) -> "CurrentBatch":
         covar = torch.eye(0)[None,:,:].expand(num_cat, -1, -1)
-        covar = BlockInterleavedLazyTensor(lazify(covar))
-        distribution = MultitaskMultivariateNormal(mean=torch.zeros(0, num_cat), covariance_matrix=covar)
+        mean = torch.zeros(0, num_cat).cuda()
+        if torch.cuda.is_available():
+            covar = BlockInterleavedLazyTensor(lazify(covar.cuda()).cuda())
+            mean = mean.cuda()
+        else:
+            covar = BlockInterleavedLazyTensor(lazify(covar))
+        
+        distribution = MultitaskMultivariateNormal(mean=mean, covariance_matrix=covar)
         return CurrentBatch(distribution, num_cat, num_points=0)
 
     def get_inverse(self) -> TensorType:
