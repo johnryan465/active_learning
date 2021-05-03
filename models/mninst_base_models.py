@@ -73,6 +73,7 @@ class MNISTResNet(FeatureExtractor):
         input_size = 28
         num_classes = nn_params.num_classes
         params = nn_params
+        self.num_features = 1024
         
         assert (depth - 4) % 6 == 0, "Wide-resnet depth should be 6n+4"
 
