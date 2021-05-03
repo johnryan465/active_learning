@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from typing import List
+from typing import Iterator, List
+from uncertainty.rank2 import Rank1Update, Rank1Updates, Rank2Combine
 from gpytorch.distributions import distribution
 
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
@@ -19,13 +20,6 @@ import string
 # Here we encapsalate the logic for actually estimating the joint entropy
 
 
-@dataclass
-class Rank1Update:
-    mean: TensorType
-    covariance: TensorType
-    cross_covariance: TensorType
-
-Rank1Updates = List[Rank1Update]
 
 
 @dataclass
@@ -111,7 +105,7 @@ class MVNJointEntropyEstimator(ABC):
         pass
 
     @abstractmethod
-    def compute_batch(self, candidates: List[Rank1Update]) -> TensorType["N"]:
+    def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:
         pass
 
     @abstractmethod
@@ -183,7 +177,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             log_p = log_p.cuda()
 
 
-        N = len(candidates)
+        N = candidates.size
         
         P = self.per_samples
 
@@ -199,10 +193,10 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             Y = self.batch.num_cat
             
             p_l_x = log_p.exp()
-            for i in range(N):
+            for candidate in candidates:
                 p_x_y: TensorType["X", "Y"] = torch.zeros(X, Y)
                 for j in range(self.batch_samples):
-                    pool_rank1 = candidates[i]
+                    pool_rank1 = candidate
                     sample = self.likelihood_samples[j]
                     distribution = self.batch.create_conditional(pool_rank1, sample)
 

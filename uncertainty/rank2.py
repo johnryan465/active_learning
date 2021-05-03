@@ -2,14 +2,24 @@
 # This class wraps the rank 2 GP outputs we use for updating our joint entropy
 # We are assuming that the covariance matrix is a block interleaved lazy tensor
 # This enables us to perform operations in a way which give better numerical stability
-from uncertainty.estimator_entropy import Rank1Update
-from typing import List
+from dataclasses import dataclass
+from typing import Iterator, List
 import torch
 from utils.typing import MultitaskMultivariateNormalType, TensorType
 from typeguard import typechecked
 from toma import toma
 from tqdm import tqdm
 from gpytorch.lazy import cat
+
+
+
+@dataclass
+class Rank1Update:
+    mean: TensorType
+    covariance: TensorType
+    cross_covariance: TensorType
+
+# Rank1Updates = Iterator[Rank1Update]
 
 
 # Here we encapsilate the logic for allowing us to minimise the amount of 
@@ -89,8 +99,20 @@ class Rank2Combine:
         cross_mat = self.get_cross_mat()[idx]
         return Rank1Update(mean, self_cov, cross_mat)
 
-    def get_rank_1_updates(self) -> List[Rank1Update]:
-        updates = []
-        for idx in range(0, self.pool_size - len(self.candidate_indexes)):
-            updates.append(self.get_rank_1_update(idx))
-        return updates
+class Rank1Updates:
+    def __init__(self, r2c: Rank2Combine):
+        self.max = r2c.pool_size - len(r2c.candidate_indexes)
+        self.r2c = r2c
+        self.size = self.max
+
+    def __iter__(self):
+        self.idx = 0
+        return self
+
+    def __next__(self) -> Rank1Update:
+        if self.idx >= self.max:
+            update =  self.r2c.get_rank_1_update(self.idx)
+            self.idx += 1
+            return update
+        else:
+            raise StopIteration

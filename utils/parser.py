@@ -166,7 +166,6 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
             fe_params=nn_params
         )
     elif args.model == ModelName.bnn:
-
         nn_params = NNParams(
             dropout_rate=args.dropout,
             batchnorm_momentum=0.01,
@@ -185,6 +184,7 @@ def parse_model(args: argparse.Namespace) -> ModelParams:
             n_power_iterations=args.power_iter,
             batchnorm_momentum=0.01,
             weight_decay=5e-4,
+            num_classes=10
         )
 
         model_params = DNNParams(
@@ -206,7 +206,7 @@ def parse_training(args: argparse.Namespace) -> TrainingParams:
         epochs=args.epochs,
         cuda=use_cuda,
         optimizers=opt_params,
-        patience=10,
+        patience=3,
         progress_bar=args.use_progress
     )
     return training_params

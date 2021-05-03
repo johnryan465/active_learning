@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from batchbald_redux.batchbald import compute_conditional_entropy
 from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator, CurrentBatch, ExactJointEntropyEstimator, MVNJointEntropyEstimator, Rank1Update, SampledJointEntropyEstimator
-from uncertainty.rank2 import Rank2Combine, Rank2Next
+from uncertainty.rank2 import Rank1Updates, Rank2Combine, Rank2Next
 from uncertainty.mvn_utils import chunked_cat_rows, chunked_distribution
 from gpytorch.distributions import distribution
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
@@ -12,7 +12,7 @@ from torch import distributions
 
 from gpytorch.lazy import CatLazyTensor, BlockInterleavedLazyTensor, batch_repeat_lazy_tensor, cat
 from torch.distributions.utils import _standard_normal
-from typing import Callable, List, Type
+from typing import Callable, Iterator, List, Type
 from typeguard import typechecked
 from utils.typing import MultitaskMultivariateNormalType, MultivariateNormalType, TensorType
 
@@ -63,7 +63,7 @@ class CustomJointEntropy(GPCJointEntropy):
     # We compute the joint entropy of the distributions
     @typechecked
     def compute_batch(self, rank2: Rank2Next) -> TensorType["N"]:
-        l_rank1updates: List[Rank1Update] = self.r2c.get_rank_1_updates()
+        l_rank1updates: Rank1Updates = Rank1Updates(self.r2c)
         return self.r2c.expand_to_full_pool(self.estimator.compute_batch(l_rank1updates))
 
 @typechecked
