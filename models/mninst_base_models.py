@@ -103,13 +103,13 @@ class MNISTResNet(FeatureExtractor):
         self.wrapped_conv = wrapped_conv
 
         strides = [1, 1, 2, 2, 2]
-        nStages = 64 * np.cumprod(strides) #[64, 64, , 512, 1024]
+        nStages = 32 * np.cumprod(strides) #[64, 64, , 512, 1024]
         layer_size = [2, 2, 2, 2]
         input_sizes = image_size // np.cumprod(strides)
 
         n = 1  # layer_size
         num_blocks = len(layer_size)
-        self.conv1 = self.wrapped_conv(image_size, 1, 64, 7, 2, padding=3)
+        self.conv1 = self.wrapped_conv(image_size, 1, 32, 5, 1, padding=3)
 
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
@@ -122,11 +122,11 @@ class MNISTResNet(FeatureExtractor):
         # self.layers.append(self._layer(nStages[2: 4], n, strides[3], 7))
 
         # print(self.layers)
-        self.bn1 = self.wrapped_bn(128)
+        self.bn1 = self.wrapped_bn(64)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(128, num_classes)
+            self.linear = nn.Linear(64, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
