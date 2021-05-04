@@ -108,6 +108,10 @@ class Rank1Updates:
     def __iter__(self):
         self.idx = 0
         return self
+    
+    def __len__(self):
+        return self.size
+
 
     def __next__(self) -> Rank1Update:
         if self.idx < self.max:
