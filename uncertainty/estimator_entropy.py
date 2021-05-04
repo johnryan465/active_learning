@@ -75,9 +75,7 @@ class CurrentBatch:
         sigma_YY: TensorType["C", 1, 1] = rank1.covariance
         sigma_YX: TensorType["C", 1, "D"] = rank1.cross_covariance
         sigma_XX_inv: TensorType["C", 1, "D"] = self.get_inverse()
-
-        conditional_cov: TensorType["C", 1, 1] = sigma_YY - (sigma_YX @ sigma_XX_inv @ torch.transpose( sigma_YX, -1, -2))
-
+        
         # mean = mu_Y + sigma_YX sigma_XX^{-1} (X - mu_x)
         # We want to expand the batch dist mean and covariance so we can broadcast in numbesumr of samples
         mu_Y: TensorType["C", 1] = torch.transpose(rank1.mean, -1, -2)
@@ -90,6 +88,8 @@ class CurrentBatch:
             mu_X = mu_X.cuda()
             sigma_XX_inv = sigma_XX_inv.cuda()
             sigma_YX = sigma_YX.cuda()
+
+        conditional_cov: TensorType["C", 1, 1] = sigma_YY - (sigma_YX @ sigma_XX_inv @ torch.transpose( sigma_YX, -1, -2))
 
         tmp_vector: TensorType["C", "D", 1] = (X - mu_X).unsqueeze(-1)
 
