@@ -226,7 +226,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                     p_x_y += p_x_y_.cpu()
                 # print(p_l_x_y)
                 p_x_y = p_x_y / L
-                p_x = torch.mean(p_l_x, dim=0)
+                p_x = torch.mean(p_l_x, dim=0).cpu()
                 p_y_given_x: TensorType["X", "Y"] = p_x_y / (p_x[:,None])
                 p: TensorType["X", "Y"] = - torch.log(p_y_given_x)  * p_y_given_x # - p(y | x) log p(y | x)
                 p: TensorType["X"] = torch.sum(p, 1)  # H(Y | X=x)
