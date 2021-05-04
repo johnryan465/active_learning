@@ -52,7 +52,7 @@ class CurrentBatch:
     @staticmethod
     def empty(num_cat: int) -> "CurrentBatch":
         covar = torch.eye(0)[None,:,:].expand(num_cat, -1, -1)
-        mean = torch.zeros(0, num_cat).cuda()
+        mean = torch.zeros(0, num_cat)
         if torch.cuda.is_available():
             covar = BlockInterleavedLazyTensor(lazify(covar.cuda()).cuda())
             mean = mean.cuda()
@@ -199,7 +199,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             Y = self.batch.num_cat
             
             p_l_x = log_p.exp()
-            for candidate in candidates:
+            for i, candidate in enumerate(candidates):
                 p_x_y: TensorType["X", "Y"] = torch.zeros(X, Y)
                 for j in range(self.batch_samples):
                     pool_rank1 = candidate

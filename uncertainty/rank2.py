@@ -110,7 +110,7 @@ class Rank1Updates:
         return self
 
     def __next__(self) -> Rank1Update:
-        if self.idx >= self.max:
+        if self.idx < self.max:
             update =  self.r2c.get_rank_1_update(self.idx)
             self.idx += 1
             return update
