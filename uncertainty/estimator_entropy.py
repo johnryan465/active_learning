@@ -273,9 +273,12 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
-        for i in range(0, N):
-            possible_batch = self.batch.append(pool[i])
+        pbar = tqdm(total=N, desc="Exact Batch", leave=False)
+        for i, candidate in enumerate(pool):
+            possible_batch = self.batch.append(candidate)
             output[i] = ExactJointEntropyEstimator._compute(possible_batch, self.likelihood, self.samples)
+            pbar.update(1)
+        pbar.close()
         return output
 
     def add_variable(self, new: Rank1Update) -> None:
@@ -308,9 +311,12 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
     def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
+        pbar = tqdm(total=N, desc="BBRedux Batch", leave=False)
         for i, candidate in enumerate(pool):
             possible_batch = self.batch.append(candidate)
             output[i] = BBReduxJointEntropyEstimator._compute(possible_batch, self.likelihood, self.samples)
+            pbar.update(1)
+        pbar.close()
         return output
 
     def add_variable(self, new: Rank1Update) -> None:
