@@ -71,7 +71,7 @@ def compute_conditional_entropy_mvn(distribution: MultitaskMultivariateNormalTyp
     # The distribution input is a batch of MVNS
     N = distribution.batch_shape[0]
     def func(dist: MultitaskMultivariateNormalType) -> TensorType:
-        log_probs_K_n_C = (likelihood(dist.sample(sample_shape=torch.Size([num_samples]))).logits).squeeze()
+        log_probs_K_n_C = (likelihood(dist.sample(sample_shape=torch.Size([num_samples]))).logits).squeeze(-1)
         log_probs_n_K_C = log_probs_K_n_C.permute(1, 0, 2)
         return compute_conditional_entropy(log_probs_N_K_C=log_probs_n_K_C)
     
