@@ -120,7 +120,7 @@ class BatchBALD(UncertainMethod):
 
                     scores_N = joint_entropy_result.detach().cpu()
 
-                    # scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
 
                     candidate_score, candidate_index = scores_N.max(dim=0)

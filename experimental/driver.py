@@ -57,8 +57,8 @@ class Driver:
         train_loader = dataset.get_train()
 
         def score_fn(engine):
-            score = engine.state.metrics['loss']
-            return -score
+            score = engine.state.metrics['accuracy']
+            return score
 
         if training_params.patience > 0:
             es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
