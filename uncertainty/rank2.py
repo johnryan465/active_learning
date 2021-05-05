@@ -28,8 +28,8 @@ class Rank1Update:
 class Rank2Next:
     # We interprete the first item as the candidate item
     def __init__(self, rank_2_mvn: MultitaskMultivariateNormalType[("N",1),(2, "C")]) -> None:
-        self.cov = rank_2_mvn.lazy_covariance_matrix.base_lazy_tensor.evaluate().squeeze(1)
-        self.mean = (rank_2_mvn.mean.squeeze(1))[:, 1, :]
+        self.cov = rank_2_mvn.lazy_covariance_matrix.base_lazy_tensor.evaluate().squeeze(1).cpu()
+        self.mean = (rank_2_mvn.mean.squeeze(1))[:, 1, :].cpu()
 
     @typechecked
     def get_mean(self) -> TensorType["N", "C"]: # mu_p
