@@ -1,12 +1,15 @@
 # A resnet for MNIST as a sanity check comparison to the custom one below
 
 
-
 import numpy as np
 from vduq.layers import spectral_norm_conv, spectral_norm_fc
 from vduq.layers.spectral_batchnorm import SpectralBatchNorm2d
 from vduq.wide_resnet import WideBasic
-from uncertainty.fixed_dropout import BayesianModule, ConsistentMCDropout, ConsistentMCDropout2d
+from uncertainty.fixed_dropout import (
+    BayesianModule,
+    ConsistentMCDropout,
+    ConsistentMCDropout2d,
+)
 from models.model_params import NNParams
 from models.base_models import FeatureExtractor
 from torchvision.models.resnet import ResNet, BasicBlock
@@ -14,10 +17,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class PTMNISTResNet(ResNet, FeatureExtractor):
     def __init__(self, params: NNParams):
         super(PTMNISTResNet, self).__init__(BasicBlock, [2, 2, 2, 2], num_classes=10)
-        self.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.conv1 = torch.nn.Conv2d(
+            1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False
+        )
         # self.fc = nn.Identity()
 
     def forward(self, x):
@@ -63,21 +69,15 @@ class CNNMNIST(FeatureExtractor):
 #         return input
 
 
-
 # We need to reduce the number of parameters in this model
 class MNISTResNet(FeatureExtractor):
     def __init__(self, nn_params: NNParams):
         super().__init__()
-        depth = 28
-        channels = 1
+        input_channels = 1
         input_size = 28
         num_classes = nn_params.num_classes
-        params = nn_params
-        self.features_size = 1024
-        
-        assert (depth - 4) % 6 == 0, "Wide-resnet depth should be 6n+4"
+        self.features_size = 64
 
-        self.dropout_rate = nn_params.dropout_rate
         spectral_normalization = nn_params.spectral_normalization
         coeff = nn_params.coeff
         n_power_iterations = nn_params.n_power_iterations
@@ -92,8 +92,6 @@ class MNISTResNet(FeatureExtractor):
                 bn = nn.BatchNorm2d(num_features, momentum=batchnorm_momentum)
 
             return bn
-
-        self.wrapped_bn = wrapped_bn
 
         def wrapped_conv(input_size, in_c, out_c, kernel_size, stride):
             if kernel_size == 3:
@@ -120,19 +118,22 @@ class MNISTResNet(FeatureExtractor):
 
             return wrapped_conv
 
-        self.wrapped_conv = wrapped_conv
+        self.conv1 = wrapped_conv(input_size, input_channels, 32, 3, 1)
+        self.bn1 = wrapped_bn(32)
 
+        # 28x28 -> 14x14
+        self.conv2 = wrapped_conv(input_size, 32, 64, 3, 2)
+        self.shortcut2 = wrapped_conv(input_size, 32, 64, 1, 2)
+        self.bn2 = wrapped_bn(64)
 
-
-        self.conv1 = wrapped_conv(input_size, channels, 32, 5, 1)
-        self.shortcut1 = wrapped_conv(input_size, channels, 32, 1, 1)
-        self.layer1 = wrapped_conv(input_size, 32, 64, 5, 1)
-        self.shortcut2 = wrapped_conv(input_size, 32, 64, 1, 1)
-        self.bn1 = self.wrapped_bn(64)
+        # 14x14 -> 7x7
+        self.conv3 = wrapped_conv(input_size, 64, 64, 3, 2)
+        self.shortcut3 = wrapped_conv(input_size, 64, 64, 1, 2)
+        self.bn3 = wrapped_bn(64)
 
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(1024, num_classes)
+            self.linear = nn.Linear(64, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -142,13 +143,11 @@ class MNISTResNet(FeatureExtractor):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        # print(x.shape)s
-        out1 = self.conv1(x)
-        out1 += self.shortcut1(x)
-        out2 = self.layer1(out1)
-        out2 += self.shortcut2(out1)
-        out2 = F.relu(self.bn1(out2))
-        out = F.avg_pool2d(out2, 7)
+        out1 = F.relu(self.bn1(self.conv1(x) + x))
+        out2 = F.relu(self.bn2(self.conv2(out1) + self.shortcut2(out1)))
+        out3 = F.relu(self.bn3(self.conv3(out2) + self.shortcut3(out2)))
+
+        out = F.avg_pool2d(out3, 7)
         out = out.flatten(1)
 
         if self.num_classes is not None:
