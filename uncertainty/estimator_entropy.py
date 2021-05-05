@@ -181,8 +181,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         self.batch = batch
         self.likelihood = likelihood
         self.samples_sum = 20
-        self.batch_samples = 1000
-        self.per_samples = 100
+        self.batch_samples = 300
+        self.per_samples = 10
         self.log_probs = torch.zeros(self.batch_samples, self.batch_samples * self.samples_sum)
 
         self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
@@ -256,10 +256,10 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             X = L *  self.samples_sum
             Y = self.batch.num_cat
             p_l_x = log_p.exp()
+            p_n_x_y = torch.zeros(datapoints_size, X, Y)
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
-                p_n_x_y = torch.zeros(n_end - n_start, X, Y)
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
@@ -274,7 +274,10 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                     
                     p_x_y_: TensorType["N", "L", "X", "Y"] =  batch_p_expanded * p_expanded # p(x,y | l)
                     p_x_y_: TensorType["N", "X", "Y"] = torch.sum(p_x_y_, dim=1)
-                    p_n_x_y += p_x_y_.cpu()
+                    if j == 0:
+                        p_n_x_y = p_x_y_.cpu()
+                    else:
+                        p_n_x_y += p_x_y_.cpu()
                     pbar.update((n_end - n_start) * (l_end - l_start))
 
                 p_n_x_y: TensorType["N", "X", "Y"] = p_n_x_y / L

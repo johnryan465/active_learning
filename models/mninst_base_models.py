@@ -76,7 +76,7 @@ class MNISTResNet(FeatureExtractor):
         input_channels = 1
         input_size = 28
         num_classes = nn_params.num_classes
-        self.features_size = 64
+        self.features_size = 1024
 
         spectral_normalization = nn_params.spectral_normalization
         coeff = nn_params.coeff
@@ -118,23 +118,22 @@ class MNISTResNet(FeatureExtractor):
 
             return wrapped_conv
 
-        self.conv1 = wrapped_conv(input_size, input_channels, 32, 3, 1)
+        self.conv1 = wrapped_conv(input_size, input_channels, 32, 5, 1)
         self.bn1 = wrapped_bn(32)
 
         # 28x28 -> 14x14
-        self.conv2 = wrapped_conv(input_size, 32, 64, 3, 2)
-        self.shortcut2 = wrapped_conv(input_size, 32, 64, 1, 2)
+        self.conv2 = wrapped_conv(input_size, 32, 64, 5, 1)
+        self.shortcut2 = wrapped_conv(input_size, 32, 64, 1, 1)
         self.bn2 = wrapped_bn(64)
 
         # 14x14 -> 7x7
-        input_size = 14
-        self.conv3 = wrapped_conv(input_size, 64, 64, 3, 2)
-        self.shortcut3 = wrapped_conv(input_size, 64, 64, 1, 2)
+        self.conv3 = wrapped_conv(input_size, 64, 64, 3, 1)
+        self.shortcut3 = wrapped_conv(input_size, 64, 64, 1, 1)
         self.bn3 = wrapped_bn(64)
 
         self.num_classes = num_classes
         if num_classes is not None:
-            self.linear = nn.Linear(64, num_classes)
+            self.linear = nn.Linear(self.features_size, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -150,6 +149,7 @@ class MNISTResNet(FeatureExtractor):
 
         out = F.avg_pool2d(out3, 7)
         out = out.flatten(1)
+        # print(out.shape)
 
         if self.num_classes is not None:
             out = self.linear(out)

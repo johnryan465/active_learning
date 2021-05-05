@@ -54,13 +54,19 @@ class Rank2Combine:
         self.candidate_indexes: List[int] = []
         self.pool_mask = torch.ones(pool_size, dtype=torch.bool)
         self.pool_size = pool_size
+        self.cum_sum = torch.cumsum(self.pool_mask, dim=0)
         self.mean = independent.mean.squeeze(1)
         self.self_covar = independent.lazy_covariance_matrix.base_lazy_tensor.evaluate()
+        N = self.mean.shape[0]
+        C = self.mean.shape[1]
+        self.cross_mat = torch.zeros(N,C,1,0)
 
     def add(self, next_rank2: Rank2Next, index: int) -> None:
         self.candidates.append(next_rank2)
         self.candidate_indexes.append(index)
         self.pool_mask[index] = 0
+        self.cum_sum = torch.cumsum(self.pool_mask, dim=0)
+        self.cross_mat = torch.cat( [self.cross_mat, next_rank2.get_cross_mat()], dim=3)
 
     @typechecked
     def get_mean(self) -> TensorType["N", "C"]:
@@ -72,12 +78,7 @@ class Rank2Combine:
 
     @typechecked
     def get_cross_mat(self) -> TensorType["N", "C", 1, "D"]:
-        if len(self.candidates) > 0:
-            return torch.cat( [nex.get_cross_mat() for nex in self.candidates], dim=3)[self.pool_mask, :]
-        else:
-            N = self.mean.shape[0]
-            C = self.mean.shape[1]
-            return torch.zeros(N,C,1,0)
+        return (self.cross_mat)[self.pool_mask, :]
 
     @typechecked
     def get_point_cross_mat(self, point: int) -> TensorType["C", 1, "D"]:
@@ -91,12 +92,16 @@ class Rank2Combine:
         return output
 
     def to_compressed_index(self, idx: int) -> int:
-        return int(torch.cumsum(self.pool_mask, dim=0)[idx].item()) - 1
+        return int(self.cum_sum[idx].item()) - 1
+
+    def to_uncompressed_index(self, idx: int) -> int:
+        return (self.cum_sum == (idx + 1)).nonzero().flatten()[0]
 
     def get_rank_1_update(self, idx: int) -> Rank1Update:
-        mean = self.get_mean()[idx].unsqueeze(0)
-        self_cov = self.get_self_covar()[idx]
-        cross_mat = self.get_cross_mat()[idx]
+        uncompressed_idx = self.to_uncompressed_index(idx)
+        mean = self.mean[uncompressed_idx:uncompressed_idx+1]
+        self_cov = self.self_covar[uncompressed_idx]
+        cross_mat = self.cross_mat[uncompressed_idx]
         return Rank1Update(mean, self_cov, cross_mat)
 
 class Rank1Updates:
