@@ -13,6 +13,7 @@ from methods.method import UncertainMethod, Method
 from methods.method_params import MethodParams
 from batchbald_redux.batchbald import CandidateBatch, compute_conditional_entropy, get_batchbald_batch
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
+import torch.autograd.profiler as profiler
 
 from typeguard import check_type, typechecked
 from utils.typing import MultitaskMultivariateNormalType, MultivariateNormalType, TensorType
@@ -73,7 +74,14 @@ class BatchBALD(UncertainMethod):
                 ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = model_wrapper.get_gp_output(features_expanded)
                 conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
 
+                # with profiler.profile(record_shapes=True) as prof:
+                #     with profiler.record_function("joint_entropy"):
+
                 joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                if self.params.smoke_test:
+                    joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
+                # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+                # print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
                 # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 1500, num_cat, N, ind_dists, ExactJointEntropyEstimator)
 
                 for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
@@ -94,7 +102,19 @@ class BatchBALD(UncertainMethod):
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
 
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
+                    
                     print(joint_entropy_result)
+                    if self.params.smoke_test:
+                        if i > 0:
+                            joint_entropy_class_.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
+                        
+                        joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
+                        print(joint_entropy_result_)
+                        diff = joint_entropy_result - joint_entropy_result_
+                        print(diff)
+                        print(torch.mean(diff))
+                        print(torch.std(diff))
+
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
