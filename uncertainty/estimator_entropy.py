@@ -100,6 +100,63 @@ class CurrentBatch:
         
         conditional_cov = BlockInterleavedLazyTensor(lazify(conditional_cov))
         return MultitaskMultivariateNormal(mean=conditional_mean, covariance_matrix=conditional_cov)
+    
+    def _create_conditionals_from_rank1s_util(self, rank1s: Rank1Updates, samples: TensorType["L", "D", "C"]) -> MultitaskMultivariateNormalType:
+        L = samples.shape[0]
+
+        means = []
+        covariance = []
+        cross_covariance = []
+        for rank1 in rank1s:
+            means.append(rank1.mean)
+            covariance.append(rank1.covariance)
+            cross_covariance.append(rank1.cross_covariance)
+        sigma_YY: TensorType["N", "C", 1, 1] = torch.stack(covariance, dim=0)
+        sigma_YX: TensorType["N", "C", 1, "D"] = torch.stack(cross_covariance, dim=0)
+        sigma_XX_inv: TensorType["C", 1, "D"] = self.get_inverse()
+
+        
+        # mean = mu_Y + sigma_YX sigma_XX^{-1} (X - mu_x)
+        # We want to expand the batch dist mean and covariance so we can broadcast in numbesumr of samples
+        mu_Y: TensorType["N", "C", 1] = torch.transpose(torch.stack(means, dim=0), -1, -2)
+        mu_X: TensorType["C", "D"] = self.get_mean()
+        X: TensorType["L", "C", "D"] = torch.transpose(samples, -1, -2)
+
+        if torch.cuda.is_available():
+            X = X.cuda()
+            mu_Y = mu_Y.cuda()
+            mu_X = mu_X.cuda()
+            sigma_XX_inv = sigma_XX_inv.cuda()
+            sigma_YX = sigma_YX.cuda()
+
+        conditional_cov: TensorType["N", "C", 1, 1] = sigma_YY - (sigma_YX @ sigma_XX_inv @ torch.transpose( sigma_YX, -1, -2))
+
+        tmp_vector: TensorType[1, "L", "C", "D", 1] = (X - mu_X).unsqueeze(-1).unsqueeze(0)
+
+        # We can let pytorch auto broadcast the matrix multiplication
+        tmp_matrix: TensorType["N", 1, "C", "D" , 1] = (sigma_YX @ sigma_XX_inv).unsqueeze(1)
+        conditional_mean: TensorType["N", "L", "C", 1, 1] = (tmp_matrix @ tmp_vector)
+        conditional_mean = mu_Y.unsqueeze(1) + conditional_mean.squeeze(-1)
+
+        conditional_cov: TensorType["N", "L", "C", 1, 1] = conditional_cov.unsqueeze(1).expand(-1, L,-1,-1,-1)
+        conditional_cov = BlockInterleavedLazyTensor(lazify(conditional_cov))
+        return MultitaskMultivariateNormal(mean=conditional_mean, covariance_matrix=conditional_cov)
+
+
+    # We take in a rank 1 update and a sample from this distribution
+    def create_conditionals_from_rank1s(self, rank1s: Rank1Updates, samples: TensorType["L", "D", "C"], size: int) -> Iterator[Iterator[MultitaskMultivariateNormalType]]:
+        L = samples.shape[0]
+        datapoints_size = max(size // L, 1)
+        samples_size = min(size, L)
+        rank1s_count = 0
+        max_rank1s_count = len(rank1s)
+        datapoints_size = min(datapoints_size, max_rank1s_count)
+
+        while rank1s_count < max_rank1s_count:
+            l = [x for _, x in zip(range(datapoints_size), rank1s)]
+            updates = Rank1Updates(already_computed=l)
+            rank1s_count += len(updates)
+            yield (self._create_conditionals_from_rank1s_util(updates, samples[idx:  min(idx+samples_size, L)]) for idx in range(0, L, samples_size))
 
 
 class MVNJointEntropyEstimator(ABC):
@@ -123,8 +180,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: int) -> None:
         self.batch = batch
         self.likelihood = likelihood
-        self.samples_sum = 10
-        self.batch_samples = 3000
+        self.samples_sum = 20
+        self.batch_samples = 1000
         self.per_samples = 100
         self.log_probs = torch.zeros(self.batch_samples, self.batch_samples * self.samples_sum)
 
@@ -172,11 +229,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         return torch.mean(- torch.log(p))
 
     @typechecked
-    def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:
-        # We can exactly compute a larger sized exact distribution
-        # As the task batches are independent we can chunk them
-        # If we haven't added any variables yet, the coditional doesn't exist yet, but we have
-        # nothing to conditon on. We have only 1 "sample", which has a probability of 1            
+    def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:   
         log_p = self.log_probs
 
         if torch.cuda.is_available():
@@ -186,54 +239,51 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         N = candidates.size
         
         P = self.per_samples
+        L = self.batch_samples
+
 
         output = torch.zeros(N)
         # We are going to compute the entropy in stages, the entropy of the current batch plus the entropy of the candiate
         # conditioned on the batch.
 
-        @toma.execute.batch(N)
+        @toma.execute.batch(N*L)
         def compute(batchsize: int):
-            pbar = tqdm(total=N, desc="Sampling Batch", leave=False)
-            L = self.batch_samples
+            candidates.reset()
+            conditional_dists = self.batch.create_conditionals_from_rank1s(candidates, self.likelihood_samples, batchsize)
+            pbar = tqdm(total=N*L, desc="Sampling Batch", leave=False)
+            datapoints_size = max(1, batchsize // L)
+            samples_size = min(L, batchsize)
             X = L *  self.samples_sum
             Y = self.batch.num_cat
-            
             p_l_x = log_p.exp()
-            for i, candidate in enumerate(candidates):
-                p_x_y: TensorType["X", "Y"] = torch.zeros(X, Y)
-                for j in range(self.batch_samples):
-                    pool_rank1 = candidate
-                    sample = self.likelihood_samples[j]
-                    distribution = self.batch.create_conditional(pool_rank1, sample)
+            for i, candidate in enumerate(conditional_dists):
+                n_start = i*datapoints_size
+                n_end = min((i+1)*datapoints_size, N)
+                p_n_x_y = torch.zeros(n_end - n_start, X, Y)
+                for j, distribution in enumerate(candidate):
+                    l_start = j*samples_size
+                    l_end = min((j+1)* samples_size, L)
+                    sample: TensorType["P", "N", "L", "Y", 1] = distribution.sample(sample_shape=torch.Size([P]))
 
+                    likelihood_samples: TensorType["P", "N", "L", "Y"] = (self.likelihood(sample).probs).squeeze(-2)
+                    p_y: TensorType[ "N", "L", "Y"] = torch.mean(likelihood_samples, dim=0)
 
-                    # We have L samples from the batch distribution
-                    # We have B samples from the sum of the batch distribution
-                    # We have P samples from the conditional distribution
-                    # We have N points on the distribution
-                    # We have E samples from the sum of the conditional
-                    sample: TensorType["P", "Y", 1] = distribution.sample(sample_shape=torch.Size([P]))
-
-                    # print(sample)
-                    likelihood_samples: TensorType["P", "Y"] = (self.likelihood(sample).probs).squeeze(-2)
-                    p_y: TensorType["Y"] = torch.mean(likelihood_samples, dim=0)
-
-                    batch_p: TensorType["X"] = p_l_x[j]
-                    p_expanded: TensorType[1, "Y"] = p_y.unsqueeze(-2)
-                    batch_p_expanded: TensorType["X", 1] = batch_p.unsqueeze(-1)
+                    batch_p: TensorType["L", "X"] = p_l_x[l_start: l_end,]
+                    p_expanded: TensorType["N", "L", 1, "Y"] = p_y.unsqueeze(-2)
+                    batch_p_expanded: TensorType["L", "X", 1] = batch_p.unsqueeze(-1)
                     
-                    p_x_y_: TensorType["X", "Y"] =  batch_p_expanded * p_expanded # p(x,y | l)
-                    p_x_y += p_x_y_.cpu()
-                # print(p_l_x_y)
-                p_x_y = p_x_y / L
-                p_x = torch.mean(p_l_x, dim=0).cpu()
-                p_y_given_x: TensorType["X", "Y"] = p_x_y / (p_x[:,None])
-                p: TensorType["X", "Y"] = - torch.log(p_y_given_x)  * p_y_given_x # - p(y | x) log p(y | x)
-                p: TensorType["X"] = torch.sum(p, 1)  # H(Y | X=x)
-                p: TensorType = torch.mean(p, dim = 0) # H(Y | X)
-                output[i] = p
-                pbar.update(1)
+                    p_x_y_: TensorType["N", "L", "X", "Y"] =  batch_p_expanded * p_expanded # p(x,y | l)
+                    p_x_y_: TensorType["N", "X", "Y"] = torch.sum(p_x_y_, dim=1)
+                    p_n_x_y += p_x_y_.cpu()
+                    pbar.update((n_end - n_start) * (l_end - l_start))
 
+                p_n_x_y: TensorType["N", "X", "Y"] = p_n_x_y / L
+                p_x: TensorType["X"] = torch.mean(p_l_x, dim=0).cpu()
+                p_y_given_x: TensorType["N", "X", "Y"] = p_n_x_y / (p_x[None,:,None])
+                p: TensorType["N", "X", "Y"] = - torch.log(p_y_given_x)  * p_y_given_x # - p(y | x) log p(y | x)
+                p: TensorType["N", "X"] = torch.sum(p, 2)  # H(Y | X=x)
+                p: TensorType["N"] = torch.mean(p, dim = 1) # H(Y | X)
+                output[n_start:n_end].copy_(p, non_blocking=True)
             pbar.close()
         
         batch_entropy: TensorType = self.compute().cpu()

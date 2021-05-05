@@ -142,7 +142,7 @@ class MNISTResNet(FeatureExtractor):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        # print(x.shape)
+        # print(x.shape)s
         out1 = self.conv1(x)
         out1 += self.shortcut1(x)
         out2 = self.layer1(out1)

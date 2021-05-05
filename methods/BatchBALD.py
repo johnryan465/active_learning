@@ -11,7 +11,7 @@ from models.vduq import vDUQ
 from datasets.activelearningdataset import ActiveLearningDataset
 from methods.method import UncertainMethod, Method
 from methods.method_params import MethodParams
-from batchbald_redux.batchbald import compute_conditional_entropy, get_batchbald_batch
+from batchbald_redux.batchbald import CandidateBatch, compute_conditional_entropy, get_batchbald_batch
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 
 from typeguard import check_type, typechecked
@@ -72,9 +72,9 @@ class BatchBALD(UncertainMethod):
                 features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
                 ind_dists: MultitaskMultivariateNormalType[("N"), (1, "num_cats")] = model_wrapper.get_gp_output(features_expanded)
                 conditional_entropies_N: TensorType["datapoints"] = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
-                print("Cond")
 
                 joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 1500, num_cat, N, ind_dists, ExactJointEntropyEstimator)
 
                 for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                     # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -94,18 +94,22 @@ class BatchBALD(UncertainMethod):
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
 
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
+                    print(joint_entropy_result)
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
                     scores_N = joint_entropy_result.detach().cpu()
 
-                    scores_N -= conditional_entropies_N + shared_conditinal_entropies
+                    # scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
 
                     candidate_score, candidate_index = scores_N.max(dim=0)
                     
                     candidate_indices.append(candidate_index.item())
                     candidate_scores.append(candidate_score.item())
+
+                batch = CandidateBatch(candidate_scores, candidate_indices)
+                print(batch)
 
                 if self.params.smoke_test:
                     # We use the BatchBALD Redux as a comparision, this does not scale to larger pool sizes.
@@ -114,7 +118,8 @@ class BatchBALD(UncertainMethod):
 
                     joint_distribution: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(pool_expanded)
                     log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((model_wrapper.likelihood(joint_distribution.sample(sample_shape=torch.Size([bb_samples]))).logits).squeeze(1)).permute(1,0,2) # type: ignore
-                    batch = get_batchbald_batch(log_probs_N_K_C, batch_size, 600000) 
+                    batch_ = get_batchbald_batch(log_probs_N_K_C, batch_size, 600000) 
+                    print(batch_)
 
 
             else:

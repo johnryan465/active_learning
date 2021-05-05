@@ -100,22 +100,33 @@ class Rank2Combine:
         return Rank1Update(mean, self_cov, cross_mat)
 
 class Rank1Updates:
-    def __init__(self, r2c: Rank2Combine):
-        self.max = r2c.pool_size - len(r2c.candidate_indexes)
-        self.r2c = r2c
+    def __init__(self, r2c: Rank2Combine = None, already_computed: List[Rank1Update] = None):
+        if already_computed is not None:
+            self.max = len(already_computed)
+            self.values = already_computed
+            self.already_computed = True
+        else:
+            self.max = r2c.pool_size - len(r2c.candidate_indexes)
+            self.r2c = r2c
+            self.already_computed = False
+        self.idx = 0
         self.size = self.max
 
     def __iter__(self):
-        self.idx = 0
         return self
     
     def __len__(self):
         return self.size
 
+    def reset(self):
+        self.idx = 0
 
     def __next__(self) -> Rank1Update:
         if self.idx < self.max:
-            update =  self.r2c.get_rank_1_update(self.idx)
+            if self.already_computed:
+                update = self.values[self.idx]
+            else:
+                update = self.r2c.get_rank_1_update(self.idx)
             self.idx += 1
             return update
         else:
