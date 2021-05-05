@@ -127,6 +127,7 @@ class MNISTResNet(FeatureExtractor):
         self.bn2 = wrapped_bn(64)
 
         # 14x14 -> 7x7
+        input_size = 14
         self.conv3 = wrapped_conv(input_size, 64, 64, 3, 2)
         self.shortcut3 = wrapped_conv(input_size, 64, 64, 1, 2)
         self.bn3 = wrapped_bn(64)
