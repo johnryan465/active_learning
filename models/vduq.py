@@ -98,9 +98,9 @@ class vDUQ(UncertainModel):
             if self.seperate_optimizers:
                 ngd_optimizer.step()
 
-            eig = torch.symeig(delazify(self.model.gp.covar_module(self.model.gp.inducing_points))).eigenvalues
-            cond = eig.max() / eig.min()
-            return {'loss': elbo.item(), 'cond': cond, 'min': eig.min()}
+            # eig = torch.symeig(delazify(self.model.gp.covar_module(self.model.gp.inducing_points))).eigenvalues
+            # cond = eig.max() / eig.min()
+            return {'loss': elbo.item()} #, 'cond': cond, 'min': eig.min()}
         return step
 
     def get_output_transform(self):
@@ -247,8 +247,8 @@ class vDUQ(UncertainModel):
 
     def get_training_log_hooks(self):
         return {
-            'cond': lambda x: x['cond'],
-            'min': lambda x: x['min'],
+            #'cond': lambda x: x['cond'],
+            #'min': lambda x: x['min'],
             'loss': lambda x: x['loss']
         }
 
