@@ -77,10 +77,11 @@ class BatchBALD(UncertainMethod):
                 # with profiler.profile(record_shapes=True) as prof:
                 #     with profiler.record_function("joint_entropy"):
 
-                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
-                joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 5000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
+                joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 5000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
                 if self.params.smoke_test:
-                    joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
+                    joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 5000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
+                    #joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
                 # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
                 # print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
 
@@ -92,10 +93,10 @@ class BatchBALD(UncertainMethod):
 
                     previous_aquisition: int = candidate_indices[-1] if i > 0 else 0 # When we don't have any candiates it doesn't matter
                     
-                    expanded_pool_features: TensorType["datapoints", 1, 1, "num_features"] = pool[:, None, None, :]
-                    new_candidate_features: TensorType["datapoints", 1, 1, "num_features"] = ((pool[previous_aquisition])[None, None, None, :]).expand(N, -1, -1, -1)
-                    joint_features: TensorType["datapoints", 1, 2, "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=2)
-                    dists: MultitaskMultivariateNormalType[ ("datapoints", 1), (2, "num_cat")] = model_wrapper.get_gp_output(joint_features)
+                    expanded_pool_features: TensorType["datapoints", 1, "num_features"] = pool[:, None, :]
+                    new_candidate_features: TensorType["datapoints", 1, "num_features"] = ((pool[previous_aquisition])[None, None, :]).expand(N, -1, -1)
+                    joint_features: TensorType["datapoints", 1, "num_features"] = torch.cat([new_candidate_features, expanded_pool_features], dim=1)
+                    dists: MultitaskMultivariateNormalType[ ("datapoints"), (2, "num_cat")] = model_wrapper.get_gp_output(joint_features)
 
                     rank2dist: Rank2Next = Rank2Next(dists)
                     if i > 0:
@@ -118,7 +119,7 @@ class BatchBALD(UncertainMethod):
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
 
-                    scores_N = joint_entropy_result.detach().cpu()
+                    scores_N = joint_entropy_result.detach().clone().cpu()
 
                     scores_N -= conditional_entropies_N + shared_conditinal_entropies
                     scores_N[candidate_indices] = -float("inf")
@@ -130,6 +131,7 @@ class BatchBALD(UncertainMethod):
                         scores_N_ = joint_entropy_result_ - (conditional_entropies_N + shared_conditinal_entropies)
                         scores_N_[candidate_indices] = -float("inf")
                         candidate_score_, candidate_index_ = scores_N_.max(dim=0)
+                        print(joint_entropy_result[candidate_index])
                         print("Sampled")
                         _, y = pool_tensor[candidate_index]
                         print(y, candidate_score)

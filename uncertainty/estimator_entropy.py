@@ -103,6 +103,7 @@ class CurrentBatch:
     
     def _create_conditionals_from_rank1s_util(self, rank1s: Rank1Updates, samples: TensorType["L", "D", "C"]) -> MultitaskMultivariateNormalType:
         L = samples.shape[0]
+        rank1s.reset()
 
         means = []
         covariance = []
@@ -136,7 +137,7 @@ class CurrentBatch:
         # We can let pytorch auto broadcast the matrix multiplication
         tmp_matrix: TensorType["N", 1, "C", "D" , 1] = (sigma_YX @ sigma_XX_inv).unsqueeze(1)
         conditional_mean: TensorType["N", "L", "C", 1, 1] = (tmp_matrix @ tmp_vector)
-        conditional_mean = mu_Y.unsqueeze(1) + conditional_mean.squeeze(-1)
+        conditional_mean = (mu_Y.unsqueeze(1) + conditional_mean.squeeze(-1)).squeeze(-1).unsqueeze(-2)
 
         conditional_cov: TensorType["N", "L", "C", 1, 1] = conditional_cov.unsqueeze(1).expand(-1, L,-1,-1,-1)
         conditional_cov = BlockInterleavedLazyTensor(lazify(conditional_cov))
@@ -155,7 +156,7 @@ class CurrentBatch:
         while rank1s_count < max_rank1s_count:
             l = [x for _, x in zip(range(datapoints_size), rank1s)]
             updates = Rank1Updates(already_computed=l)
-            rank1s_count += len(updates)
+            rank1s_count += len(l)
             yield (self._create_conditionals_from_rank1s_util(updates, samples[idx:  min(idx+samples_size, L)]) for idx in range(0, L, samples_size))
 
 
@@ -180,9 +181,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: int) -> None:
         self.batch = batch
         self.likelihood = likelihood
-        self.samples_sum = 100
-        self.batch_samples = 500
-        self.per_samples = 50
+        self.samples_sum = 50
+        self.batch_samples = 100
+        self.per_samples = 100
         self.log_probs = torch.zeros(self.batch_samples, self.batch_samples * self.samples_sum)
 
         self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
@@ -217,7 +218,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         p: TensorType["S", "S", "D", "E"] = torch.gather(l, 3, choices)
 
 
-        p: TensorType["S", "S", "D", "E"] = torch.log(p, out=p)
+        p: TensorType["S", "S", "D", "E"] = torch.log(p)
         p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
         p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
 
@@ -263,9 +264,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
-                    sample: TensorType["P", "N", "L", "Y", 1] = distribution.sample(sample_shape=torch.Size([P]))
+                    sample: TensorType["P", "N", "L", "Y"] = distribution.sample(sample_shape=torch.Size([P])).squeeze(-2)
 
-                    likelihood_samples: TensorType["P", "N", "L", "Y"] = (self.likelihood(sample).probs).squeeze(-2)
+                    likelihood_samples: TensorType["P", "N", "L", "Y"] = (self.likelihood(sample).probs) # .squeeze(-2)
                     p_y: TensorType[ "N", "L", "Y"] = torch.mean(likelihood_samples, dim=0)
 
                     batch_p: TensorType["L", "X"] = p_l_x[l_start: l_end,]
@@ -290,7 +291,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             pbar.close()
         
         batch_entropy: TensorType = self.compute().cpu()
+        print(batch_entropy)
         conditioned_entropy = output.cpu()
+        print(conditioned_entropy)
         conditioned_entropy = conditioned_entropy + batch_entropy
         return conditioned_entropy
 
@@ -347,7 +350,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
 
     @staticmethod
     def _compute(batch: CurrentBatch, likelihood, samples: int) -> TensorType:
-        log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((likelihood(batch.distribution.sample(sample_shape=torch.Size([500]))).logits)).permute(1,0,2) # type: ignore
+        log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((likelihood(batch.distribution.sample(sample_shape=torch.Size([1000]))).logits)).permute(1,0,2) # type: ignore
         N, K, C = log_probs_N_K_C.shape
 
         batch_joint_entropy = joint_entropy.DynamicJointEntropy(
@@ -374,3 +377,15 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
 
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
+
+# p: TensorType["S", "S", "D", "E"] = torch.gather(l, 3, choices)
+
+
+# p: TensorType["S", "S", "D", "E"] = torch.log(p)
+# p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
+# p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
+
+# self.log_probs = p
+# p = self.log_probs.exp()
+# p = torch.mean(p, dim=0)
+# torch.mean(- torch.log(p))
