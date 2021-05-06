@@ -77,12 +77,12 @@ class BatchBALD(UncertainMethod):
                 # with profiler.profile(record_shapes=True) as prof:
                 #     with profiler.record_function("joint_entropy"):
 
-                joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 5000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
                 if self.params.smoke_test:
                     joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
                 # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
                 # print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
-                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 1500, num_cat, N, ind_dists, ExactJointEntropyEstimator)
 
                 for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                     # First we compute the joint distribution of each of the datapoints with the current aquisition
@@ -103,15 +103,15 @@ class BatchBALD(UncertainMethod):
 
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
                     
-                    print(joint_entropy_result)
+                    # print(joint_entropy_result)
                     if self.params.smoke_test:
                         if i > 0:
                             joint_entropy_class_.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
                         
                         joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
-                        print(joint_entropy_result_)
+                        # print(joint_entropy_result_)
                         diff = joint_entropy_result - joint_entropy_result_
-                        print(diff)
+                        # print(diff)
                         print(torch.mean(diff))
                         print(torch.std(diff))
 
@@ -124,6 +124,19 @@ class BatchBALD(UncertainMethod):
                     scores_N[candidate_indices] = -float("inf")
 
                     candidate_score, candidate_index = scores_N.max(dim=0)
+
+                    if self.params.smoke_test:
+                        pool_tensor = dataset.get_pool_tensor()
+                        scores_N_ = joint_entropy_result_ - (conditional_entropies_N + shared_conditinal_entropies)
+                        scores_N_[candidate_indices] = -float("inf")
+                        candidate_score_, candidate_index_ = scores_N_.max(dim=0)
+                        print("Sampled")
+                        _, y = pool_tensor[candidate_index]
+                        print(y, candidate_score)
+                        print("BB Redux")
+                        _, y_ = pool_tensor[candidate_index_]
+                        print(y_, candidate_score_)
+
                     
                     candidate_indices.append(candidate_index.item())
                     candidate_scores.append(candidate_score.item())

@@ -286,13 +286,11 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                 p: TensorType["N", "X", "Y"] = - torch.log(p_y_given_x)  * p_y_given_x # - p(y | x) log p(y | x)
                 p: TensorType["N", "X"] = torch.sum(p, 2)  # H(Y | X=x)
                 p: TensorType["N"] = torch.mean(p, dim = 1) # H(Y | X)
-                print(p)
                 output[n_start:n_end].copy_(p, non_blocking=True)
             pbar.close()
         
         batch_entropy: TensorType = self.compute().cpu()
         conditioned_entropy = output.cpu()
-        print(conditioned_entropy)
         conditioned_entropy = conditioned_entropy + batch_entropy
         return conditioned_entropy
 
