@@ -182,7 +182,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         self.batch = batch
         self.likelihood = likelihood
         self.samples_sum = 60
-        self.batch_samples = 500
+        self.batch_samples = 300
         self.per_samples = 100
         self.log_probs = torch.zeros(self.batch_samples, self.batch_samples * self.samples_sum)
 
