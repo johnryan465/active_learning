@@ -406,8 +406,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
         super().__init__(batch, likelihood, samples)
 
     @staticmethod
-    def _compute(batch: CurrentBatch, likelihood, samples: int) -> TensorType:
-        log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((likelihood(batch.distribution.sample(sample_shape=torch.Size([1000]))).logits)).permute(1,0,2) # type: ignore
+    def _compute(log_probs_N_K_C: TensorType["N","K","C"], samples: int) -> TensorType:
         N, K, C = log_probs_N_K_C.shape
 
         batch_joint_entropy = joint_entropy.DynamicJointEntropy(
@@ -418,16 +417,27 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
 
         return batch_joint_entropy.compute()
 
+    @staticmethod
+    def _compute_from_batch(batch: CurrentBatch, likelihood, samples: int, function_samples: int) -> TensorType:
+        log_probs_N_K_C: TensorType["datapoints", "samples", "num_cat"] = ((likelihood(batch.distribution.sample(sample_shape=torch.Size([function_samples]))).logits)).permute(1,0,2) # type: ignore
+        return BBReduxJointEntropyEstimator._compute(log_probs_N_K_C, samples)
+
     def compute(self) -> TensorType:
-        return self._compute(self.batch, self.likelihood, self.samples)
+        return self._compute_from_batch(self.batch, self.likelihood, self.samples, 100)
 
     def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
         pbar = tqdm(total=N, desc="BBRedux Batch", leave=False)
+        samples:  TensorType["samples", "datapoints", "num_cat"] = self.batch.distribution.sample(sample_shape=torch.Size([200]))
+
         for i, candidate in enumerate(pool):
-            possible_batch = self.batch.append(candidate)
-            output[i] = BBReduxJointEntropyEstimator._compute(possible_batch, self.likelihood, self.samples)
+            cond_dists = self.batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, 200)
+            dist = next(next(cond_dists))
+            sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(0).squeeze(0)
+            joint_sample = torch.cat([samples, sample_], dim=1)
+            log_probs = (self.likelihood(joint_sample).logits).permute(1,0,2) # type: ignore
+            output[i] = BBReduxJointEntropyEstimator._compute(log_probs, self.samples)
             pbar.update(1)
         pbar.close()
         return output
