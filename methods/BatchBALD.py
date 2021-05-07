@@ -109,12 +109,6 @@ class BatchBALD(UncertainMethod):
                         if i > 0:
                             joint_entropy_class_.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
                         
-                        joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
-                        # print(joint_entropy_result_)
-                        diff = joint_entropy_result - joint_entropy_result_
-                        # print(diff)
-                        print(torch.mean(diff))
-                        print(torch.std(diff))
 
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
@@ -127,6 +121,12 @@ class BatchBALD(UncertainMethod):
                     candidate_score, candidate_index = scores_N.max(dim=0)
 
                     if self.params.smoke_test:
+                        joint_entropy_result_ = joint_entropy_class_.compute_batch(rank2dist)
+                        # print(joint_entropy_result_)
+                        diff = joint_entropy_result - joint_entropy_result_
+                        # print(diff)
+                        print(torch.mean(diff))
+                        print(torch.std(diff))
                         pool_tensor = dataset.get_pool_tensor()
                         scores_N_ = joint_entropy_result_ - (conditional_entropies_N + shared_conditinal_entropies)
                         scores_N_[candidate_indices] = -float("inf")
@@ -138,6 +138,22 @@ class BatchBALD(UncertainMethod):
                         print("BB Redux")
                         _, y_ = pool_tensor[candidate_index_]
                         print(y_, candidate_score_)
+
+                        per_classes_idx = [ [] for i in range(num_cat)]
+
+                        for idx in range(0, len(pool_tensor)):
+                            _, y = pool_tensor[idx]
+                            per_classes_idx[y].append(idx)
+
+                        # The difference between the 2 methods is minimum at the max value of the low memory
+                        difference = torch.flatten(diff)
+
+                        for i in range(num_cat):
+                            print("Class ", i)
+                            class_diff = diff[per_classes_idx[i]]
+                            difference = torch.flatten(class_diff)
+                            print(torch.std(difference))
+                            print(torch.mean(difference))
 
                     
                     candidate_indices.append(candidate_index.item())
@@ -158,11 +174,11 @@ class BatchBALD(UncertainMethod):
 
 
             else:
-                num_samples = 1000
+                num_samples = 10
                 samples = torch.zeros(N, num_samples, 10)
                 @toma.execute.chunked(inputs, N)
                 def make_samples(chunk: TensorType, start: int, end: int):
-                    res = model_wrapper.sample(chunk, 1000)
+                    res = model_wrapper.sample(chunk, num_samples)
                     samples[start:end].copy_(res)
 
                 batch = get_batchbald_batch(samples, batch_size, 60000)
