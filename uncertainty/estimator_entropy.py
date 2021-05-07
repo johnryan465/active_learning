@@ -427,12 +427,13 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
 
     def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
+        function_samples = 1000
         output: TensorType["N"] = torch.zeros(N)
         pbar = tqdm(total=N, desc="BBRedux Batch", leave=False)
-        samples:  TensorType["samples", "datapoints", "num_cat"] = self.batch.distribution.sample(sample_shape=torch.Size([200]))
+        samples:  TensorType["samples", "datapoints", "num_cat"] = self.batch.distribution.sample(sample_shape=torch.Size([function_samples]))
 
         for i, candidate in enumerate(pool):
-            cond_dists = self.batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, 200)
+            cond_dists = self.batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, function_samples)
             dist = next(next(cond_dists))
             sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(0).squeeze(0)
             joint_sample = torch.cat([samples, sample_], dim=1)

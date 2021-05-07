@@ -77,7 +77,8 @@ class BatchBALD(UncertainMethod):
                 # with profiler.profile(record_shapes=True) as prof:
                 #     with profiler.record_function("joint_entropy"):
 
-                joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
+                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
                 # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 5000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
                 if self.params.smoke_test:
                     joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
