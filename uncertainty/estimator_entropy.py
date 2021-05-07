@@ -282,7 +282,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         log_p = self.log_probs
 
         if torch.cuda.is_available():
-            log_p = log_p.cuda()
+            p_l_x = log_p.exp().cuda()
+        else:
+            p_l_x = log_p.exp()
 
 
         N = candidates.size
@@ -304,13 +306,12 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             samples_size = min(L, batchsize)
             X = L *  self.samples_sum
             Y = self.batch.num_cat
-            p_l_x = log_p.exp()
             # p_n_l_1_y = torch.zeros(datapoints_size, L, 1, Y)
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
-                p_n_l_1_y = torch.zeros(n_end - n_start, L, 1, Y)
-                p_n_x_y = torch.zeros(n_end - n_start, X, Y)
+                p_n_l_1_y = torch.zeros(n_end - n_start, L, 1, Y, device=p_l_x.device)
+                p_n_x_y = torch.zeros(n_end - n_start, X, Y, device=p_l_x.device)
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
@@ -337,6 +338,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                 p_n_l_x_1: TensorType["N", "L", "X", 1] = p_l_x[None,:,:,None].expand(n_end - n_start, -1,-1,-1)
                 h: TensorType["N", "L", "X"] = torch.sum((p_n_l_1_y * (p_n_l_x_1 / p_x[None,None,:,None])) * torch.log(p_n_x_y[:,None,:,:]), dim=3)
                 p: TensorType["N"] = -torch.mean(h, dim = (1,2)) # H(Y | X)
+                del p_n_l_1_y
+                del p_n_x_y
                 output[n_start:n_end].copy_(p, non_blocking=True)
             pbar.close()
         
