@@ -309,8 +309,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
-                p_n_l_1_y = torch.zeros(n_end - n_start, L, 1, Y)
-                p_n_x_y = torch.zeros(n_end - n_start, X, Y)
+                p_n_l_1_y = torch.zeros(n_end - n_start, L, 1, Y).cpu()
+                p_n_x_y = torch.zeros(n_end - n_start, X, Y).cpu()
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
@@ -334,7 +334,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
                 p_n_x_y: TensorType["N", "X", "Y"] = p_n_x_y / L
                 p_x: TensorType["X"] = torch.mean(p_l_x, dim=0).cpu()
-                p_n_l_x_1: TensorType["N", "L", "X", 1] = p_l_x[None,:,:,None].expand(n_end - n_start, -1,-1,-1)
+                p_n_l_x_1: TensorType["N", "L", "X", 1] = p_l_x[None,:,:,None].expand(n_end - n_start, -1,-1,-1).cpu()
                 h: TensorType["N", "L", "X"] = torch.sum((p_n_l_1_y * (p_n_l_x_1 / p_x[None,None,:,None])) * torch.log(p_n_x_y[:,None,:,:]), dim=3)
                 p: TensorType["N"] = -torch.mean(h, dim = (1,2)) # H(Y | X)
                 output[n_start:n_end].copy_(p, non_blocking=True)
