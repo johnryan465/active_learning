@@ -1,5 +1,11 @@
 \documentclass[12pt, a4paper]{report}
+
+
 \input{Packages.tex}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+
 \hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \pagestyle{fancy}
@@ -66,8 +72,10 @@ Active Learning is an use
 \chapter{Introduction}
 \pagenumbering{arabic}
 
+Active learning is an area of machine learning where we are attempting to select which unlabelled datapoints we believe would be best to learn the label of. It is important because in many important use cases (for example, medical data), it is often either quite costly or just simply impossible to collect an incredibly large dataset. However current approaches to do it suffer from issues related to quality of aquired datapoints, model requirements and computational issues.
 
-Active learning is BLAH. 
+Bayesian ML models are the standard ways of building machine learning models which can calculate uncertainty well, however many of the standard approaches to doing so (MC Dropout) can give suboptimal performance, for example requiring a substantial amount of sampling. Gaussian Processes are a ML approach which give very good uncertainty performance, and new results in the field [DUE] have shown successful training of Variational Gaussian Processes with feature extractors and demonstrate that they maintain good uncertainty performance.
+
 \section{Motivation}
 
 Active Learning is an active area of Machine Learning where we are trying to select (unlabelled) data points in an attempt to maximise some objective.
@@ -119,19 +127,30 @@ When working with Active Learning we are also normally working with much smaller
 \section{Uncertainty}
 \section{Entropy}
 \section{BALD}
-Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian}.
+Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is based on selecting datapoints which maximise the mutual information between the datapoints class output and the models parameters. The paper details how we can instead of computing this in the paramater space which would be computationally prohibative in many cases, we can compute the same objective in the output space.
 
 $${\arg\,\max}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
 
 $${\arg\,\max}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
 
-However when using BALD to select multiple datapoints, (acquiring a batch of new datapoints before retraining the model has some issues as the amount of information we are obtaining is sub-optimal due to overlap in information content.).
-\subsection{BatchBALD}
-BatchBALD \cite{kirsch2019batchbald}, is a modification of BALD in which we are able to take the 
 
-\chapter{Performance}
-\label{Chap3}
-We can cite an article as an example \cite{kirsch2019batchbald}. 
+An issue which we run into when using BALD in the case where we want to select multiple datapoints to aquire at the same time is the fact that selecting the $n$ points with the greatest individual information content will not necessarily give you the $n$ points which jointly have the greatest information content. This can be made very obvious by considering the case when there is duplicates in the dataset. If the duplicated point is in the top n points as decieded by the BALD score, having both of the points in your aquired batch will give you no more information than just having one of them, you would be better served by selecting any other point instead of these points.
+
+\section{BatchBALD}
+BatchBALD \cite{kirsch2019batchbald}, is an extension of BALD designed especially to deal with the issues which we run into when using BALD to aquire batches of points.
+
+To do this the objective function is modified, the original BALD objective is retained by setting $n = 1$ .
+
+The authors of the paper prove that the objective function that they specify is \textit{submodular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimium batch.
+
+The BatchBALD score function is as follows.
+
+$$s_{BatchBald} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n) - E_{p(f)}\left[H(y_1, \ldots, y_n | f)\right]$$
+
+
+
+As the variables are independent conditioned on the value of the function, the right hand side of the equation factors into a sum over conditional expectations for each individual datapoint. The computationally difficult part of this objective is the computation of the joint entropy as this does not factor similarly. In fact, the summation required to compute this value is exponential in the number of datapoints we are currently considering. The authors of the paper address this issue by using sampling to estimate the joint entropy for larger batch sizes. The BatchBALD paper uses Bayesian Neural networks (BNNs) as their model. They are then able to sample from the weight distribution once to obtain a function draw for all possible inputs. This is not an ability we have when using GPCs, which we will come back to later.
+
 
 
 \chapter{Gaussian Process Based Models}
@@ -139,9 +158,31 @@ We can cite an article as an example \cite{kirsch2019batchbald}.
 
 
 \section{Gaussian Processes}
-Definition: "A Gaussian processes is a collection of random variables, any finite number of which have a joint Gaussian distribution" from \cite[]{rasmussen2003gaussian}
 
-We can completely define a Gaussian Process by giving a mean, and covariance function.
+
+\begin{definition}[Gaussian Process]
+    A Gaussian processes is a collection of random variables, any finite number of which have a joint Gaussian distribution. \cite[]{rasmussen2003gaussian}
+\end{definition}
+
+
+We can completely specify a Gaussian Process over a space $\chi$ by giving a mean function $m(\cdot), m : \chi \rightarrow R$, and covariance (kernel) function $k(\cdot, \cdot), k: \chi \times \chi \rightarrow R$.
+
+
+For $k$ to be a valid covariance funciton we need for any evaluation of the covariance matrix to be a symetric positive definite matrix (as all covariance matrices of random variables must be S.P.D).
+
+\begin{definition}[Positive Definte Matrix]
+    A positive definite matrix is a matrix which has positive eiginvalues.
+\end{definition}
+
+\subsection{As distributions over functions}
+
+We can view a Gaussian Processes as a distribution over functions. The space of functions which we can represent by a particular Gaussian Process is paramaterised by the kernel function which we are using.
+
+We can understand this by investigating the interpretation of kernels as Repreducing Kernel Hilbert Spaces.
+
+
+
+
 
 Gaussian Processes have a number of useful properties such as being closed under conditioning and marginalisation.
 
@@ -198,7 +239,9 @@ $$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
 
 \section{vDUQ / DUE}
 
-vDUQ / DUQ \cite{vanamersfoort2020uncertainty} are a recent approach which enables us to 
+vDUQ / DUE \cite{vanamersfoort2020uncertainty} is a recent model which deals with some of the issues with using deep kernel learning with GPCs. DUE uses an inducing point GP to enable it to scale to large amounts of data. To bound the lipschitz constant of the model, DUE uses spectral normalisation in the feature extractor of the model.
+To enforce sensitivity to chages in the input, 
+\subsection{Spectral Normalisation}
 
 \chapter{Combination}
 \label{Chap5}
@@ -235,7 +278,7 @@ However the number of dimensions which we are performing this integration over i
 
 \section{Sampling}
 
-Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which relie on sampling.
+Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which rely on sampling.
 
 In comparision with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our postior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
 The complexity of performing this is cubic in the size of the pool, this complexity is unacceptably high as we are often working with quite large pool sizes.
@@ -295,7 +338,12 @@ We can then use these as a numerical test to valididate that the more computatio
 
 \section{DUE}
 
+To attempt to keep the experiments as comparible as possible, the feature extractor architecture used for DUE for this problem was the same architecture as the BNN with minimal modifications to satify the constraints of DUE. This primarily consisted of the additon of residual connections to the models, and the removal of the dropout layers.
+
+While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantl.
+
 \subsection{Training on small datasets}
+
 
 \subsection{BALD}
 
