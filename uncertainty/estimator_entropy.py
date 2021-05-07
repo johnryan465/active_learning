@@ -181,9 +181,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: int) -> None:
         self.batch = batch
         self.likelihood = likelihood
-        self.samples_sum = 20
-        self.batch_samples = 2000
-        self.per_samples = 1000
+        self.samples_sum = 60
+        self.batch_samples = 500
+        self.per_samples = 100
         self.log_probs = torch.zeros(self.batch_samples, self.batch_samples * self.samples_sum)
 
         self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
@@ -241,6 +241,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         
         P = self.per_samples
         L = self.batch_samples
+        X = L * self.samples_sum
 
 
         output = torch.zeros(N)
@@ -260,23 +261,19 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                     point_sample: TensorType["P", "L", 1, "Y"] = cond_dist.sample(sample_shape=torch.Size([P])).squeeze(1)
                     # combined_sample = torch.cat([batch_samples, point_sample], dim=1)
                     point_sample = self.likelihood(point_sample).probs
+                    # point_sample = torch.transpose(point_sample, 0, 1)
                     point_sample = torch.mean(point_sample, dim=0)
                     sample_list.append(point_sample)
-                p_l_1_y = torch.cat(sample_list, dim=0)
+                p_l_1_y: TensorType["L", 1, "Y"]  = torch.cat(sample_list, dim=0)
+                p_l_y = p_l_1_y.squeeze(1)
                 p_l_x: TensorType["L", "X"] = log_p.exp()
                 p_l_x_1: TensorType["L", "X", 1] = p_l_x[:,:,None]
                 p_l_x_y: TensorType["L", "X", "Y"] = p_l_x_1 * p_l_1_y
                 p_x = torch.mean(p_l_x, dim= 0)
                 p_x_y = torch.mean(p_l_x_y, dim=0)
-                p_y_bar_x = p_x_y / p_x[:,None]
-                h = torch.sum(- torch.log(p_x_y) * p_y_bar_x, dim=1)
-                output[i] = torch.mean(h)
 
-        # batch_entropy: TensorType = self.compute().cpu()
-        # print(batch_entropy)
-        # conditioned_entropy = output.cpu()
-        # print(conditioned_entropy)
-        # conditioned_entropy = conditioned_entropy + batch_entropy
+                h = torch.sum((p_l_1_y * (p_l_x_1 / p_x[None,:,None])) * torch.log(p_x_y[None,:,:]), dim=2)
+                output[i] = -torch.mean(h)
         print(output)
         return output
     
@@ -308,24 +305,27 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             X = L *  self.samples_sum
             Y = self.batch.num_cat
             p_l_x = log_p.exp()
-            p_n_x_y = torch.zeros(datapoints_size, X, Y)
+            # p_n_l_1_y = torch.zeros(datapoints_size, L, 1, Y)
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
+                p_n_l_1_y = torch.zeros(n_end - n_start, L, 1, Y)
+                p_n_x_y = torch.zeros(n_end - n_start, X, Y)
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
                     sample: TensorType["P", "N", "L", "Y"] = distribution.sample(sample_shape=torch.Size([P])).squeeze(-2)
 
-                    likelihood_samples: TensorType["P", "N", "L", "Y"] = (self.likelihood(sample).probs) # .squeeze(-2)
-                    p_y: TensorType[ "N", "L", "Y"] = torch.mean(likelihood_samples, dim=0)
+                    likelihood_samples: TensorType["P", "N", "L", "Y"] = (self.likelihood(sample).probs)
+                    p_y: TensorType["N", "L", "Y"] = torch.mean(likelihood_samples, dim=0)
 
                     batch_p: TensorType["L", "X"] = p_l_x[l_start: l_end,]
                     p_expanded: TensorType["N", "L", 1, "Y"] = p_y.unsqueeze(-2)
-                    batch_p_expanded: TensorType["L", "X", 1] = batch_p.unsqueeze(-1)
+                    p_n_l_1_y[:,l_start:l_end,:,:].copy_(p_expanded)
+                    batch_p_expanded: TensorType[1, "L", "X", 1] = batch_p.unsqueeze(-1).unsqueeze(0)
                     
                     p_x_y_: TensorType["N", "L", "X", "Y"] =  batch_p_expanded * p_expanded # p(x,y | l)
-                    p_x_y_: TensorType["N", "X", "Y"] = torch.sum(p_x_y_, dim=1)
+                    p_x_y_: TensorType["N", "X", "Y"] =  torch.sum(p_x_y_, dim=1)
                     if j == 0:
                         p_n_x_y = p_x_y_.cpu()
                     else:
@@ -334,10 +334,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
                 p_n_x_y: TensorType["N", "X", "Y"] = p_n_x_y / L
                 p_x: TensorType["X"] = torch.mean(p_l_x, dim=0).cpu()
-                p_y_given_x: TensorType["N", "X", "Y"] = p_n_x_y / (p_x[None,:,None])
-                p: TensorType["N", "X", "Y"] = - torch.log(p_y_given_x)  * p_y_given_x # - p(y | x) log p(y | x)
-                p: TensorType["N", "X"] = torch.sum(p, 2)  # H(Y | X=x)
-                p: TensorType["N"] = torch.mean(p, dim = 1) # H(Y | X)
+                p_n_l_x_1: TensorType["N", "L", "X", 1] = p_l_x[None,:,:,None].expand(n_end - n_start, -1,-1,-1)
+                h: TensorType["N", "L", "X"] = torch.sum((p_n_l_1_y * (p_n_l_x_1 / p_x[None,None,:,None])) * torch.log(p_n_x_y[:,None,:,:]), dim=3)
+                p: TensorType["N"] = -torch.mean(h, dim = (1,2)) # H(Y | X)
                 output[n_start:n_end].copy_(p, non_blocking=True)
             pbar.close()
         
@@ -345,7 +344,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         print(batch_entropy)
         conditioned_entropy = output.cpu()
         print(conditioned_entropy)
-        conditioned_entropy = conditioned_entropy + batch_entropy
+        conditioned_entropy = conditioned_entropy # + batch_entropy
         return conditioned_entropy
 
     def add_variable(self, new: Rank1Update) -> None:
