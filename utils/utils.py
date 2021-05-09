@@ -1,6 +1,6 @@
 from datasets.activelearningdataset import ActiveLearningDataset
-from utils.typing import MultitaskMultivariateNormalType, MultivariateNormalType, TensorType
-from typeguard import check_type, typechecked
+from utils.typing import TensorType
+from typeguard import typechecked
 from tqdm import tqdm
 import torch
 

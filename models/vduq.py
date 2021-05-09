@@ -1,10 +1,10 @@
-from typing import Any, Callable, Dict
+from typing import Any, Dict
+from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
 
 from gpytorch.lazy.cat_lazy_tensor import CatLazyTensor
 from toma import toma
 from tqdm.std import tqdm
 from typeguard import typechecked
-from uncertainty.mvn_utils import combine_mtmvns
 
 from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
 
@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import gpytorch
 import torch
 from torch.utils.data import TensorDataset
-from utils.typing import MultivariateNormalType, TensorType
+from utils.typing import TensorType
 
 @dataclass
 class vDUQParams(ModelWrapperParams):
@@ -300,7 +300,7 @@ class vDUQ(UncertainModel):
 
 
     @typechecked
-    def get_gp_output(self, features: TensorType[ ..., "num_points", "num_features"]) -> MultivariateNormalType[("N"), ("num_points", "num_cats")]:
+    def get_gp_output(self, features: TensorType[ ..., "num_points", "num_features"]) -> MultitaskMultivariateNormalType:
         # We need to expand the dimensions of the features so we can broadcast with the GP
         if len(features.shape) > 2: # we have batches
             features = features.unsqueeze(-3)
@@ -317,7 +317,7 @@ class vDUQ(UncertainModel):
                 pbar.update(end - start)
             pbar.close()
             # We want to keep things off the GPU
-            dist = combine_mtmvns(dists)
+            dist = MultitaskMultivariateNormalType.combine_mtmvns(dists)
             mean_cpu = dist.mean
             cov_cpu = dist.lazy_covariance_matrix
             if torch.cuda.is_available():
@@ -331,4 +331,4 @@ class vDUQ(UncertainModel):
                 else:
                     cov_cpu = cov_cpu.cuda()
 
-            return MultitaskMultivariateNormal(mean=mean_cpu, covariance_matrix=cov_cpu)
+            return MultitaskMultivariateNormalType(mean=mean_cpu, covariance_matrix=cov_cpu)

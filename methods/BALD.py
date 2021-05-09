@@ -1,8 +1,8 @@
 from dataclasses import dataclass
+from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
 from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator
-from uncertainty.mvn_joint_entropy import CustomJointEntropy
+from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy
 from typing import List
-from utils.typing import MultitaskMultivariateNormalType
 
 from models.model import UncertainModel
 from models.vduq import vDUQ
@@ -13,8 +13,8 @@ from batchbald_redux.batchbald import get_bald_batch
 from datasets.activelearningdataset import DatasetUtils
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 import torch
-from .BatchBALD import get_pool, compute_conditional_entropy_mvn
-from utils.typing import TensorType, MultitaskMultivariateNormalType, MultivariateNormalType
+from .BatchBALD import get_pool
+from utils.typing import TensorType
 
 @dataclass
 class BALDParams(MethodParams):
@@ -56,8 +56,8 @@ class BALD(UncertainMethod):
 
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
             features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
-            ind_dists: List[MultitaskMultivariateNormalType[("chunk_size"), (1, "num_cats")]] = model_wrapper.get_gp_output(features_expanded)
-            conditional_entropies_N = compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
+            ind_dists: List[MultitaskMultivariateNormalType] = model_wrapper.get_gp_output(features_expanded)
+            conditional_entropies_N = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
             
             # First we compute the joint distribution of each of the datapoints with the current aquisition
             # We first calculate the aquisition by itself first.
@@ -76,7 +76,7 @@ class BALD(UncertainMethod):
 
             dists = model_wrapper.get_gp_output(grouped_pool)
             joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
-            joint_entropy_class = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
+            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
 
             joint_entropy_class.compute_batch(dists)
 

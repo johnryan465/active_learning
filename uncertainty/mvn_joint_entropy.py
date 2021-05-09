@@ -1,39 +1,32 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from uncertainty.current_batch import CurrentBatch
+from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
 
 from batchbald_redux.batchbald import compute_conditional_entropy
-from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator, CurrentBatch, ExactJointEntropyEstimator, MVNJointEntropyEstimator, Rank1Update, SampledJointEntropyEstimator
+from uncertainty.estimator_entropy import MVNJointEntropyEstimator, Sampling
 from uncertainty.rank2 import Rank1Updates, Rank2Combine, Rank2Next
-from uncertainty.mvn_utils import chunked_cat_rows, chunked_distribution
-from gpytorch.distributions import distribution
-from gpytorch.distributions.multitask_multivariate_normal import MultitaskMultivariateNormal
-from gpytorch.lazy.non_lazy_tensor import NonLazyTensor, lazify
-from torch import distributions
+from uncertainty.mvn_utils import  chunked_distribution
 
-from gpytorch.lazy import CatLazyTensor, BlockInterleavedLazyTensor, batch_repeat_lazy_tensor, cat
-from torch.distributions.utils import _standard_normal
-from typing import Callable, Iterator, List, Type
+from typing import Type
 from typeguard import typechecked
-from utils.typing import MultitaskMultivariateNormalType, MultivariateNormalType, TensorType
+from utils.typing import TensorType
 
 import torch
-from tqdm import tqdm
-from toma import toma
-import string
+
 
 # This class is designed to have a similar interface the the joint entropy class in batchbald_redux.
 # We are wrapping the classes in estimator_entropy to wrap the complexity of the rank2 updates
 
 
 
-class GPCJointEntropy(ABC):
+class GPCEntropy(ABC):
     @abstractmethod
     def compute(self) -> torch.Tensor:
         """Computes the entropy of this joint entropy."""
         pass
 
     @abstractmethod
-    def add_variables(self, next: Rank2Next, selected_point: int) -> "GPCJointEntropy":
+    def add_variables(self, next: Rank2Next, selected_point: int) -> "GPCEntropy":
         """Expands the joint entropy to include more terms."""
         pass
 
@@ -41,16 +34,31 @@ class GPCJointEntropy(ABC):
     def compute_batch(self, next: Rank2Combine) -> TensorType:
         """Computes the joint entropy of the added variables together with the batch (one by one)."""
         pass
+    
+    @staticmethod
+    @typechecked
+    def compute_conditional_entropy_mvn(distribution: MultitaskMultivariateNormalType, likelihood, num_samples : int) -> TensorType["N"]:
+        # The distribution input is a batch of MVNS
+        N = distribution.batch_shape[0]
+        def func(dist: MultitaskMultivariateNormalType) -> TensorType:
+            log_probs_K_n_C = (likelihood(dist.sample(sample_shape=torch.Size([num_samples]))).logits).squeeze(-2)
+            log_probs_n_K_C = log_probs_K_n_C.permute(1, 0, 2)
+            return compute_conditional_entropy(log_probs_N_K_C=log_probs_n_K_C)
+        
+        entropies_N = torch.empty(N, dtype=torch.double)
+        chunked_distribution("Conditional Entropy", distribution, func, entropies_N)
 
+        return entropies_N
 
-class CustomJointEntropy(GPCJointEntropy):
-    def __init__(self, likelihood, samples: int, num_cat: int, pool_size: int, independent: MultitaskMultivariateNormalType, estimator_type: Type[MVNJointEntropyEstimator]) -> None:
+class CustomEntropy(GPCEntropy):
+    def __init__(self, likelihood, samples: Sampling, num_cat: int, pool_size: int, independent: MultitaskMultivariateNormalType, estimator_type: Type[MVNJointEntropyEstimator]) -> None:
         self.r2c: Rank2Combine = Rank2Combine(pool_size, independent)
-        empty_batch = CurrentBatch.empty(num_cat)
+        empty_batch = CurrentBatch.empty(num_cat, torch.cuda.is_available())
         self.estimator: MVNJointEntropyEstimator = estimator_type(empty_batch, likelihood, samples)
 
     @typechecked
     def add_variables(self, rank2: Rank2Next, selected_point: int) -> None:
+        # print(selected_point)
         compressed_idx = self.r2c.to_compressed_index(selected_point)
         r1update = self.r2c.get_rank_1_update(compressed_idx)
         self.estimator.add_variable(r1update)
@@ -66,16 +74,4 @@ class CustomJointEntropy(GPCJointEntropy):
         l_rank1updates: Rank1Updates = Rank1Updates(self.r2c)
         return self.r2c.expand_to_full_pool(self.estimator.compute_batch(l_rank1updates))
 
-@typechecked
-def compute_conditional_entropy_mvn(distribution: MultitaskMultivariateNormalType[("N"), (1, "num_cats")], likelihood, num_samples : int) -> TensorType["N"]:
-    # The distribution input is a batch of MVNS
-    N = distribution.batch_shape[0]
-    def func(dist: MultitaskMultivariateNormalType) -> TensorType:
-        log_probs_K_n_C = (likelihood(dist.sample(sample_shape=torch.Size([num_samples]))).logits).squeeze(-2)
-        log_probs_n_K_C = log_probs_K_n_C.permute(1, 0, 2)
-        return compute_conditional_entropy(log_probs_N_K_C=log_probs_n_K_C)
-    
-    entropies_N = torch.empty(N, dtype=torch.double)
-    chunked_distribution("Conditional Entropy", distribution, func, entropies_N)
 
-    return entropies_N

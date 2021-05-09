@@ -5,7 +5,8 @@
 from dataclasses import dataclass
 from typing import Iterator, List
 import torch
-from utils.typing import MultitaskMultivariateNormalType, TensorType
+from utils.typing import TensorType
+from .multivariate_normal import MultitaskMultivariateNormalType
 from typeguard import typechecked
 from toma import toma
 from tqdm import tqdm
@@ -27,7 +28,7 @@ class Rank1Update:
 
 class Rank2Next:
     # We interprete the first item as the candidate item
-    def __init__(self, rank_2_mvn: MultitaskMultivariateNormalType[("N"),(2, "C")]) -> None:
+    def __init__(self, rank_2_mvn: MultitaskMultivariateNormalType) -> None:
         self.cov = rank_2_mvn.lazy_covariance_matrix.base_lazy_tensor.evaluate().cpu()
         self.mean = (rank_2_mvn.mean)[:, 1, :].cpu()
 
@@ -95,7 +96,7 @@ class Rank2Combine:
         return int(self.cum_sum[idx].item()) - 1
 
     def to_uncompressed_index(self, idx: int) -> int:
-        return (self.cum_sum == (idx + 1)).nonzero().flatten()[0]
+        return int((self.cum_sum == (idx + 1)).nonzero().flatten()[0].item())
 
     def get_rank_1_update(self, idx: int) -> Rank1Update:
         uncompressed_idx = self.to_uncompressed_index(idx)
