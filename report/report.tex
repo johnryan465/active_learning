@@ -6,6 +6,7 @@
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[section]
 
+
 \hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \pagestyle{fancy}
@@ -37,6 +38,9 @@
 Trinity 2021
 }
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\DeclareMathOperator{\E}{\mathbb{E}}
+
 \begin{document}
 % Adjust logo positions here
 \AddToShipoutPicture*{\BackgroundPicturea{Logos/logo2.png}{0.7in}{5.8in}}
@@ -276,6 +280,7 @@ After performing this transformation we have a standard orthant integral which w
 However the number of dimensions which we are performing this integration over is (number of variables) * (number of categories - 1). With the exponential complexity this an infeasible method of computation.
 
 
+
 \section{Sampling}
 
 Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which rely on sampling.
@@ -286,7 +291,65 @@ The complexity of performing this is cubic in the size of the pool, this complex
 This means that we can not use the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to make some improvements in this aspect.
 
 
-\subsection{}
+\section{Entropy}
+
+\begin{definition}[Entropy]
+    For a discrete r.v $X$ the entropy is defined as $$H(X) = - \sum_{x \in X} p(x) \log p(x) $$
+\end{definition}
+
+
+We require the ability to compute the joint entropy of a large number of random variables to compute several of the score functions which we are evaluating.
+
+\subsection{Gaussian Process Classifer}
+As we are using a Gaussian Process Classifier, the random variable of which we are trying to estimate the value of is of a known form.
+
+
+$$ \mathbf{f} \sim N(\mu, \Sigma) $$
+$$ \mathbf{p} =  \sigma \left(f \right) $$
+$$ X_i \sim Cat(p_i) $$
+
+The distribution $p(x)$ does not have a closed formula. We can estimate $p(x)$ via estimating the intergral via monte carlo intergration.
+
+When we are considering larger and larger pool sizes the number of possible states of our random variable grows at an exponential rate.
+
+With $C$ classes the entropy sumation will have $C^n$ terms in it. 
+
+As we have that $ X_i \perp\!\!\!\perp X_j | f$, for a given likelihood sample we can store the exponential number of terms in a factored form. We for a sample $f$, we can compute $p(x_i = c | f)$ for each of the datapoints. To reconstruct the joint distribution for this function sample we take the product of the terms and relevant categories.
+
+
+$$ p(X) = p(x_1, \ldots, x_n) = \E_{l \sim p(l)}  p(x_1, \ldots, x_n | l) = \E_{l \sim p(l)} \prod_{i=1}^n  p(x_i| l)$$
+
+\subsection{Estimating the entroy}
+
+The are 2 different approaches we can use in the estimation.
+
+\subsection{Taking samples}
+
+We can take samples from the distribution, and then use these samples to estimate the entropy.
+
+
+
+\subsection{Plugin Estimator}
+The most straightforward approach is to use the \textit{plugin estimator}. This approach is to take $k$ samples from the distribution of interest, calculate the observed probability of each class and compute the entropy.
+
+As we define the term in the entropy summation as $0$, when the probability is $0$. Using this approach bounds the number of terms in the summation by $k$.
+
+$$p_j = \frac{1}{k} \sum_{i=1}^k \mathbf{1}_{X = j} $$
+
+$$\hat{H}_k = - \sum_{i=1}^{c} \hat{p}_i \log{\hat{p}_i}$$
+
+
+Some of the convergence properties of the plugin estimator are below.
+$$\E \left(H - \hat{H}_k \right)^2 = O \left ( \frac{1}{k} \right) $$
+
+$$ \frac{\sqrt{K}}{\sigma} \left(H - \hat{H}_k \right) \sim \mathbf{N} \left(0, 1 \right) $$
+
+
+
+\subsection{LP Estimator}
+
+Using an \textit{LP Estimator} [cite] we can estimate the the entropy with far less samples. The required number of samples from the distribution to estimate the entropy well is of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support.
+
 
 
 \chapter{Methodology}
@@ -294,7 +357,7 @@ This means that we can not use the same computational tricks used previously to 
 
 All of the experiments referencedx here can easily be replicated using the codebase for this project which is avaiable here.
 
-The code uses the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}.
+The code base for this project uses the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}. Hyper-paramaters were selected using Ray-Tune.
 
 
 
@@ -343,7 +406,6 @@ To attempt to keep the experiments as comparible as possible, the feature extrac
 While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantl.
 
 \subsection{Training on small datasets}
-
 
 \subsection{BALD}
 
