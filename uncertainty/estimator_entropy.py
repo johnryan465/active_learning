@@ -265,10 +265,12 @@ class _SampledJointEntropy:
         for i, candidate in enumerate(pool):
             cond_dists = batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, function_samples)
             dist = next(next(cond_dists))
-            sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(0).squeeze(0).permute(1, 0, 2)
+            sample_ = dist.sample(sample_shape=torch.Size([500])).squeeze(3).squeeze(1)
+            sample_ = torch.mean(sample_, dim=0, keepdim=True)
             candidate_samples.append(sample_)
 
         candidate_samples = torch.cat(candidate_samples, dim=0)
+        
         log_probs_B_K_C = self.likelihood(candidate_samples).logits
         assert self.sampled_joint_probs_M_K.shape[1] == log_probs_B_K_C.shape[1]
 
