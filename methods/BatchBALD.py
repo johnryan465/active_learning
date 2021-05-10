@@ -1,5 +1,5 @@
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
-from uncertainty.estimator_entropy import ExactJointEntropyEstimator, SampledJointEntropyEstimator
+from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator, ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling
 
 from utils.utils import get_pool
 from datasets.activelearningdataset import DatasetUtils
@@ -70,17 +70,9 @@ class BatchBALD(UncertainMethod):
                 ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
                 conditional_entropies_N: TensorType["datapoints"] = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
 
-                # with profiler.profile(record_shapes=True) as prof:
-                #     with profiler.record_function("joint_entropy"):
-
-                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
-                joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, SampledJointEntropyEstimator)
-                # joint_entropy_class: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 5000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
+                joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, Sampling(batch_samples=600, per_samples=100, samples_sum=20), num_cat, N, ind_dists, SampledJointEntropyEstimator)
                 if self.params.smoke_test:
-                    joint_entropy_class_: GPCEntropy = CustomEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, ExactJointEntropyEstimator)
-                    #joint_entropy_class_: GPCJointEntropy = CustomJointEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
-                # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-                # print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=10))
+                    joint_entropy_class_: GPCEntropy = CustomEntropy(model_wrapper.likelihood, Sampling(batch_samples=5000), num_cat, N, ind_dists, ExactJointEntropyEstimator)
 
                 for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                     # First we compute the joint distribution of each of the datapoints with the current aquisition

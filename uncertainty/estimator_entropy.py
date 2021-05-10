@@ -61,31 +61,21 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         sum_samples = self.samples_sum
 
         likelihood_samples: TensorType["S", "D", "C"] = likelihood(distribution.sample(sample_shape=torch.Size([self.batch_samples]))).probs
-
-        l_shape = likelihood_samples.shape
-        likelihood_samples: TensorType["S * D", "C"] = likelihood_samples.reshape((-1, l_shape[-1]))
-        # Instead of using einsum we will sample from the possible 
-        # indexes, we wish to keep the same for each datapoints samples
-
-        
-        choices: TensorType["S * D", "E"] = torch.multinomial(likelihood_samples, sum_samples, replacement=True)
-        choices: TensorType["S", "D", "E"] = choices.reshape( list(l_shape[:-1]) + [-1])
-        likelihood_samples: TensorType["S", "D", "C"] = likelihood_samples.reshape(l_shape)
-        
         self.likelihood_samples = likelihood_samples
 
+        probs_N_K_C = likelihood_samples.permute(1, 0, 2)
 
-        l: TensorType["S", "S", "D", "C"] = likelihood_samples[None,:,:,:].expand(batch_samples, -1, -1, -1)
-        choices: TensorType["S", "S", "D", "E"] = choices[:,None,:,:].expand(-1, batch_samples, -1, -1)
-        self.choices = choices
-        p: TensorType["S", "S", "D", "E"] = torch.gather(l, 3, choices)
+        choices_N_K_S = joint_entropy.batch_multi_choices(probs_N_K_C, sum_samples).long()
 
+        expanded_choices_N_1_K_S = choices_N_K_S[:, None, :, :]
+        expanded_probs_N_K_1_C = probs_N_K_C[:, :, None, :]
 
-        p: TensorType["S", "S", "D", "E"] = torch.log(p)
-        p: TensorType["S", "S", "E"] = torch.sum(p, dim=2) # For each of the samples we have a random sample of log probs
-        p: TensorType["S", "S*E"] = torch.flatten(p, start_dim=1)
+        probs_N_K_K_S = joint_entropy.gather_expand(expanded_probs_N_K_1_C, dim=-1, index=expanded_choices_N_1_K_S)
+        # exp sum log seems necessary to avoid 0s?
+        log_probs_K_K_S = torch.sum(torch.log(probs_N_K_K_S), dim=0, keepdim=False)
+        samples_K_M = log_probs_K_K_S.reshape((batch_samples, -1))
 
-        self.log_probs = p
+        self.log_probs = samples_K_M
 
     def compute(self) -> TensorType:
         p = self.log_probs.exp()
@@ -127,7 +117,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                 p_l_1_y: TensorType["L", 1, "Y"]  = torch.cat(sample_list, dim=0)
                 p_l_x: TensorType["L", "X"] = log_p.exp()
                 p_l_x_1: TensorType["L", "X", 1] = p_l_x[:,:,None]
-                p_l_x_y: TensorType["L", "X", "Y"] = p_l_x_1 * p_l_1_y
+                p_l_x_y: TensorType["L", "X", "Y"] = p_l_x_1 @ p_l_1_y
                 p_x: TensorType["X"] = torch.mean(p_l_x, dim=0)
                 p_x_y: TensorType["X", "Y"] = torch.mean(p_l_x_y, dim=0)
                 e: TensorType["X", "Y"] = p_x_y
@@ -142,9 +132,9 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         log_p = self.log_probs
 
         if torch.cuda.is_available():
-            p_l_x = log_p.exp().cuda()
+            p_k_m = log_p.exp().cuda()
         else:
-            p_l_x = log_p.exp()
+            p_k_m = log_p.exp()
 
 
         N = candidates.size
@@ -155,7 +145,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
         output = torch.zeros(N)
         # We are going to compute the entropy in stages, the entropy of the current batch plus the entropy of the candiate
-        # conditioned on the batch
+        # conditioned on the batch/s]
+
         # Dimension annotations
         # N - per data point
         # L - samples from the underlying MVN
@@ -170,54 +161,154 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             pbar = tqdm(total=N*L, desc="Sampling Batch", leave=False)
             datapoints_size = max(1, batchsize // L)
             samples_size = min(L, batchsize)
-            X = L *  self.samples_sum
-            Y = self.batch.num_cat
+            M = L *  self.samples_sum
+            C = self.batch.num_cat
+            K = L
             # p_n_l_1_y = torch.zeros(datapoints_size, L, 1, Y)
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
-                p_n_l_1_y = torch.zeros(n_end - n_start, L, 1, Y, device=p_l_x.device)
-                p_n_x_y = torch.zeros(n_end - n_start, X, Y, device=p_l_x.device)
+                p_b_m_c = torch.zeros(n_end - n_start, M, C, device=p_k_m.device)
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
-                    sample: TensorType["P", "N", "L", "Y"] = distribution.sample(sample_shape=torch.Size([P])).squeeze(-2)
+                    sample: TensorType["P", "B", "K", "C"] = distribution.sample(sample_shape=torch.Size([P])).squeeze(-2)
 
-                    likelihood_samples: TensorType["P", "N", "L", "Y"] = (self.likelihood(sample).probs)
-                    p_y: TensorType["N", "L", "Y"] = torch.mean(likelihood_samples, dim=0)
+                    likelihood_samples: TensorType["P", "B", "K", "C"] = (self.likelihood(sample).probs)
+                    p_c: TensorType["B", "K", "C"] = torch.mean(likelihood_samples, dim=0)
 
-                    batch_p: TensorType["L", "X"] = p_l_x[l_start: l_end,]
-                    p_expanded: TensorType["N", "L", 1, "Y"] = p_y.unsqueeze(-2)
-                    p_n_l_1_y[:,l_start:l_end,:,:].copy_(p_expanded)
-                    batch_p_expanded: TensorType[1, "L", "X", 1] = batch_p.unsqueeze(-1).unsqueeze(0)
-                    
-                    p_x_y_: TensorType["N", "L", "X", "Y"] =  batch_p_expanded * p_expanded # p(x,y | l)
-                    p_x_y_: TensorType["N", "X", "Y"] =  torch.sum(p_x_y_, dim=1)
+                    batch_p: TensorType["K", "M"] = p_k_m[l_start: l_end,]
+
+                    batch_p_expanded: TensorType["B", "M", "K"] = batch_p.unsqueeze(0).expand(n_end - n_start, -1, -1).permute(0, 2, 1)
+                    p_m_c_: TensorType["B", "M", "C"] =  batch_p_expanded @ p_c
                     if j == 0:
-                        p_n_x_y = p_x_y_
+                        p_b_m_c = p_m_c_
                     else:
-                        p_n_x_y += p_x_y_
+                        p_b_m_c += p_m_c_
                     pbar.update((n_end - n_start) * (l_end - l_start))
-
-                p_n_x_y: TensorType["N", "X", "Y"] = p_n_x_y / L
-                p_x: TensorType["X"] = torch.mean(p_l_x, dim=0)
-                p_n_l_x_1: TensorType["N", "L", "X", 1] = p_l_x[None,:,:,None].expand(n_end - n_start, -1,-1,-1)
-                h: TensorType["N", "L", "X"] = torch.sum(((p_n_l_1_y * p_n_l_x_1) / p_x[None,None,:,None]) * torch.log(p_n_x_y[:,None,:,:]), dim=3)
-                p: TensorType["N"] = -torch.mean(h, dim = (1,2)) # H(Y | X)
-                del p_n_l_1_y
-                del p_n_x_y
-                output[n_start:n_end].copy_(p, non_blocking=True)
+                
+                p_b_m_c /=  K
+                p_m: TensorType["M"] = torch.mean(p_k_m, dim=0)
+                p_1_m_1 = p_m[None,:,None]
+                h: TensorType["B", "L", "M"] = - torch.sum( (p_b_m_c / p_1_m_1) * torch.log(p_b_m_c), dim=(1,2)) / M
+                output[n_start:n_end].copy_(h, non_blocking=True)
             pbar.close()
         
-        batch_entropy: TensorType = self.compute().cpu()
-        conditioned_entropy = output.cpu()
-        conditioned_entropy = conditioned_entropy # + batch_entropy
-        return conditioned_entropy
+        entropy = output.cpu()
+        return entropy
 
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
         self.create_samples()
 
+class _SampledJointEntropy:
+    """Random variables (all with the same # of categories $C$) can be added via `SampledJointEntropy.add_variables`.
+
+    `SampledJointEntropy.compute` computes the joint entropy.
+
+    `SampledJointEntropy.compute_batch` computes the joint entropy of the added variables with each of the variables in the provided batch probabilities in turn."""
+
+    sampled_joint_probs_M_K: torch.Tensor
+
+    def __init__(self, sampled_joint_probs_M_K: torch.Tensor, likelihood):
+        self.sampled_joint_probs_M_K = sampled_joint_probs_M_K
+        self.likelihood = likelihood
+
+    @staticmethod
+    def empty(K: int, likelihood, device=None, dtype=None) -> "_SampledJointEntropy":
+        return _SampledJointEntropy(torch.ones((1, K), device=device, dtype=dtype), likelihood)
+
+    @staticmethod
+    def sample(samples: torch.Tensor, M: int, likelihood) -> "_SampledJointEntropy":
+        probs_N_K_C = likelihood(samples).probs
+        K = probs_N_K_C.shape[1]
+
+        # S: num of samples per w
+        S = M // K
+
+        choices_N_K_S = joint_entropy.batch_multi_choices(probs_N_K_C, S).long()
+
+        expanded_choices_N_1_K_S = choices_N_K_S[:, None, :, :]
+        expanded_probs_N_K_1_C = probs_N_K_C[:, :, None, :]
+
+        probs_N_K_K_S = joint_entropy.gather_expand(expanded_probs_N_K_1_C, dim=-1, index=expanded_choices_N_1_K_S)
+        # exp sum log seems necessary to avoid 0s?
+        probs_K_K_S = torch.exp(torch.sum(torch.log(probs_N_K_K_S), dim=0, keepdim=False))
+        samples_K_M = probs_K_K_S.reshape((K, -1))
+
+        samples_M_K = samples_K_M.t()
+        return _SampledJointEntropy(samples_M_K, likelihood)
+
+    def compute(self) -> torch.Tensor:
+        sampled_joint_probs_M = torch.mean(self.sampled_joint_probs_M_K, dim=1, keepdim=False)
+        nats_M = -torch.log(sampled_joint_probs_M)
+        entropy = torch.mean(nats_M)
+        return entropy
+
+    def add_variables(self, log_probs_N_K_C: torch.Tensor, M2: int) -> "_SampledJointEntropy":
+        assert self.sampled_joint_probs_M_K.shape[1] == log_probs_N_K_C.shape[1]
+
+        sample_K_M1_1 = self.sampled_joint_probs_M_K.t()[:, :, None]
+
+        new_sample_M2_K = self.sample(log_probs_N_K_C.exp(), M2, self.likelihood).sampled_joint_probs_M_K
+        new_sample_K_1_M2 = new_sample_M2_K.t()[:, None, :]
+
+        merged_sample_K_M1_M2 = sample_K_M1_1 * new_sample_K_1_M2
+        merged_sample_K_M = merged_sample_K_M1_M2.reshape((K, -1))
+
+        self.sampled_joint_probs_M_K = merged_sample_K_M.t()
+
+        return self
+
+    def compute_batch(self, pool: Rank1Updates, batch, samples, function_samples, output_entropies_B=None):
+        candidate_samples = []
+        for i, candidate in enumerate(pool):
+            cond_dists = batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, function_samples)
+            dist = next(next(cond_dists))
+            sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(0).squeeze(0).permute(1, 0, 2)
+            candidate_samples.append(sample_)
+
+        candidate_samples = torch.cat(candidate_samples, dim=0)
+        log_probs_B_K_C = self.likelihood(candidate_samples).logits
+        assert self.sampled_joint_probs_M_K.shape[1] == log_probs_B_K_C.shape[1]
+
+        B, K, C = log_probs_B_K_C.shape
+        M = self.sampled_joint_probs_M_K.shape[0]
+
+        if output_entropies_B is None:
+            output_entropies_B = torch.empty(B, dtype=log_probs_B_K_C.dtype, device=log_probs_B_K_C.device)
+
+        pbar = tqdm(total=B, desc="SampledJointEntropy.compute_batch", leave=False)
+
+        @toma.execute.chunked(log_probs_B_K_C, initial_step=1024, dimension=0)
+        def chunked_joint_entropy(chunked_log_probs_b_K_C: torch.Tensor, start: int, end: int):
+            b = chunked_log_probs_b_K_C.shape[0]
+
+            probs_b_M_C = torch.empty(
+                (b, M, C),
+                dtype=self.sampled_joint_probs_M_K.dtype,
+                device=self.sampled_joint_probs_M_K.device,
+            )
+            for i in range(b):
+                torch.matmul(
+                    self.sampled_joint_probs_M_K,
+                    chunked_log_probs_b_K_C[i].to(self.sampled_joint_probs_M_K, non_blocking=True).exp(),
+                    out=probs_b_M_C[i],
+                )
+            probs_b_M_C /= K
+
+            q_1_M_1 = self.sampled_joint_probs_M_K.mean(dim=1, keepdim=True)[None]
+
+            output_entropies_B[start:end].copy_(
+                torch.sum(-torch.log(probs_b_M_C) * probs_b_M_C / q_1_M_1, dim=(1, 2)) / M,
+                non_blocking=True,
+            )
+
+            pbar.update(end - start)
+
+        pbar.close()
+
+        return output_entropies_B
 
 
 class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
@@ -276,8 +367,6 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
         print(torch.min(log_probs_N_K_C.exp()))
         batch_joint_entropy = joint_entropy.SampledJointEntropy.sample(log_probs_N_K_C.exp(), samples)
 
-        # batch_joint_entropy.add_variables(log_probs_N_K_C)
-
         return batch_joint_entropy.compute()
 
     @staticmethod
@@ -295,14 +384,11 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
         pbar = tqdm(total=N, desc="BBRedux Batch", leave=False)
         samples:  TensorType["samples", "datapoints", "num_cat"] = self.batch.distribution.sample(sample_shape=torch.Size([function_samples]))
 
-        for i, candidate in enumerate(pool):
-            cond_dists = self.batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, function_samples)
-            dist = next(next(cond_dists))
-            sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(0).squeeze(0)
-            joint_sample = torch.cat([samples, sample_], dim=1)
-            log_probs = (self.likelihood(joint_sample).logits).permute(1,0,2) # type: ignore
-            output[i] = BBReduxJointEntropyEstimator._compute(log_probs, self.function_samples * self.per_samples)
-            pbar.update(1)
+        if samples.shape[1] == 0:
+            batch_joint_entropy = _SampledJointEntropy.empty(function_samples, self.likelihood)
+        else:
+            batch_joint_entropy = _SampledJointEntropy.sample(samples.permute(1, 0, 2), function_samples * self.per_samples, self.likelihood)
+        batch_joint_entropy.compute_batch(pool, self.batch, samples, function_samples, output)
         pbar.close()
         return output
 
