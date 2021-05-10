@@ -260,12 +260,12 @@ class _SampledJointEntropy:
 
         return self
 
-    def compute_batch(self, pool: Rank1Updates, batch, samples, function_samples, output_entropies_B=None):
+    def compute_batch(self, pool: Rank1Updates, batch, samples, function_samples, per_samples, output_entropies_B=None):
         candidate_samples = []
         for i, candidate in enumerate(pool):
             cond_dists = batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), samples, function_samples)
             dist = next(next(cond_dists))
-            sample_ = dist.sample(sample_shape=torch.Size([500])).squeeze(3).squeeze(1)
+            sample_ = dist.sample(sample_shape=torch.Size([per_samples])).squeeze(3).squeeze(1)
             sample_ = torch.mean(sample_, dim=0, keepdim=True)
             candidate_samples.append(sample_)
 
@@ -361,6 +361,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
         self.likelihood = likelihood
         self.function_samples = samples.batch_samples
         self.per_samples = samples.per_samples
+        self.sum_samples = samples.samples_sum
         super().__init__(batch, likelihood, samples)
 
     @staticmethod
@@ -390,7 +391,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
             batch_joint_entropy = _SampledJointEntropy.empty(function_samples, self.likelihood)
         else:
             batch_joint_entropy = _SampledJointEntropy.sample(samples.permute(1, 0, 2), function_samples * self.per_samples, self.likelihood)
-        batch_joint_entropy.compute_batch(pool, self.batch, samples, function_samples, output)
+        batch_joint_entropy.compute_batch(pool, self.batch, samples, function_samples, self.per_samples, output)
         pbar.close()
         return output
 
