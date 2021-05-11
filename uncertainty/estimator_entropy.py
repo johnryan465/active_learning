@@ -46,8 +46,11 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         self.samples_sum = samples.samples_sum
         self.batch_samples = samples.batch_samples
         self.per_samples = samples.per_samples
-        self.probs = torch.ones(self.batch_samples, self.batch_samples * self.samples_sum)
-
+        
+        if torch.cuda.is_available():
+            self.probs = torch.ones(self.batch_samples, self.batch_samples * self.samples_sum, device='cuda')
+        else:
+            self.probs = torch.ones(self.batch_samples, self.batch_samples * self.samples_sum)
         self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
         super().__init__(batch, likelihood, samples)
 
