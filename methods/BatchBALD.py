@@ -72,7 +72,7 @@ class BatchBALD(UncertainMethod):
                 ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
                 conditional_entropies_N: TensorType["datapoints"] = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
 
-                joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, Sampling(batch_samples=600, per_samples=100, samples_sum=20), num_cat, N, ind_dists, SampledJointEntropyEstimator)
+                joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, Sampling(batch_samples=300, per_samples=10, samples_sum=20), num_cat, N, ind_dists, SampledJointEntropyEstimator)
                 if self.params.smoke_test:
                     joint_entropy_class_: GPCEntropy = CustomEntropy(model_wrapper.likelihood, Sampling(batch_samples=5000), num_cat, N, ind_dists, ExactJointEntropyEstimator)
 
