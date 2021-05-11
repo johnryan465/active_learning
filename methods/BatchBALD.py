@@ -11,6 +11,7 @@ from methods.method import UncertainMethod, Method
 from methods.method_params import MethodParams
 from batchbald_redux.batchbald import CandidateBatch, get_batchbald_batch
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
+import torch.autograd.profiler as profiler
 
 from typeguard import typechecked
 from utils.typing import TensorType
@@ -92,7 +93,20 @@ class BatchBALD(UncertainMethod):
                     if i > 0:
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
 
+
+                    # with profiler.profile(record_shapes=True) as prof:
+                    #     with profiler.record_function("model_inference"):
+                    #         joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
+                    # print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=100))
+
+                    import cProfile, pstats
+                    profiler = cProfile.Profile()
+                    profiler.enable()
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
+                    profiler.disable()
+                    stats = pstats.Stats(profiler).sort_stats('cumtime')
+                    stats.print_stats()
+
                     print(joint_entropy_result.shape)
                     print(joint_entropy_result)
                     
@@ -100,7 +114,7 @@ class BatchBALD(UncertainMethod):
                     if self.params.smoke_test:
                         if i > 0:
                             joint_entropy_class_.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
-                        
+                    
 
 
                     shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
@@ -123,7 +137,7 @@ class BatchBALD(UncertainMethod):
                         scores_N_ = joint_entropy_result_ - (conditional_entropies_N + shared_conditinal_entropies)
                         scores_N_[candidate_indices] = -float("inf")
                         candidate_score_, candidate_index_ = scores_N_.max(dim=0)
-                        print(joint_entropy_result[candidate_index])
+
                         print("Sampled")
                         _, y = pool_tensor[candidate_index]
                         print(y, candidate_score)

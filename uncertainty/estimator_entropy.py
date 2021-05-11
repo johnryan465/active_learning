@@ -122,7 +122,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
                     batch_p: TensorType["K", "M"] = p_k_m[l_start: l_end,]
 
-                    batch_p_expanded: TensorType["B", "M", "K"] = batch_p.unsqueeze(0).expand(n_end - n_start, -1, -1).permute(0, 2, 1)
+                    batch_p_expanded: TensorType["B", "M", "K"] = batch_p.unsqueeze(0).permute(0, 2, 1)
                     p_m_c_: TensorType["B", "M", "C"] =  batch_p_expanded @ p_c
                     if j == 0:
                         p_b_m_c = p_m_c_
