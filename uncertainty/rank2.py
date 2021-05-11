@@ -92,47 +92,50 @@ class Rank2Combine:
         output.scatter_(0, idx, smaller)
         return output
 
-    def to_compressed_index(self, idx: int) -> int:
-        return int(self.cum_sum[idx].item()) - 1
-
-    def to_uncompressed_index(self, idx: int) -> int:
-        return int((self.cum_sum == (idx + 1)).nonzero().flatten()[0].item())
-
     def get_rank_1_update(self, idx: int) -> Rank1Update:
-        uncompressed_idx = self.to_uncompressed_index(idx)
-        mean = self.mean[uncompressed_idx:uncompressed_idx+1]
-        self_cov = self.self_covar[uncompressed_idx]
-        cross_mat = self.cross_mat[uncompressed_idx]
+        mean = self.mean[idx:idx+1]
+        self_cov = self.self_covar[idx]
+        cross_mat = self.cross_mat[idx]
         return Rank1Update(mean, self_cov, cross_mat)
+
+    def get_rank_1_updates(self) -> Iterator[Rank1Update]:
+        mean = self.get_mean()
+        self_cov = self.get_self_covar()
+        cross_mat = self.get_cross_mat()
+        for i in range(mean.shape[0]):
+            yield Rank1Update(mean[i:i+1], self_cov[i], cross_mat[i])
 
 class Rank1Updates:
     def __init__(self, r2c: Rank2Combine = None, already_computed: List[Rank1Update] = None):
         if already_computed is not None:
             self.max = len(already_computed)
+            self.iter = iter(already_computed)
             self.values = already_computed
             self.already_computed = True
         else:
             self.max = r2c.pool_size - len(r2c.candidate_indexes)
+            self.iter = r2c.get_rank_1_updates()
             self.r2c = r2c
             self.already_computed = False
         self.idx = 0
-        self.size = self.max
 
     def __iter__(self):
         return self
     
     def __len__(self):
-        return self.size
+        print(self.max)
+        return self.max
 
     def reset(self):
         self.idx = 0
+        if self.already_computed:
+            self.iter = iter(self.values)
+        else:
+            self.iter = self.r2c.get_rank_1_updates()
 
     def __next__(self) -> Rank1Update:
         if self.idx < self.max:
-            if self.already_computed:
-                update = self.values[self.idx]
-            else:
-                update = self.r2c.get_rank_1_update(self.idx)
+            update = next(self.iter)
             self.idx += 1
             return update
         else:

@@ -58,9 +58,7 @@ class CustomEntropy(GPCEntropy):
 
     @typechecked
     def add_variables(self, rank2: Rank2Next, selected_point: int) -> None:
-        # print(selected_point)
-        compressed_idx = self.r2c.to_compressed_index(selected_point)
-        r1update = self.r2c.get_rank_1_update(compressed_idx)
+        r1update = self.r2c.get_rank_1_update(selected_point)
         self.estimator.add_variable(r1update)
         self.r2c.add(rank2, selected_point)
 

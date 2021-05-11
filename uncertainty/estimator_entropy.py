@@ -91,7 +91,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             p_k_m = self.probs
 
 
-        N = candidates.size
+        N = len(candidates)
                 
         P = self.per_samples
         L = self.batch_samples
