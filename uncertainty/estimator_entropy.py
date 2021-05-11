@@ -157,14 +157,13 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         @toma.execute.batch(N*L)
         def compute(batchsize: int):
             candidates.reset()
-            conditional_dists = self.batch.create_conditionals_from_rank1s(candidates, self.likelihood_samples, batchsize)
+            conditional_dists = self.batch.create_conditionals_from_rank1s(candidates, self.likelihood_samples, L)
             pbar = tqdm(total=N*L, desc="Sampling Batch", leave=False)
             datapoints_size = max(1, batchsize // L)
             samples_size = min(L, batchsize)
             M = L *  self.samples_sum
             C = self.batch.num_cat
             K = L
-            # p_n_l_1_y = torch.zeros(datapoints_size, L, 1, Y)
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
