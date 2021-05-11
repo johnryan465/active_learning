@@ -98,7 +98,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         P = self.per_samples
         L = self.batch_samples
         
-        output = torch.zeros(N, device='cpu')
+        output = torch.zeros(N, device=p_m_k.device)
 
         @toma.execute.batch(N*L)
         def compute(batchsize: int):
@@ -136,7 +136,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                 output[n_start:n_end].copy_(h, non_blocking=True)
             pbar.close()
         
-        return output
+        return output.cpu()
 
 
     def add_variable(self, new: Rank1Update) -> None:
