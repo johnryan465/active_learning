@@ -32,7 +32,7 @@ class CurrentBatch:
         _covar = self.distribution.lazy_covariance_matrix.base_lazy_tensor.cat_rows(cross_mat, self_cov).evaluate()
 
         new_dist = MultitaskMultivariateNormalType.create(_mean, _covar, self.cuda)
-        return CurrentBatch(new_dist, self.num_cat, self.num_points+1)
+        return CurrentBatch(new_dist, self.num_cat, self.num_points+1, self.cuda)
 
     @staticmethod
     def empty(num_cat: int, cuda: bool) -> "CurrentBatch":
