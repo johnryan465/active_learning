@@ -61,7 +61,7 @@ class ActiveLearningDataset(ABC):
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
 class DatasetWrapper(ActiveLearningDataset):
-    num_workers = 1
+    num_workers = 4
     
     def __init__(self, train_dataset: VisionDataset,
                  test_dataset: VisionDataset, config: DatasetParams) -> None:
