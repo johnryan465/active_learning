@@ -75,8 +75,10 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         # exp sum log seems necessary to avoid 0s?
         probs_K_K_S = torch.exp(torch.sum(torch.log(probs_N_K_K_S), dim=0, keepdim=False))
         samples_K_M = probs_K_K_S.reshape((batch_samples, -1))
-
         self.probs = samples_K_M
+        if torch.cuda.is_available():
+            self.probs = self.probs.to('cuda', non_blocking=True)
+
 
     def compute(self) -> TensorType:
         p = self.probs
@@ -85,10 +87,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
     @typechecked
     def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:   
-        if torch.cuda.is_available():
-            p_k_m = self.probs.cuda()
-        else:
-            p_k_m = self.probs
+        p_k_m = self.probs
 
 
         N = len(candidates)
@@ -96,7 +95,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         P = self.per_samples
         L = self.batch_samples
         
-        output = torch.zeros(N)
+        output = torch.zeros(N, device='cpu')
 
         @toma.execute.batch(N*L)
         def compute(batchsize: int):
@@ -124,10 +123,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
                     batch_p_expanded: TensorType["B", "M", "K"] = batch_p.unsqueeze(0).permute(0, 2, 1)
                     p_m_c_: TensorType["B", "M", "C"] =  batch_p_expanded @ p_c
-                    if j == 0:
-                        p_b_m_c = p_m_c_
-                    else:
-                        p_b_m_c += p_m_c_
+                    p_b_m_c += p_m_c_
                     pbar.update((n_end - n_start) * (l_end - l_start))
                 
                 p_b_m_c /=  K
@@ -137,8 +133,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                 output[n_start:n_end].copy_(h, non_blocking=True)
             pbar.close()
         
-        entropy = output.cpu()
-        return entropy
+        return output
 
 
     def add_variable(self, new: Rank1Update) -> None:
