@@ -78,7 +78,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         # exp sum log seems necessary to avoid 0s?
         probs_K_K_S = torch.exp(torch.sum(torch.log(probs_N_K_K_S), dim=0, keepdim=False))
         samples_K_M = probs_K_K_S.reshape((batch_samples, -1))
-        self.probs = samples_K_M
+        self.probs = samples_K_M.t()
         if torch.cuda.is_available():
             self.probs = self.probs.to('cuda', non_blocking=True)
 
@@ -90,7 +90,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
 
     @typechecked
     def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:   
-        p_k_m = self.probs
+        p_m_k = self.probs
 
 
         N = len(candidates)
@@ -113,7 +113,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             for i, candidate in enumerate(conditional_dists):
                 n_start = i*datapoints_size
                 n_end = min((i+1)*datapoints_size, N)
-                p_b_m_c = torch.zeros(n_end - n_start, M, C, device=p_k_m.device)
+                p_b_m_c = torch.zeros(n_end - n_start, M, C, device=p_m_k.device)
                 for j, distribution in enumerate(candidate):
                     l_start = j*samples_size
                     l_end = min((j+1)* samples_size, L)
@@ -122,15 +122,15 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                     likelihood_samples: TensorType["P", "B", "K", "C"] = (self.likelihood(sample).probs)
                     p_c: TensorType["B", "K", "C"] = torch.mean(likelihood_samples, dim=0)
 
-                    batch_p: TensorType["K", "M"] = p_k_m[l_start: l_end,]
+                    batch_p: TensorType["M", "K"] = p_m_k[, l_start: l_end]
 
-                    batch_p_expanded: TensorType["B", "M", "K"] = batch_p.unsqueeze(0).permute(0, 2, 1)
+                    batch_p_expanded: TensorType[1, "M", "K"] = batch_p.unsqueeze(0)
                     p_m_c_: TensorType["B", "M", "C"] =  batch_p_expanded @ p_c
                     p_b_m_c += p_m_c_
                     pbar.update((n_end - n_start) * (l_end - l_start))
                 
                 p_b_m_c /=  K
-                p_m: TensorType["M"] = torch.mean(p_k_m, dim=0)
+                p_m: TensorType["M"] = torch.mean(p_m_k, dim=1)
                 p_1_m_1 = p_m[None,:,None]
                 h: TensorType["B", "L", "M"] = - torch.sum( (p_b_m_c / p_1_m_1) * torch.log(p_b_m_c), dim=(1,2)) / M
                 output[n_start:n_end].copy_(h, non_blocking=True)
