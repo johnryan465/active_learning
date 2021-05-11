@@ -122,7 +122,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
                     likelihood_samples: TensorType["P", "B", "K", "C"] = (self.likelihood(sample).probs)
                     p_c: TensorType["B", "K", "C"] = torch.mean(likelihood_samples, dim=0)
 
-                    batch_p: TensorType["M", "K"] = p_m_k[, l_start: l_end]
+                    batch_p: TensorType["M", "K"] = p_m_k[:, l_start: l_end]
 
                     batch_p_expanded: TensorType[1, "M", "K"] = batch_p.unsqueeze(0)
                     p_m_c_: TensorType["B", "M", "C"] =  batch_p_expanded @ p_c
