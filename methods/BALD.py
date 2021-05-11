@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
-from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator
+from uncertainty.bbredux_estimator_entropy import BBReduxJointEntropyEstimator
 from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy
 from typing import List
 

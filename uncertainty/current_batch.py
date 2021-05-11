@@ -3,16 +3,12 @@
 
 from typing import Iterator
 
-from torch.distributions import distribution
 from uncertainty.rank2 import Rank1Update, Rank1Updates
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
 import torch
 from utils.typing import TensorType
 from dataclasses import dataclass
 
-
-from gpytorch.lazy.block_interleaved_lazy_tensor import BlockInterleavedLazyTensor
-from gpytorch.lazy.non_lazy_tensor import lazify
 from typeguard import typechecked
 
 @dataclass

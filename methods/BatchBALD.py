@@ -1,5 +1,6 @@
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
-from uncertainty.estimator_entropy import BBReduxJointEntropyEstimator, ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling
+from uncertainty.estimator_entropy import ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling
+from uncertainty.bbredux_estimator_entropy import BBReduxJointEntropyEstimator
 
 from utils.utils import get_pool
 from datasets.activelearningdataset import DatasetUtils
@@ -92,6 +93,8 @@ class BatchBALD(UncertainMethod):
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
 
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
+                    print(joint_entropy_result.shape)
+                    print(joint_entropy_result)
                     
                     # print(joint_entropy_result)
                     if self.params.smoke_test:
