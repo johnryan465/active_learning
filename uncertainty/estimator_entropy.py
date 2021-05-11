@@ -154,10 +154,10 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         # Y - a dimension of size C for the candidate points
         # P - The number of samples we use to estimate p(y|l)
 
-        @toma.execute.batch(N*L)
+        @toma.execute.batch(L)
         def compute(batchsize: int):
             candidates.reset()
-            conditional_dists = self.batch.create_conditionals_from_rank1s(candidates, self.likelihood_samples, L)
+            conditional_dists = self.batch.create_conditionals_from_rank1s(candidates, self.likelihood_samples, batchsize)
             pbar = tqdm(total=N*L, desc="Sampling Batch", leave=False)
             datapoints_size = max(1, batchsize // L)
             samples_size = min(L, batchsize)
