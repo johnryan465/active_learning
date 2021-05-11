@@ -390,7 +390,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
         if samples.shape[1] == 0:
             batch_joint_entropy = _SampledJointEntropy.empty(function_samples, self.likelihood)
         else:
-            batch_joint_entropy = _SampledJointEntropy.sample(samples.permute(1, 0, 2), function_samples * self.per_samples, self.likelihood)
+            batch_joint_entropy = _SampledJointEntropy.sample(samples.permute(1, 0, 2), function_samples * self.sum_samples, self.likelihood)
         batch_joint_entropy.compute_batch(pool, self.batch, samples, function_samples, self.per_samples, output)
         pbar.close()
         return output
