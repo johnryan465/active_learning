@@ -15,10 +15,11 @@ import uuid
 def create_training_function(path):
     def training_function(config):
         # Hyperparameters
-        lr = config["point"][0]
+        lr = config["lr"]
+        var_opt = lr
         dropout = config["dropout"]
         method = config["method"]
-        coeff = config["point"][1]
+        coeff = config["coeff"]
         batch_size = config["batch_size"]
         var_opt = config["var_opt"]
         starting_size = config["starting_size"]
@@ -29,9 +30,9 @@ def create_training_function(path):
         # aquisition
         args = Namespace(
             data_path=path,
-            aquisition_size=7, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
+            aquisition_size=10, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
             epochs=500, initial_per_class=starting_size, smoke_test=False, var_reduction=False, lr=lr, method=method, use_progress=False, model='vduq', model_index=0, var_opt=var_opt, n_inducing_points=n_inducing_points,
-            num_repetitions=4, name='vduq_bb_tuning', num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff)
+            num_repetitions=1, name='vduq_bb_tuning', num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff)
 
         dataset_params = parse_dataset(args)
         method_params = parse_method(args)
@@ -59,37 +60,37 @@ if __name__ == "__main__":
     args = parser.parse_args()
     ray.init(include_dashboard=False)
 
-    df_search = DragonflySearch(
-        optimizer="bandit",
-        domain="euclidean")
+    # df_search = DragonflySearch(
+    #     optimizer="bandit",
+    #     domain="euclidean")
 
-    df_search = ConcurrencyLimiter(df_search, max_concurrent=2)
-    scheduler = ASHAScheduler(
-        time_attr='iteration',
-        max_t=40,
-        brackets=1,
-        grace_period=5,
-        reduction_factor=3
-    )
+    # df_search = ConcurrencyLimiter(df_search, max_concurrent=2)
+    # scheduler = ASHAScheduler(
+    #     time_attr='iteration',
+    #     max_t=40,
+    #     brackets=1,
+    #     grace_period=5,
+    #     reduction_factor=3
+    # )
 
     analysis = tune.run(
         create_training_function(args.data_path),
         metric="accuracy",
         mode="max",
-        search_alg=df_search,
-        scheduler=scheduler,
-        num_samples=50,
+        #search_alg=df_search,
+        #scheduler=scheduler,
+        num_samples=10,
         resources_per_trial={'gpu': 1},
         config={
-            "lr": tune.loguniform(5e-4, 1e-1),
+            "lr": 0.003,
             "dropout": 0.0,
             "method": "batchbald",
-            "coeff": tune.uniform(6, 18),
+            "coeff": 9,
             "batch_size": 64,
             "starting_size": 2,
             "num_aquisitions": 70,
             "var_opt": -1,
-            "n_inducing_points": 20,
+            "n_inducing_points": 10,
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
