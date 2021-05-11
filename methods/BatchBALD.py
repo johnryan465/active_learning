@@ -93,23 +93,8 @@ class BatchBALD(UncertainMethod):
                     if i > 0:
                         joint_entropy_class.add_variables(rank2dist, previous_aquisition) #type: ignore # last point
 
-
-                    # with profiler.profile(record_shapes=True) as prof:
-                    #     with profiler.record_function("model_inference"):
-                    #         joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
-                    # print(prof.key_averages(group_by_input_shape=True).table(sort_by="cpu_time_total", row_limit=100))
-
-                    import cProfile, pstats
-                    profiler = cProfile.Profile()
-                    profiler.enable()
                     joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
-                    profiler.disable()
-                    stats = pstats.Stats(profiler).sort_stats('cumtime')
-                    stats.print_stats()
 
-                    print(joint_entropy_result.shape)
-                    print(joint_entropy_result)
-                    
                     # print(joint_entropy_result)
                     if self.params.smoke_test:
                         if i > 0:
