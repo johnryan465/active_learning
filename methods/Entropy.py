@@ -1,5 +1,5 @@
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
-from uncertainty.estimator_entropy import ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling, get_entropy_batch
+from uncertainty.estimator_entropy import CombinedJointEntropyEstimator, ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling, get_entropy_batch
 from uncertainty.bbredux_estimator_entropy import BBReduxJointEntropyEstimator
 
 from utils.utils import get_pool
@@ -46,7 +46,7 @@ class Entropy(UncertainMethod):
             features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
             ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
 
-            joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+            joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, CombinedJointEntropyEstimator)
 
             for i in tqdm(range(batch_size), desc="Aquiring", leave=False):
                 previous_aquisition: int = candidate_indices[-1] if i > 0 else 0 # When we don't have any candiates it doesn't matter

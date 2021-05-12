@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from methods.method import UncertainMethod
 from uncertainty.rank2 import Rank2Next
-from uncertainty.estimator_entropy import SampledJointEntropyEstimator
+from uncertainty.estimator_entropy import CombinedJointEntropyEstimator, SampledJointEntropyEstimator
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
 from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy
 
@@ -37,7 +37,7 @@ class BALD(UncertainMethod):
             ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
             conditional_entropies_N = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, self.params.samples.batch_samples).cpu()
 
-            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, SampledJointEntropyEstimator)
+            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, CombinedJointEntropyEstimator)
 
             new_candidate_features: TensorType["datapoints", 1, "num_features"] = ((pool[0])[None, None, :]).expand(N, -1, -1)
             joint_features: TensorType["datapoints", 2, "num_features"] = torch.cat([new_candidate_features, features_expanded], dim=1)
