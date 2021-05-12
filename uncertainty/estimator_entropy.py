@@ -90,7 +90,7 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
         self.count = 0
         self.samples = samples
         self.likelhood = likelihood
-        self.inner : MVNJointEntropyEstimator = SampledJointEntropyEstimator(batch, likelihood, samples)
+        self.inner : MVNJointEntropyEstimator = ExactJointEntropyEstimator(batch, likelihood, samples)
 
     def compute(self) -> TensorType:
         return self.inner.compute()
@@ -99,7 +99,7 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
         return self.inner.compute_batch(candidates)
 
     def add_variable(self, new: Rank1Update) -> None:
-        if False:
+        if self.count > 3:
             self.inner = SampledJointEntropyEstimator(self.inner.get_current_batch(), self.likelhood, self.samples)
         self.count += 1
         return self.inner.add_variable(new)
@@ -223,15 +223,15 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
 
     @staticmethod
     def _compute(samples: TensorType) -> TensorType:
-        D = samples.shape[1]
+        D = samples.shape[2]
         t = string.ascii_lowercase[:D]
-        s =  ','.join(['z' + c for c in list(t)]) + '->' + 'z' + t
+        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'z' + t
         l: TensorType["N","S", "D", "C"] = samples
-        j: List[TensorType["S", "C"]] = list(torch.unbind(l, dim=-2))
+        j: List[TensorType["N", "S", "C"]] = list(torch.unbind(l, dim=-2))
         # This is where the stupid amount of memory happens
-        g: TensorType["S", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
-        g: TensorType["S", "E"] = torch.flatten(g, start_dim=-D)
-        g: TensorType["E"] = torch.mean(g, dim=-2)
+        g: TensorType["N", "S", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
+        g: TensorType["N", "S", "E"] = torch.flatten(g, start_dim=-D)
+        g: TensorType["N", "E"] = torch.mean(g, dim=-2)
         return torch.sum(-g * torch.log(g), dim=-1)
 
     @staticmethod
@@ -245,15 +245,27 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
         L = self.samples
-        likelihood_samples: TensorType["K", "D", "C"] = self.batch.distribution.sample(sample_shape=torch.Size([L]))
         pbar = tqdm(total=N, desc="Exact Batch", leave=False)
-        likelihood_samples: TensorType["S", "D", "C"] = self.batch.distribution.sample(sample_shape=torch.Size([self.samples]))
-        self.batch.create_conditionals_from_rank1s(pool, likelihood_samples, self.samples)
+        likelihood_samples: TensorType["S", "D", "C"] = self.batch.distribution.sample(sample_shape=torch.Size([L]))
+        candidate_samples = []
         for i, candidate in enumerate(pool):
-            possible_batch = self.batch.append(candidate)
-            samples = self.likelihood(possible_batch.distribution.sample(sample_shape=torch.Size([self.samples]))).probs
-            output[i] = ExactJointEntropyEstimator._compute(samples)
-            pbar.update(1)
+            cond_dists = self.batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), likelihood_samples, L)
+            dist = next(next(cond_dists))
+            sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(3).squeeze(1)
+            sample_ = torch.mean(sample_, dim=0, keepdim=True)
+            candidate_samples.append(sample_)
+
+        candidate_samples = torch.cat(candidate_samples, dim=0)        
+        probs_B_K_C = self.likelihood(candidate_samples).probs
+        if likelihood_samples.shape[1] > 0:
+            probs_K_D_C = self.likelihood(likelihood_samples).probs
+        else:
+            probs_K_D_C = likelihood_samples
+        @toma.execute.chunked(probs_B_K_C, 1024)
+        def compute(chunked_probs_B_K_C: TensorType, start: int, end: int):
+            probs_B_K_D_C = torch.cat([chunked_probs_B_K_C.unsqueeze(2), probs_K_D_C.unsqueeze(0).expand(end-start,-1,-1,-1)] , dim = 2)
+            output[start: end].copy_(ExactJointEntropyEstimator._compute(probs_B_K_D_C))
+            pbar.update(end - start)
         pbar.close()
         return output.cpu()
 
