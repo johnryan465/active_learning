@@ -112,12 +112,17 @@ def parse_dataset(args: argparse.Namespace) -> DatasetParams:
 
 def parse_method(args: argparse.Namespace) -> MethodParams:
     # Create the active learning method
+    if args.model == ModelName.vduq:
+        sampling_config = Sampling(batch_samples=300, per_samples=10, sum_samples=20)
+    else:
+        sampling_config = Sampling(batch_samples=30, per_samples=10, sum_samples=20)
+
     if args.method == MethodName.batchbald:
         method_params = BatchBALDParams(
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples = Sampling(batch_samples=30, per_samples=10, sum_samples=20),
+            samples = sampling_config,
             use_cuda=use_cuda,
             smoke_test=args.smoke_test
         )
@@ -126,7 +131,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=Sampling(batch_samples=300, per_samples=10, sum_samples=20),
+            samples=sampling_config,
             smoke_test=args.smoke_test
         )
     elif args.method == MethodName.entropy:
@@ -134,7 +139,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=Sampling(batch_samples=300, per_samples=10, sum_samples=20),
+            samples=sampling_config,
             smoke_test=args.smoke_test
         )
     else:
