@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from batchbald_redux.batchbald import CandidateBatch
+
 from methods.method_params import MethodParams
 from .method import Method
 
@@ -17,18 +19,9 @@ class RandomParams(MethodParams):
 # This method simply aquires in a random order
 class Random(Method):
     def __init__(self, params: RandomParams) -> None:
-        super().__init__()
-        self.params = params
-        self.current_aquisition = 0
+        super().__init__(params)
 
-    def acquire(self, model: ModelWrapper, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
+    def acquire(self, model: ModelWrapper, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> CandidateBatch:
         idxs = list(random.sample(range(0, dataset.get_pool_size()), self.params.aquisition_size))
-        Method.log_batch(dataset.get_indexes(idxs), tb_logger, self.current_aquisition)
-        dataset.move(idxs)
-        self.current_aquisition = self.current_aquisition + 1
+        return CandidateBatch(list([0 for i in range(0, self.params.aquisition_size)]), idxs)
 
-    def complete(self) -> bool:
-        return self.current_aquisition >= self.params.max_num_aquisitions
-
-    def initialise(self, dataset: ActiveLearningDataset) -> None:
-        DatasetUtils.balanced_init(dataset, self.params.initial_size)

@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+from methods.method_params import MethodParams
+
+from batchbald_redux.batchbald import CandidateBatch
 
 from models.model import ModelWrapper, UncertainModel
-from datasets.activelearningdataset import ActiveLearningDataset
+from datasets.activelearningdataset import ActiveLearningDataset, DatasetUtils
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 from typing import List
 import torch
@@ -12,30 +15,42 @@ import torchvision
 class MethodName(str, Enum):
     batchbald = 'batchbald'
     bald = 'bald'
+    entropy = 'entropy'
     random = 'random'
 
 
 class Method(ABC):
-    @abstractmethod
+    def __init__(self, params: MethodParams) -> None:
+        super().__init__()
+        self.params = params
+        self.current_aquisition = 0
+
     def acquire(self, model: ModelWrapper, dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
         """
         Moves data from the pool to training
         """
-        pass
+        with torch.no_grad():
+            candidate_batch = self.score(model, dataset)
+        indexes = candidate_batch.indices
+        Method.log_batch(dataset.get_indexes(indexes), tb_logger, self.current_aquisition)
+        dataset.move(indexes)
+
+        self.current_aquisition += 1
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     @abstractmethod
+    def score(self, model: ModelWrapper, dataset: ActiveLearningDataset) -> CandidateBatch:
+        """
+        Generates the candidate batch
+        """
+        pass
+
     def complete(self) -> bool:
-        """
-        Checks whether or not the method is complete
-        """
-        pass
+        return self.current_aquisition >= self.params.max_num_aquisitions
 
-    @abstractmethod
     def initialise(self, dataset: ActiveLearningDataset) -> None:
-        """
-        Initialise the dataset to have some training data
-        """
-        pass
+        DatasetUtils.balanced_init(dataset, self.params.initial_size)
 
     @staticmethod
     def log_batch(images: List[torch.Tensor], tb_logger: TensorboardLogger, index: int) -> None:
@@ -47,5 +62,5 @@ class Method(ABC):
 # with uncertainty
 class UncertainMethod(Method):
     @abstractmethod
-    def acquire(self, model: UncertainModel, dataset: ActiveLearningDataset) -> None:
+    def score(self, model: UncertainModel, dataset: ActiveLearningDataset) -> CandidateBatch:
         pass

@@ -123,7 +123,6 @@ class Rank1Updates:
         return self
     
     def __len__(self):
-        print(self.max)
         return self.max
 
     def reset(self):
