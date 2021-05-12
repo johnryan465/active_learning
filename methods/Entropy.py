@@ -23,12 +23,14 @@ from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy, Rank2Next
 
 
 @dataclass
-class BatchBALDParams(UncertainMethodParams):
-    use_cuda: bool
+class EntropyParams(UncertainMethodParams):
+    pass
 
 
-class BatchBALD(UncertainMethod):
-    def __init__(self, params: BatchBALDParams) -> None:
+
+
+class Entropy(UncertainMethod):
+    def __init__(self, params: EntropyParams) -> None:
         super().__init__(params)
 
     @typechecked
@@ -46,7 +48,6 @@ class BatchBALD(UncertainMethod):
 
             features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
             ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
-            conditional_entropies_N: TensorType["datapoints"] = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, 5000).cpu()
 
             joint_entropy_class: GPCEntropy = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, SampledJointEntropyEstimator)
 
@@ -64,11 +65,8 @@ class BatchBALD(UncertainMethod):
 
                 joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
 
-                shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
-
                 scores_N = joint_entropy_result.detach().clone().cpu()
 
-                scores_N -= conditional_entropies_N + shared_conditinal_entropies
                 scores_N[candidate_indices] = -float("inf")
 
                 candidate_score, candidate_index = scores_N.max(dim=0)

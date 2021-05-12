@@ -20,7 +20,7 @@ import string
 class Sampling:
     batch_samples: int = 0
     per_samples: int = 0
-    samples_sum: int = 0
+    sum_samples: int = 0
 
 class MVNJointEntropyEstimator(ABC):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
@@ -43,14 +43,14 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
         self.batch = batch
         self.likelihood = likelihood
-        self.samples_sum = samples.samples_sum
+        self.sum_samples = samples.sum_samples
         self.batch_samples = samples.batch_samples
         self.per_samples = samples.per_samples
         
         if torch.cuda.is_available():
-            self.probs = torch.ones(self.batch_samples * self.samples_sum, self.batch_samples, device='cuda')
+            self.probs = torch.ones(self.batch_samples * self.sum_samples, self.batch_samples, device='cuda')
         else:
-            self.probs = torch.ones(self.batch_samples * self.samples_sum, self.batch_samples)
+            self.probs = torch.ones(self.batch_samples * self.sum_samples, self.batch_samples)
         self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
         super().__init__(batch, likelihood, samples)
 
@@ -61,7 +61,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         distribution = self.batch.distribution
         likelihood = self.likelihood
         batch_samples = self.batch_samples
-        sum_samples = self.samples_sum
+        sum_samples = self.sum_samples
         
 
         likelihood_samples: TensorType["S", "D", "C"] = distribution.sample(sample_shape=torch.Size([self.batch_samples]))
@@ -107,7 +107,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
             pbar = tqdm(total=N*L, desc="Sampling Batch", leave=False)
             datapoints_size = max(1, batchsize // L)
             samples_size = min(L, batchsize)
-            M = L *  self.samples_sum
+            M = L *  self.sum_samples
             C = self.batch.num_cat
             K = L
             for i, candidate in enumerate(conditional_dists):

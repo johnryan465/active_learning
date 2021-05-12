@@ -152,6 +152,9 @@ class BNN(UncertainModel):
             "model_params": self.params
         }
 
+    def get_num_cats(self) -> int:
+        return 10
+
     @classmethod
     def load_state_dict(cls, state: Dict[str, Any], dataset: ActiveLearningDataset) -> 'BNN':
         params = state['model_params']

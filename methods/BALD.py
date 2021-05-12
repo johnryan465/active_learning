@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from uncertainty.rank2 import Rank2Next
+from uncertainty.estimator_entropy import Sampling
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
 from uncertainty.bbredux_estimator_entropy import BBReduxJointEntropyEstimator
 from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy
@@ -8,8 +10,8 @@ from models.model import UncertainModel
 from models.vduq import vDUQ
 from datasets.activelearningdataset import ActiveLearningDataset
 from methods.method import UncertainMethod, Method
-from methods.method_params import MethodParams
-from batchbald_redux.batchbald import get_bald_batch
+from methods.method_params import MethodParams, UncertainMethodParams
+from batchbald_redux.batchbald import CandidateBatch, get_bald_batch
 from datasets.activelearningdataset import DatasetUtils
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 import torch
@@ -17,28 +19,18 @@ from .BatchBALD import get_pool
 from utils.typing import TensorType
 
 @dataclass
-class BALDParams(MethodParams):
-    samples: int
+class BALDParams(UncertainMethodParams):
+    pass
 
 
 class BALD(UncertainMethod):
     def __init__(self, params: BALDParams) -> None:
-        super().__init__()
-        self.params = params
-        self.current_aquisition = 0
+        super().__init__(params)
 
-    def acquire(self, model_wrapper: UncertainModel,
-                dataset: ActiveLearningDataset, tb_logger: TensorboardLogger) -> None:
+    def score(self, model_wrapper: UncertainModel, inputs: TensorType["N", ...]) -> CandidateBatch:
         if isinstance(model_wrapper, vDUQ):
-            # We cant use the standard get_batchbald_batch function as we would need to sample and entire function from posterior
-            # which is computationaly prohibative (has complexity related to the pool size)
+            num_cat = model_wrapper.get_num_cats()
 
-            # We instead need to repeatedly compute the updated probabilties for each aquisition
-            
-            samples = 100
-            num_cat = 10
-
-            inputs = get_pool(dataset)
             N = inputs.shape[0]
 
             pool = model_wrapper.get_features(inputs)
@@ -47,56 +39,27 @@ class BALD(UncertainMethod):
             batch_size = self.params.aquisition_size
             batch_size = min(batch_size, N)
 
-            if batch_size == 0:
-                self.current_aquisition += 1
-                return
-
-            candidate_indices = []
-            candidate_scores = []
-
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
             features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
-            ind_dists: List[MultitaskMultivariateNormalType] = model_wrapper.get_gp_output(features_expanded)
-            conditional_entropies_N = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, samples).cpu()
-            
-            # First we compute the joint distribution of each of the datapoints with the current aquisition
-            # We first calculate the aquisition by itself first.
-            joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
-            scores_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
+            ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
+            conditional_entropies_N = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, self.params.samples.batch_samples).cpu()
 
-            # We get the current selected datapoints and broadcast them together with
-            # the pool
-            z = pool[candidate_indices]
-            z = z[None,:,:]
-            z = z.expand(N, -1, -1)
+            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
 
-            t = pool[:,None,:]
-            grouped_pool = torch.cat([z,t], dim=1)
-            grouped_pool = grouped_pool[:,None,:,:]
+            new_candidate_features: TensorType["datapoints", 1, "num_features"] = ((pool[0])[None, None, :]).expand(N, -1, -1)
+            joint_features: TensorType["datapoints", 2, "num_features"] = torch.cat([new_candidate_features, features_expanded], dim=1)
+            dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(joint_features)
 
-            dists = model_wrapper.get_gp_output(grouped_pool)
-            joint_entropy_result = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
-            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, 60000, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
+            rank2dist: Rank2Next = Rank2Next(dists)
+            joint_entropy_result = joint_entropy_class.compute_batch(rank2dist)
 
-            joint_entropy_class.compute_batch(dists)
+            scores_N = joint_entropy_result.cpu()
 
-            # Then we compute the batchbald objective
+            scores_N -= conditional_entropies_N
 
-            shared_conditinal_entropies = conditional_entropies_N[candidate_indices].sum()
+            batch = torch.topk(scores_N, batch_size)
 
-            scores_N = joint_entropy_result.detach().clone().cpu()
-
-            scores_N -= conditional_entropies_N + shared_conditinal_entropies
-            scores_N[candidate_indices] = -float("inf")
-
-            candidate_score, candidate_index = scores_N.max(dim=0)
-            
-            candidate_indices.append(candidate_index.item())
-            candidate_scores.append(candidate_score.item())
-            
-            Method.log_batch(dataset.get_indexes(candidate_indices), tb_logger, self.current_aquisition)
-            dataset.move(candidate_indices)
-            self.current_aquisition += 1
+            return CandidateBatch(scores=batch.values.tolist(), indices=batch.indices.tolist())
         else:
             probs = []
             for x, _ in dataset.get_pool():
@@ -107,12 +70,4 @@ class BALD(UncertainMethod):
 
             probs = torch.cat(probs, dim=0)
             batch = get_bald_batch(probs, self.params.aquisition_size)
-            Method.log_batch(dataset.get_indexes(batch.indices), tb_logger, self.current_aquisition)
-            dataset.move(batch.indices)
-            self.current_aquisition += 1
-
-    def initialise(self, dataset: ActiveLearningDataset) -> None:
-        DatasetUtils.balanced_init(dataset, self.params.initial_size)
-
-    def complete(self) -> bool:
-        return self.current_aquisition >= self.params.max_num_aquisitions
+            return batch

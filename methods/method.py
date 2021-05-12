@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from methods.method_params import MethodParams
+from utils.utils import get_pool
+
+from torchtyping.tensor_type import TensorType
+from methods.method_params import MethodParams, UncertainMethodParams
 
 from batchbald_redux.batchbald import CandidateBatch
 
@@ -30,7 +33,8 @@ class Method(ABC):
         Moves data from the pool to training
         """
         with torch.no_grad():
-            candidate_batch = self.score(model, dataset)
+            pool = get_pool(dataset)
+            candidate_batch = self.score(model, pool)
         indexes = candidate_batch.indices
         Method.log_batch(dataset.get_indexes(indexes), tb_logger, self.current_aquisition)
         dataset.move(indexes)
@@ -40,7 +44,7 @@ class Method(ABC):
             torch.cuda.empty_cache()
 
     @abstractmethod
-    def score(self, model: ModelWrapper, dataset: ActiveLearningDataset) -> CandidateBatch:
+    def score(self, model: ModelWrapper, pool: TensorType) -> CandidateBatch:
         """
         Generates the candidate batch
         """
@@ -61,6 +65,10 @@ class Method(ABC):
 # A type of method which requires a model which can output
 # with uncertainty
 class UncertainMethod(Method):
+    def __init__(self, params: UncertainMethodParams) -> None:
+        super().__init__(params)
+        self.params = params
+    
     @abstractmethod
-    def score(self, model: UncertainModel, dataset: ActiveLearningDataset) -> CandidateBatch:
+    def score(self, model: UncertainModel, pool: TensorType) -> CandidateBatch:
         pass

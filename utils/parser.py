@@ -1,3 +1,4 @@
+from uncertainty.estimator_entropy import Sampling
 from models.bnn import BNNParams
 from methods.BatchBALD import BatchBALDParams
 from methods.BALD import BALDParams
@@ -44,11 +45,11 @@ def init_parser() -> argparse.ArgumentParser:
     for method in methods:
         p = subprasers.add_parser(method)
         if method == "entropy":
-            p.add_argument('--var_reduction', default=False, type=bool)
+            pass
         elif method == "batchbald":
-            p.add_argument('--var_reduction', default=False, type=bool)
+            pass
         elif method == "bald":
-            p.add_argument('--var_reduction', default=False, type=bool)
+            pass
         elif method == "random":
             pass
         p.add_argument('--batch_size', type=int, required=True)
@@ -115,9 +116,8 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=500,
+            samples = Sampling(batch_samples=300, per_samples=10, sum_samples=20),
             use_cuda=use_cuda,
-            var_reduction=args.var_reduction,
             smoke_test=args.smoke_test
         )
     elif args.method == MethodName.bald:
@@ -125,7 +125,15 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
             aquisition_size=args.aquisition_size,
             max_num_aquisitions=args.num_aquisitions,
             initial_size=args.initial_per_class,
-            samples=1,
+            samples=Sampling(batch_samples=300, per_samples=10, sum_samples=20),
+            smoke_test=args.smoke_test
+        )
+    elif args.method == MethodName.entropy:
+        method_params = EntropyParams(
+            aquisition_size=args.aquisition_size,
+            max_num_aquisitions=args.num_aquisitions,
+            initial_size=args.initial_per_class,
+            samples=Sampling(batch_samples=300, per_samples=10, sum_samples=20),
             smoke_test=args.smoke_test
         )
     else:

@@ -80,6 +80,10 @@ class ModelWrapper(ABC):
     def state_dict(self) -> Dict[str, Any]:
         pass
 
+    @abstractmethod
+    def get_num_cats(self) -> int:
+        pass
+
     @classmethod
     @abstractmethod
     def load_state_dict(cls: Type[T], state: Dict[str, Any], dataset: ActiveLearningDataset) -> T:

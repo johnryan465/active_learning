@@ -55,6 +55,9 @@ class DNN(ModelWrapper):
     def prepare(self, batch_size: int) -> None:
         pass
 
+    def get_num_cats(self) -> int:
+        return 10
+
     def get_training_params(self) -> TrainingParams:
         return self.training_params
 

@@ -125,6 +125,9 @@ class vDUQ(UncertainModel):
     def get_model(self):
         return self.model
 
+    def get_num_cats(self) -> int:
+        return 10
+
     def initialize(self, dataset: ActiveLearningDataset) -> None:
         params = self.params
         gp_params = params.gp_params

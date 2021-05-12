@@ -113,7 +113,7 @@ class BBReduxJointEntropyEstimator(MVNJointEntropyEstimator):
         self.likelihood = likelihood
         self.function_samples = samples.batch_samples
         self.per_samples = samples.per_samples
-        self.sum_samples = samples.samples_sum
+        self.sum_samples = samples.sum_samples
         super().__init__(batch, likelihood, samples)
 
     @staticmethod

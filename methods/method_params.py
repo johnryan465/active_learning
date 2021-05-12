@@ -1,3 +1,4 @@
+from uncertainty.estimator_entropy import Sampling
 from params.params import Params
 from dataclasses import dataclass
 
@@ -8,3 +9,7 @@ class MethodParams(Params):
     max_num_aquisitions: int
     initial_size: int
     smoke_test: bool
+
+@dataclass
+class UncertainMethodParams(MethodParams):
+    samples: Sampling
