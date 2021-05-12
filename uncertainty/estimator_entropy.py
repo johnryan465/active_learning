@@ -80,7 +80,7 @@ class MVNJointEntropyEstimator(ABC):
         pass
 
     @abstractmethod
-    def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
+    def get_current_batch(self) -> CurrentBatch:
         pass
 
 
@@ -103,6 +103,9 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
             self.inner = SampledJointEntropyEstimator(self.inner.get_current_batch(), self.likelhood, self.samples)
         self.count += 1
         return self.inner.add_variable(new)
+
+    def get_current_batch(self) -> CurrentBatch:
+        return self.inner.get_current_batch()
     
 class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
@@ -168,10 +171,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         @toma.execute.batch(N*L)
         def compute(batchsize: int):
             candidates.reset()
-            conditional_dists = self.batch.create_conditionals_from_rank1s(candidates, self.likelihood_samples, batchsize)
-            pbar = tqdm(total=N*L, desc="Sampling Batch", leave=False)
-            datapoints_size = max(1, batchsize // L)
-            samples_size = min(L, batchsize)
+            conditional_dists = def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
             M = L *  self.sum_samples
             C = self.batch.num_cat
             K = L
@@ -208,7 +208,7 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         self.batch = self.batch.append(new)
         self.create_samples()
 
-    def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
+    def get_current_batch(self) -> CurrentBatch:
         return self.batch
 
 class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
@@ -252,5 +252,5 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
 
-    def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
+    def get_current_batch(self) -> CurrentBatch:
         return self.batch
