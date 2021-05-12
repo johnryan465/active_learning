@@ -32,7 +32,7 @@ class BatchBALD(UncertainMethod):
         super().__init__(params)
 
     @typechecked
-    def score(self, model_wrapper: UncertainModel, inputs: TensorType["N", ...]) -> CandidateBatch:
+    def score(self, model_wrapper: UncertainModel, inputs: TensorType) -> CandidateBatch:
         candidate_indices = []
         candidate_scores = []
         N = inputs.shape[0]

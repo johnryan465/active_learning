@@ -27,7 +27,7 @@ class BALD(UncertainMethod):
     def __init__(self, params: BALDParams) -> None:
         super().__init__(params)
 
-    def score(self, model_wrapper: UncertainModel, inputs: TensorType["N", ...]) -> CandidateBatch:
+    def score(self, model_wrapper: UncertainModel, inputs: TensorType) -> CandidateBatch:
         if isinstance(model_wrapper, vDUQ):
             num_cat = model_wrapper.get_num_cats()
 
