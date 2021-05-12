@@ -2,6 +2,7 @@ from uncertainty.estimator_entropy import Sampling
 from models.bnn import BNNParams
 from methods.BatchBALD import BatchBALDParams
 from methods.BALD import BALDParams
+from methods.Entropy import EntropyParams
 from methods.random import RandomParams
 
 from methods.method import MethodName
