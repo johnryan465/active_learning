@@ -59,6 +59,10 @@ def get_entropy_batch(log_probs_N_K_C: torch.Tensor, batch_size: int, num_sample
 
     return CandidateBatch(candidate_scores, candidate_indices)
 
+
+
+
+
 class MVNJointEntropyEstimator(ABC):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
         pass
@@ -75,7 +79,31 @@ class MVNJointEntropyEstimator(ABC):
     def add_variable(self, new: Rank1Update) -> None:
         pass
 
+    @abstractmethod
+    def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
+        pass
 
+
+class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
+    def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
+        super().__init__(batch, likelihood, samples)
+        self.count = 0
+        self.samples = samples
+        self.likelhood = likelihood
+        self.inner : MVNJointEntropyEstimator = ExactJointEntropyEstimator(batch, likelihood, samples)
+
+    def compute(self) -> TensorType:
+        return self.inner.compute()
+
+    def compute_batch(self, candidates: Rank1Updates) -> TensorType["N"]:
+        return self.inner.compute_batch(candidates)
+
+    def add_variable(self, new: Rank1Update) -> None:
+        if self.count >= 3:
+            self.inner = SampledJointEntropyEstimator(self.inner.get_current_batch(), self.likelhood, self.samples)
+        self.count += 1
+        return self.inner.add_variable(new)
+    
 class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
         self.batch = batch
@@ -180,6 +208,8 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         self.batch = self.batch.append(new)
         self.create_samples()
 
+    def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
+        return self.batch
 
 class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:
@@ -221,3 +251,6 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
 
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
+
+    def get_current_batch(self, new: Rank1Update) -> CurrentBatch:
+        return self.batch

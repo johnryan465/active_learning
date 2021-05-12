@@ -3,9 +3,11 @@
 
 \input{Packages.tex}
 
+
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[section]
 
+\newtheorem{theorem}{Theorem}
 
 \hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -96,7 +98,6 @@ The aims of this report is to
 The remainder of this report is organised as follows:
 \begin{itemize}
     \item[] \textbf{Chapter} \hyperref[Chap2]{\textbf{2}} --- Defines active learning, and introduces the different active learning methods from the literature.
-    \item[] \textbf{Chapter} \hyperref[Chap3]{\textbf{3}} --- contains the performance of these methods compared
     \item[] \textbf{Chapter} \hyperref[Chap4]{\textbf{4}} --- introduces Gaussian Process based models
     \item[] \textbf{Chapter} \hyperref[Chap5]{\textbf{5}} --- Combines BatchBALD and GPC
 \end{itemize}
@@ -128,8 +129,12 @@ This violates a very common assumption that we assume for convergence in many ML
 When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over paramatised to begin with become even more so, this can lead to training issues.
 
 \section{Random}
-\section{Uncertainty}
-\section{Entropy}
+
+The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random aquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparision between unweighted MNIST and weighted MNIST with random aquisition.
+
+\includegraphics{todo}
+
+
 \section{BALD}
 Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is based on selecting datapoints which maximise the mutual information between the datapoints class output and the models parameters. The paper details how we can instead of computing this in the paramater space which would be computationally prohibative in many cases, we can compute the same objective in the output space.
 
@@ -145,17 +150,54 @@ BatchBALD \cite{kirsch2019batchbald}, is an extension of BALD designed especiall
 
 To do this the objective function is modified, the original BALD objective is retained by setting $n = 1$ .
 
-The authors of the paper prove that the objective function that they specify is \textit{submodular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimium batch.
-
 The BatchBALD score function is as follows.
 
-$$s_{BatchBald} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n) - E_{p(f)}\left[H(y_1, \ldots, y_n | f)\right]$$
+
+\begin{definition}[BatchBALD]
+    $$s_{BatchBald} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n) - E_{p(f)}\left[H(y_1, \ldots, y_n | f)\right]$$
+\end{definition}
+
+
+\begin{definition}[Submodularity]
+    A function $f : P(X) \rightarrow \mathbf{R}$ is sub modular if for all $A,B \subseteq X$ we have the following.
+
+    $$f(A) + f(B) \geq f\left( A \cup B \right) +  f\left(A \cap B \right) $$
+\end{definition}
+
+The authors of the paper prove that the objective function that they specify is \textit{submodular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimium batch.
 
 
 
-As the variables are independent conditioned on the value of the function, the right hand side of the equation factors into a sum over conditional expectations for each individual datapoint. The computationally difficult part of this objective is the computation of the joint entropy as this does not factor similarly. In fact, the summation required to compute this value is exponential in the number of datapoints we are currently considering. The authors of the paper address this issue by using sampling to estimate the joint entropy for larger batch sizes. The BatchBALD paper uses Bayesian Neural networks (BNNs) as their model. They are then able to sample from the weight distribution once to obtain a function draw for all possible inputs. This is not an ability we have when using GPCs, which we will come back to later.
+As the variables are independent conditioned on the value of the function, the right hand side of the equation factors into a sum over conditional expectations for each individual datapoint. The computationally difficult part of this objective is the computation of the joint entropy as this does not factor similarly. In fact, the summation required to compute this value is exponential in the number of datapoints we are currently considering. Estimating the entropy of a discrete distribution is something which we will investigate later \hyperref[sec:Entropy]{here}.
 
 
+The authors of the paper address this issue by using sampling to estimate the joint entropy for larger batch sizes. The BatchBALD paper uses Bayesian Neural networks (BNNs) as their model. They are then able to sample from the weight distribution once to obtain a function draw for all possible inputs. This is not an ability we have when using GPCs, which we will come back to later.
+
+
+\section{Entropy}
+
+We can also simply use the joint entropy alone as the active learning objective
+
+$$s_{Entropy} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n)$$
+
+\begin{theorem}[$s_{Entropy}$ is submodular]
+    Proof.
+    Let $A_x,B_x \subseteq D_{pool}, C_x = A_x \cap B_x$
+    
+    $\hat{A} = A_y \setminus C_y, \hat{B} = B_y \setminus C_y$
+    \begin{align*}
+        s_{Entropy} (A_x) + s_{Entropy} (B_x) &= H(A_y) + H(B_y)\\
+        &= H(C_y \cup \hat{A}) + H(C_y \cup \hat{B})\\
+        &= H(\hat{A} | C_y) + H(\hat{B} | C_y) + 2 H(C_y)\\
+        &\geq H(\hat{A}, \hat{B} | C_y) + 2 H(C_y)\\
+        &= H(\hat{A}, \hat{B}, C_y) + H(C_y)\\
+        &= H(A_y \cup B_y) + H(A_x \cap B_x)\\
+        &= s_{Entropy} (A_x \cup B_x) + s_{Entropy} (A_x \cap B_x)
+    \end{align*}
+
+\end{theorem}
+
+The fact that this objective is submodular enables us to use the same greedy $1 - \frac{1}{\epsilon}$ approximation algorithm as used above.
 
 \chapter{Gaussian Process Based Models}
 \label{Chap4}
@@ -243,9 +285,87 @@ $$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
 
 \section{vDUQ / DUE}
 
-vDUQ / DUE \cite{vanamersfoort2020uncertainty} is a recent model which deals with some of the issues with using deep kernel learning with GPCs. DUE uses an inducing point GP to enable it to scale to large amounts of data. To bound the lipschitz constant of the model, DUE uses spectral normalisation in the feature extractor of the model.
-To enforce sensitivity to chages in the input, 
+vDUQ / DUE \cite{vanamersfoort2020uncertainty} is a recent model which deals with some of the issues with using deep kernel learning with GPCs. DUE uses an inducing point GP to enable it to scale to large amounts of data.
+
+This model is designed to have good uncertainty properties by enforcing sensitivity and bounding the amount by which any 2 inputs can diverge in the feature space. These properties are maintained by the additon of residual connections to the model and by performing spectral normalisation to bound the lipshitz constant of the layers in the feature extractor.
+
 \subsection{Spectral Normalisation}
+
+\begin{definition}[Lipshitz Constant]
+    Given a function $f: X \rightarrow Y$, where $(X, d_x)$ and $(Y, d_y)$ are metric spaces. A lipshitz constant of the function $f$ is a value of $k$ such that.
+
+    $$\frac{d_y(f(x_1), f(x_2))}{d_x(x_1, x_2)} \leq K, \forall x_1, x_2 \in X $$
+\end{definition}
+
+Some times we refer to \textit{the lipshitz constant} of a function, this is normally taken to mean the smallest value $k$ which is a lipshitz constant.
+
+In our particular problem we are dealing with spaces in $\mathbf{R}^n$. The metric on this space which we will be using is the $L_2$ norm, (also known as the euclidean distance).
+
+The lipschitz constant is a measure of how far apart 2 outputs to the function can be in terms of their inputs.
+
+In the case where $f: R^n \rightarrow R^m$ and $f$ is a linear transformation we get a familar result.
+
+\begin{align*}
+    \min_k  \forall x_1,x_2 \in X \frac{d_y(f(x_1), f(x_2))}{d_x(x_1, x_2)} \leq K &= \min_k \forall x_1,x_2 \in X \frac{ L_2(Ax_1 - Ax_2)  }{ L_2(x_1, x_2)} \leq K \\
+    &=  \min_k \forall x_1,x_2 \in X  \frac{ ||A(x_1 - x_2)||_2  }{ ||x_1- x_2||_2 } \leq K \\
+    &=  \min_k \forall x \in X  \frac{ ||Ax||_2  }{ ||x||_2 } \leq K \\
+\end{align*}
+
+After the substitution we obtain an expression which from linear algebra we know is the matrix norm of $A$ induced by the vector norm which we have chosen, in this case the $L_2$ norm. The induced matrix norm by the $L_2$ vector norm has the nice property that it is the \textit{largest singular value} of the matrix which is also the square root of the largest eigenvalue.
+
+For all of the linear layers in our model we now know how we can compute the respective lipschitz constants.
+
+\begin{theorem}[Lipschitz constant of function compositions]
+    If $lip(f) = a$ and $lip(g) = b$, then $lip(f \circ g) \leq a * b$
+\end{theorem}
+
+It turns out that the majority of activation functions which we use in our neural networks have a lipschitz constant of $\leq 1$, eg relu. This enables us to compute an upper bound of the lipschitz constant of our model by computing the lipschitz constant of all of the indiviudal layers and taking the product of those constants.
+
+
+
+\subsubsection{Power Method}
+
+Directly computing the largest singular value via computing the Singular Value Decompoisition of each linear transform is quite computationally prohibative, however there is a way in which we can approximate this value quite cheaply and accurately.
+
+The \textbf{power method} is defined by a recurrence relation.
+
+\begin{definition}[Power Method(for square matrices)]
+    $$v_{k+1} = \frac{Av_k}{||Av_k||} $$
+\end{definition}
+
+This recurrence relation will converge if 2 conditions are met.
+
+\begin{itemize}
+    \item $A$ has a strictly largest eigenvalue
+    \item $v_0$ has a non zero component in the direction of the largest eigenvalue
+\end{itemize}
+
+We compute the eigenvalue from the rayleigh quotent from our approximate maximum eigenvector. $\frac{v_k^T A v_k}{v_k ^ T v_k}$
+
+If we chose a starting vector $v_0$ with uniform probability over all possible directions the second condition will be fullfilled with a probability of $1$.
+
+The convergence ratio of this algorithm is $\frac{|\lambda_1|}{|\lambda_2|}$, so the convergence rate depends on the size of the second largest eigenvalue also.
+
+
+To extend this to work with non square matrices we can either compute $A^TA$ or $AA^T$, use the power method to calculate its maximum eigenvalue and this is the spectral norm of $A$.
+There is another approach which enables us to bypass this computation by instead of maintaining just 1 eignevector, we maintain a left and a right domainant eigenvector
+
+\begin{definition}[Power Method(for non square matrices)]
+    $$v_{k+1} = \frac{A^Tu_k}{||A^Tu_k||}, u_{k+1} = \frac{Av_k}{||Av_k||} $$
+\end{definition}
+
+Then with these appoximate eigenvectors we can approximate the singular value with $u^T A v$
+
+To bound the lipschitz constant of a linear layer to a values, call this value $\sigma$. We can calculate the spectral norm $\alpha$, check if $\alpha > \sigma$. If this is true, we muliply the linear layer by $\frac{\sigma}{\alpha}$.
+
+To maintain this during training we are required to compute this value during every forward pass. Due to the fact that given a sufficently small learning rate we expect that the change to linear layer will be small, if we use the previous forwards passes final vector(s) as our starting vector instead of randomly restarting we can greatly speed up the convergence of the recurrence relation. We find that empircally we can actually get very good performance with a single iteration of this method at each stage.
+
+
+\subsection{Residual Connections}
+
+Residual connections were introduced in by [cite]. One of their origianl 
+
+
 
 \chapter{Combination}
 \label{Chap5}
@@ -292,6 +412,7 @@ This means that we can not use the same computational tricks used previously to 
 
 
 \section{Entropy}
+\label{sec:Entropy}
 
 \begin{definition}[Entropy]
     For a discrete r.v $X$ the entropy is defined as $$H(X) = - \sum_{x \in X} p(x) \log p(x) $$
@@ -323,13 +444,13 @@ $$ p(X) = p(x_1, \ldots, x_n) = \E_{l \sim p(l)}  p(x_1, \ldots, x_n | l) = \E_{
 
 The are 2 different approaches we can use in the estimation.
 
-\subsection{Taking samples}
+\subsection{Taking samples from the distribution}
 
 We can take samples from the distribution, and then use these samples to estimate the entropy.
 
 
 
-\subsection{Plugin Estimator}
+\subsubsection{Plugin Estimator}
 The most straightforward approach is to use the \textit{plugin estimator}. This approach is to take $k$ samples from the distribution of interest, calculate the observed probability of each class and compute the entropy.
 
 As we define the term in the entropy summation as $0$, when the probability is $0$. Using this approach bounds the number of terms in the summation by $k$.
@@ -346,19 +467,62 @@ $$ \frac{\sqrt{K}}{\sigma} \left(H - \hat{H}_k \right) \sim \mathbf{N} \left(0, 
 
 
 
-\subsection{LP Estimator}
+\subsubsection{LP Estimator}
 
-Using an \textit{LP Estimator} [cite] we can estimate the the entropy with far less samples. The required number of samples from the distribution to estimate the entropy well is of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support.
+Using an \textit{LP Estimator} [cite] we can estimate the the entropy with far less samples in comparision to using a plugin estimator. The required number of samples from the distribution to estimate the entropy well is \textit{sublinear}, of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support. However the amount of values with support in our problem is going to be exponential as our final layer is a softmax, which means that $d = c^n$.
+
+
+\subsection{Sampling from the outer summation}
+
+As we can actually compute the values $p(x)$ without sampling from the final categorical distribution, we can take advantage of this fact to improve the performance of our estimator. We can directly obtain the probabilities after the softmax. This enables us to perform the estimation in 2 steps.
+
+\begin{itemize}
+    \item Sample from the outer summation to see which values of $p(x)$ we are required to compute.
+    \item Estimate $p(x)$ directly from the output of the softmax.
+\end{itemize}
+
+We can also take advantage of the fact that the output variables are conditionally independent given a function sample. This enables us to sample from $p(x)$ without requiring an exponential amount of computation by sampling from the distribution in the following the following sequence of steps.
+
+\begin{itemize}
+    \item Sample from the likelihood distribution $p(l)$
+    \item Put this sample though the softmax
+    \item As the outputs of the different variables are conditionally independent given $l$, we sample once from the categorical distribuiton for each variable.
+    \item This is a sample from $p(x)$
+\end{itemize}
 
 
 
-\chapter{Methodology}
+\chapter{Implementaion}
 \label{Chap6}
 
-All of the experiments referencedx here can easily be replicated using the codebase for this project which is avaiable here.
+All of the experiments referencedx here can easily be replicated using the codebase for this project which is linked in the appendices.
 
-The code base for this project uses the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}. Hyper-paramaters were selected using Ray-Tune.
+The code for this project is written in Python and uses the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}.
 
+
+\section{Conditional Distributions}
+To reduce the number of samples required and the complexity of computing those samples the framework implements the following system to sampling from the joint postior.
+
+\begin{itemize}
+    \item Generate $K$ samples from the current batch distribution
+    \item For each $N$ items in the pool set, we generate a condition distribuiton for each of the $K$ samples we have previously generated.
+    \item We can then sample from each of these conditional distributions $P$, these are combined with the corresponding orignal sample to create the samples we will use.
+\end{itemize}
+
+These conditional distributions are lazily generated as to enable very large amounts of sampling.
+
+\section{Rank 1 Updates}
+To be able to compute all of the candidate distributions at each stage in the acquisition, we require the mean the of the datapoints along with the convariance of each datapoint and the cross covariance between the datapoints and all of the datapoints in the current batch.
+
+Computing these new distributions at each stage naively will have atleast quadratic complexity (assuming that you are using an inducing point GP). However we are recomputing many of these quantities between aquisitions. We can instead at each aquisition only compute the covariances between the latest addition and the points in the pool.
+
+Doing this prevents the complexity of generating the the required covariances from scaling with the batch size.
+
+For each of the candidate points we store its mean, and a covariance matrix between it and the current batch. Given we are using an independent output GP we can reduce the storage of the covariance even further to a tensor of size $C * 1 * D$. To create the conditional distributions, we only have matrix vector products. Which is of complexity $O(d^2)$ and isolates the cubic complexity issues to only the single matrix inversion required for the conputing of the conditional distributions and to the generation of the batch samples.
+
+We can even remove these $O(d^3)$ operations by making the following changes, store the samples generated by the conditional distributions. When we add a new point, update the likelihood samples by selecting one of these at random for each conditional distribution. We can update the matrix inverse of the batch using a rank 1 update on the previous inverse.
+
+Importantly this leaves us with only $O(d^2)$ related to the pool size terms as our acquisition continous to grow in size.
 
 
 \section{Replication}
@@ -389,23 +553,80 @@ We can then use these as a numerical test to valididate that the more computatio
 
 \chapter{Experiments}
 
+We have set up some of these experiments to demonstrate the issues with some of the active learning methods detailed in this paper.
+
+The random method should be impacted by how unbalanced the dataset is particuallly.
+
 \section{Replication}
 
 \subsection{Random}
 
+\subsubsection{MNIST (DNN vs BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Unbalanced MNIST (DNN vs BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Repeated MNIST (DNN vs BNN vs DUE)}
+
+\includegraphics{todo.png}
+
 \subsection{BALD}
+
+\subsubsection{MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Unbalanced MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Repeated MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
 
 \subsection{BatchBALD}
 
+\subsubsection{MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Unbalanced MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Repeated MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+
 \subsection{Predictive Entropy}
+
+\subsubsection{MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Unbalanced MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
+
+\subsubsection{Repeated MNIST (BNN vs DUE)}
+
+\includegraphics{todo.png}
 
 \section{DUE}
 
 To attempt to keep the experiments as comparible as possible, the feature extractor architecture used for DUE for this problem was the same architecture as the BNN with minimal modifications to satify the constraints of DUE. This primarily consisted of the additon of residual connections to the models, and the removal of the dropout layers.
 
-While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantl.
 
 \subsection{Training on small datasets}
+
+Training a machine learning model on a small dataset can exaherbate many issues that we run into in machine learning. For example the models we have are even further over parameterised when we are operating in very small datasets.
+
+While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantly, the performance of DUE on small subsets of MNIST was quite significatnly impacted.
+
 
 \subsection{BALD}
 
@@ -423,7 +644,8 @@ While DUE has no problems in learning MNIST with more expressive models, eg more
 \bibliography{Bibliography.bib}
 
 \begin{appendices}
-\chapter{Appendix Example}
+\chapter{Appendix}
+
 \end{appendices}
 
 \end{document}
