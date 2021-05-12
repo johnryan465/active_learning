@@ -1,21 +1,16 @@
 from dataclasses import dataclass
+from methods.method import UncertainMethod
 from uncertainty.rank2 import Rank2Next
-from uncertainty.estimator_entropy import Sampling
+from uncertainty.estimator_entropy import SampledJointEntropyEstimator
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
-from uncertainty.bbredux_estimator_entropy import BBReduxJointEntropyEstimator
 from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy
-from typing import List
 
 from models.model import UncertainModel
 from models.vduq import vDUQ
-from datasets.activelearningdataset import ActiveLearningDataset
-from methods.method import UncertainMethod, Method
-from methods.method_params import MethodParams, UncertainMethodParams
+from methods.method_params import UncertainMethodParams
 from batchbald_redux.batchbald import CandidateBatch, get_bald_batch
-from datasets.activelearningdataset import DatasetUtils
-from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 import torch
-from .BatchBALD import get_pool
+from toma import toma
 from utils.typing import TensorType
 
 @dataclass
@@ -28,23 +23,21 @@ class BALD(UncertainMethod):
         super().__init__(params)
 
     def score(self, model_wrapper: UncertainModel, inputs: TensorType) -> CandidateBatch:
+        num_cat = model_wrapper.get_num_cats()
+        N = inputs.shape[0]
+        batch_size = self.params.aquisition_size
+        batch_size = min(batch_size, N)
         if isinstance(model_wrapper, vDUQ):
-            num_cat = model_wrapper.get_num_cats()
-
-            N = inputs.shape[0]
-
             pool = model_wrapper.get_features(inputs)
 
             model_wrapper.model.eval()
-            batch_size = self.params.aquisition_size
-            batch_size = min(batch_size, N)
 
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
             features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]
             ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)
             conditional_entropies_N = GPCEntropy.compute_conditional_entropy_mvn(ind_dists, model_wrapper.likelihood, self.params.samples.batch_samples).cpu()
 
-            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, BBReduxJointEntropyEstimator)
+            joint_entropy_class = CustomEntropy(model_wrapper.likelihood, self.params.samples, num_cat, N, ind_dists, SampledJointEntropyEstimator)
 
             new_candidate_features: TensorType["datapoints", 1, "num_features"] = ((pool[0])[None, None, :]).expand(N, -1, -1)
             joint_features: TensorType["datapoints", 2, "num_features"] = torch.cat([new_candidate_features, features_expanded], dim=1)
@@ -61,13 +54,11 @@ class BALD(UncertainMethod):
 
             return CandidateBatch(scores=batch.values.tolist(), indices=batch.indices.tolist())
         else:
-            probs = []
-            for x, _ in dataset.get_pool():
-                if torch.cuda.is_available():
-                    x = x.cuda()
-                probs_ = model_wrapper.sample(x, self.params.samples).detach().clone()
-                probs.append(probs_)
+            num_samples = self.params.samples.batch_samples
+            samples = torch.zeros(N, num_samples, num_cat)
+            @toma.execute.chunked(inputs, N)
+            def make_samples(chunk: TensorType, start: int, end: int):
+                res = model_wrapper.sample(chunk, num_samples)
+                samples[start:end].copy_(res)
 
-            probs = torch.cat(probs, dim=0)
-            batch = get_bald_batch(probs, self.params.aquisition_size)
-            return batch
+            return get_bald_batch(samples, batch_size, num_samples * self.params.samples.sum_samples)

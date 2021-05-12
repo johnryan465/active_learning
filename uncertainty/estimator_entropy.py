@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from typing import List
+
+from batchbald_redux.batchbald import CandidateBatch, compute_conditional_entropy
 from uncertainty.current_batch import CurrentBatch
 from uncertainty.rank2 import Rank1Update, Rank1Updates
 
@@ -21,6 +23,41 @@ class Sampling:
     batch_samples: int = 0
     per_samples: int = 0
     sum_samples: int = 0
+
+
+def get_entropy_batch(log_probs_N_K_C: torch.Tensor, batch_size: int, num_samples: int, dtype=None, device=None) -> CandidateBatch:
+    N, K, C = log_probs_N_K_C.shape
+
+    batch_size = min(batch_size, N)
+
+    candidate_indices = []
+    candidate_scores = []
+
+    if batch_size == 0:
+        return CandidateBatch(candidate_scores, candidate_indices)
+
+    batch_joint_entropy = joint_entropy.DynamicJointEntropy(
+        num_samples, batch_size - 1, K, C, dtype=dtype, device=device
+    )
+
+    # We always keep these on the CPU.
+    scores_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
+
+    for i in tqdm(range(batch_size), desc="BatchBALD", leave=False):
+        if i > 0:
+            latest_index = candidate_indices[-1]
+            batch_joint_entropy.add_variables(log_probs_N_K_C[latest_index : latest_index + 1])
+
+        batch_joint_entropy.compute_batch(log_probs_N_K_C, output_entropies_B=scores_N)
+
+        scores_N[candidate_indices] = -float("inf")
+
+        candidate_score, candidate_index = scores_N.max(dim=0)
+
+        candidate_indices.append(candidate_index.item())
+        candidate_scores.append(candidate_score.item())
+
+    return CandidateBatch(candidate_scores, candidate_indices)
 
 class MVNJointEntropyEstimator(ABC):
     def __init__(self, batch: CurrentBatch, likelihood, samples: Sampling) -> None:

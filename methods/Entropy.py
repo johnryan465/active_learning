@@ -1,5 +1,5 @@
 from uncertainty.multivariate_normal import MultitaskMultivariateNormalType
-from uncertainty.estimator_entropy import ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling
+from uncertainty.estimator_entropy import ExactJointEntropyEstimator, SampledJointEntropyEstimator, Sampling, get_entropy_batch
 from uncertainty.bbredux_estimator_entropy import BBReduxJointEntropyEstimator
 
 from utils.utils import get_pool
@@ -21,12 +21,9 @@ from toma import toma
 from uncertainty.mvn_joint_entropy import CustomEntropy, GPCEntropy, Rank2Next
 
 
-
 @dataclass
 class EntropyParams(UncertainMethodParams):
     pass
-
-
 
 
 class Entropy(UncertainMethod):
@@ -83,4 +80,4 @@ class Entropy(UncertainMethod):
                 res = model_wrapper.sample(chunk, num_samples)
                 samples[start:end].copy_(res)
 
-            return get_batchbald_batch(samples, batch_size, num_samples * self.params.samples.sum_samples)
+            return get_entropy_batch(samples, batch_size, num_samples * self.params.samples.sum_samples)
