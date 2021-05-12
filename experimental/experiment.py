@@ -1,5 +1,6 @@
 from methods.BatchBALD import BatchBALD, BatchBALDParams
 from methods.BALD import BALD, BALDParams
+from methods.Entropy import Entropy, EntropyParams
 from models.bnn import BNN, BNNParams
 from methods.random import Random, RandomParams
 from datasets.mnist import MNIST
@@ -15,12 +16,8 @@ from models.training import TrainingParams
 from methods.method_params import MethodParams
 from datasets.dataset_params import DatasetParams
 from .driver import Driver
-import torch.autograd.profiler as profiler
 import time
-import tracemalloc
-import gc
-import sys
-import torch
+
 
 
 
@@ -60,6 +57,8 @@ class Experiment:
             method = BALD(method_config)
         elif isinstance(method_config, BatchBALDParams):
             method = BatchBALD(method_config)
+        elif isinstance(method_config, EntropyParams):
+            method = Entropy(method_config)
         else:
             raise NotImplementedError('Method')
         return method
