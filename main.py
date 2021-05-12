@@ -7,8 +7,11 @@ from utils.parser import parse_dataset, parse_model, parse_training, parse_metho
 import torch
 import random
 
-torch.manual_seed(0)
-random.seed(0)
+torch.manual_seed(42)
+torch.cuda.manual_seed(42)
+random.seed(42)
+torch.use_deterministic_algorithms(True)
+
 
 if __name__ == "__main__":
     parser = init_parser()
