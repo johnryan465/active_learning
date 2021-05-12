@@ -115,7 +115,7 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
     if args.model == ModelName.vduq:
         sampling_config = Sampling(batch_samples=300, per_samples=10, sum_samples=20)
     else:
-        sampling_config = Sampling(batch_samples=30, per_samples=10, sum_samples=20)
+        sampling_config = Sampling(batch_samples=30, per_samples=10, sum_samples=200)
 
     if args.method == MethodName.batchbald:
         method_params = BatchBALDParams(
