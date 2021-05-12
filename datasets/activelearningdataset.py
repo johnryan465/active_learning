@@ -30,10 +30,6 @@ class ActiveLearningDataset(ABC):
         pass
 
     @abstractmethod
-    def get_pool(self) -> DataLoader:
-        pass
-
-    @abstractmethod
     def get_pool_tensor(self) -> torch.Tensor:
         pass
 
@@ -100,15 +96,8 @@ class DatasetWrapper(ActiveLearningDataset):
     def get_test(self):
         return self.test_loader
 
-    def get_pool(self) -> DataLoader:
-        ts = Subset(self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask == 0).squeeze()))
-        return DataLoader(
-            ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, shuffle=True, pin_memory=True
-        )
-
     def get_pool_tensor(self) -> Dataset:
-        ts = Subset(
-            self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask == 0).squeeze()))
+        ts = Subset(self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask == 0).squeeze()))
         return ts
     
     # This method and related ones should take inputs in the range
@@ -136,27 +125,27 @@ class DatasetWrapper(ActiveLearningDataset):
 class DatasetUtils:
     @staticmethod
     def balanced_init(dataset: ActiveLearningDataset, per_class: int):
+        N = len(dataset.get_pool_tensor())
+        perm = torch.randperm(N)
         num_classes = len(dataset.get_classes())
-        current_sample_idx = 0
         collected_indexes = {}
         indexes = []
         completed_classes = 0
         for i in range(0, num_classes):
             collected_indexes[i] = 0
+        pool_tensor = dataset.get_pool_tensor()
+        for i in range(0,N):
+            _, y = pool_tensor[perm[i]]
+            if collected_indexes[y] < per_class:
+                collected_indexes[y] += 1
+                if collected_indexes[y] == per_class:
+                    completed_classes += 1
 
-        for _, y in dataset.get_pool():
-            for i in range(len(y)):
-                yi = y[i].item()
-                if collected_indexes[yi] < per_class:
-                    collected_indexes[yi] += 1
-                    if collected_indexes[yi] == per_class:
-                        completed_classes += 1
+                indexes.append(perm[i])
 
-                    indexes.append(current_sample_idx)
-
-                current_sample_idx += 1
             if completed_classes == num_classes:
                 break
+
         dataset.move(indexes)
     
     @staticmethod
