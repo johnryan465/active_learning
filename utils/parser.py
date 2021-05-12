@@ -148,7 +148,6 @@ def parse_method(args: argparse.Namespace) -> MethodParams:
 
 
 def parse_model(args: argparse.Namespace) -> ModelParams:
-    # print(args)
     if args.model == ModelName.vduq:
         gp_params = GPParams(
             kernel='RBF',
