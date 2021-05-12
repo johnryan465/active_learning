@@ -99,7 +99,7 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
         return self.inner.compute_batch(candidates)
 
     def add_variable(self, new: Rank1Update) -> None:
-        if self.count > 3:
+        if self.count >= 3:
             self.inner = SampledJointEntropyEstimator(self.inner.get_current_batch(), self.likelhood, self.samples)
         self.count += 1
         return self.inner.add_variable(new)
@@ -245,28 +245,37 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
         L = self.samples
-        pbar = tqdm(total=N, desc="Exact Batch", leave=False)
         likelihood_samples: TensorType["S", "D", "C"] = self.batch.distribution.sample(sample_shape=torch.Size([L]))
-        candidate_samples = []
-        for i, candidate in enumerate(pool):
-            cond_dists = self.batch.create_conditionals_from_rank1s(Rank1Updates(already_computed=[candidate]), likelihood_samples, L)
-            dist = next(next(cond_dists))
-            sample_ = dist.sample(sample_shape=torch.Size([1])).squeeze(3).squeeze(1)
-            sample_ = torch.mean(sample_, dim=0, keepdim=True)
-            candidate_samples.append(sample_)
 
-        candidate_samples = torch.cat(candidate_samples, dim=0)        
-        probs_B_K_C = self.likelihood(candidate_samples).probs
-        if likelihood_samples.shape[1] > 0:
-            probs_K_D_C = self.likelihood(likelihood_samples).probs
-        else:
-            probs_K_D_C = likelihood_samples
-        @toma.execute.chunked(probs_B_K_C, 1024)
-        def compute(chunked_probs_B_K_C: TensorType, start: int, end: int):
-            probs_B_K_D_C = torch.cat([chunked_probs_B_K_C.unsqueeze(2), probs_K_D_C.unsqueeze(0).expand(end-start,-1,-1,-1)] , dim = 2)
-            output[start: end].copy_(ExactJointEntropyEstimator._compute(probs_B_K_D_C))
-            pbar.update(end - start)
-        pbar.close()
+        @toma.execute.batch(N*L)
+        def compute(batchsize: int):
+            pool.reset()
+            conditional_dists = self.batch.create_conditionals_from_rank1s(pool, likelihood_samples, batchsize)
+            pbar = tqdm(total=N*L, desc="Exact Batch", leave=False)
+            datapoints_size = max(1, batchsize // L)
+            samples_size = min(L, batchsize)
+            C = self.batch.num_cat
+            K = L
+            for i, candidate in enumerate(conditional_dists):
+                n_start = i*datapoints_size
+                n_end = min((i+1)*datapoints_size, N)
+
+                samples = []
+                for j, distribution in enumerate(candidate):
+                    l_start = j*samples_size
+                    l_end = min((j+1)* samples_size, L)
+                    sample: TensorType["B", "K", "C"] = distribution.sample(sample_shape=torch.Size([1])).squeeze(-2).squeeze(0)
+                    samples.append(sample)
+                    pbar.update((n_end - n_start) * (l_end - l_start))
+                probs_b_k_c = self.likelihood(torch.cat(samples, dim=1)).probs
+                if likelihood_samples.shape[1] > 0:
+                    probs_k_d_c = self.likelihood(likelihood_samples).probs
+                else:
+                    probs_k_d_c = likelihood_samples
+                probs_B_K_D_C = torch.cat([probs_b_k_c.unsqueeze(2), probs_k_d_c.unsqueeze(0).expand(n_end-n_start,-1,-1,-1)] , dim = 2)
+                output[n_start: n_end].copy_(ExactJointEntropyEstimator._compute(probs_B_K_D_C), non_blocking=True)
+            pbar.close()
+        
         return output.cpu()
 
     def add_variable(self, new: Rank1Update) -> None:
