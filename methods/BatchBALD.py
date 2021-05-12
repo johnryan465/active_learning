@@ -82,6 +82,8 @@ class BatchBALD(UncertainMethod):
             samples = torch.zeros(N, num_samples, num_cat)
             @toma.execute.chunked(inputs, N)
             def make_samples(chunk: TensorType, start: int, end: int):
+                if torch.cuda.is_available():
+                    chunk = chunk.cuda()
                 res = model_wrapper.sample(chunk, num_samples)
                 samples[start:end].copy_(res)
 
