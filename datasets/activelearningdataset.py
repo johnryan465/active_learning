@@ -126,6 +126,7 @@ class DatasetUtils:
     @staticmethod
     def balanced_init(dataset: ActiveLearningDataset, per_class: int):
         N = len(dataset.get_pool_tensor())
+        torch.manual_seed(42)
         perm = torch.randperm(N)
         num_classes = len(dataset.get_classes())
         collected_indexes = {}
