@@ -90,7 +90,7 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
         self.count = 0
         self.samples = samples
         self.likelhood = likelihood
-        self.inner : MVNJointEntropyEstimator = ExactJointEntropyEstimator(batch, likelihood, samples)
+        self.inner : MVNJointEntropyEstimator = SampledJointEntropyEstimator(batch, likelihood, samples)
 
     def compute(self) -> TensorType:
         return self.inner.compute()
@@ -99,7 +99,7 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
         return self.inner.compute_batch(candidates)
 
     def add_variable(self, new: Rank1Update) -> None:
-        if self.count >= 3:
+        if False:
             self.inner = SampledJointEntropyEstimator(self.inner.get_current_batch(), self.likelhood, self.samples)
         self.count += 1
         return self.inner.add_variable(new)
@@ -222,17 +222,17 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
         super().__init__(batch, likelihood, samples)
 
     @staticmethod
-    def _compute(samples: TensorType["S","D", "C"]) -> TensorType:
+    def _compute(samples: TensorType) -> TensorType:
         D = samples.shape[1]
         t = string.ascii_lowercase[:D]
         s =  ','.join(['z' + c for c in list(t)]) + '->' + 'z' + t
-        l: TensorType["S", "D", "C"] = samples
+        l: TensorType["N","S", "D", "C"] = samples
         j: List[TensorType["S", "C"]] = list(torch.unbind(l, dim=-2))
         # This is where the stupid amount of memory happens
         g: TensorType["S", "expanded" : ...] = torch.einsum(s, *j) # We should have num_points dimensions each of size num_cat
-        g: TensorType["S", "E"] = torch.flatten(g, start_dim=1)
-        g: TensorType["E"] = torch.mean(g, dim=0)
-        return torch.sum(-g * torch.log(g), dim=0)
+        g: TensorType["S", "E"] = torch.flatten(g, start_dim=-D)
+        g: TensorType["E"] = torch.mean(g, dim=-2)
+        return torch.sum(-g * torch.log(g), dim=-1)
 
     @staticmethod
     def _compute_from_batch(batch: CurrentBatch, likelihood, samples: int) -> TensorType:
@@ -244,13 +244,18 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def compute_batch(self, pool: Rank1Updates) -> TensorType["N"]:
         N = len(pool)
         output: TensorType["N"] = torch.zeros(N)
+        L = self.samples
+        likelihood_samples: TensorType["K", "D", "C"] = self.batch.distribution.sample(sample_shape=torch.Size([L]))
         pbar = tqdm(total=N, desc="Exact Batch", leave=False)
+        likelihood_samples: TensorType["S", "D", "C"] = self.batch.distribution.sample(sample_shape=torch.Size([self.samples]))
+        self.batch.create_conditionals_from_rank1s(pool, likelihood_samples, self.samples)
         for i, candidate in enumerate(pool):
             possible_batch = self.batch.append(candidate)
-            output[i] = ExactJointEntropyEstimator._compute_from_batch(possible_batch, self.likelihood, self.samples)
+            samples = self.likelihood(possible_batch.distribution.sample(sample_shape=torch.Size([self.samples]))).probs
+            output[i] = ExactJointEntropyEstimator._compute(samples)
             pbar.update(1)
         pbar.close()
-        return output
+        return output.cpu()
 
     def add_variable(self, new: Rank1Update) -> None:
         self.batch = self.batch.append(new)
