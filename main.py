@@ -4,7 +4,11 @@ from experimental.experiment_params import ExperimentParams
 from utils.config import IO
 
 from utils.parser import parse_dataset, parse_model, parse_training, parse_method, init_parser
+import torch
+import random
 
+torch.manual_seed(0)
+random.seed(0)
 
 if __name__ == "__main__":
     parser = init_parser()
