@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Sequence
 import torch
 from batchbald_redux.active_learning import RandomFixedLengthSampler
-from torch.utils.data import Dataset, ConcatDataset, DataLoader, Subset
+from torch.utils.data import Dataset, ConcatDataset, DataLoader, Subset, WeightedRandomSampler
 from torchvision.datasets.vision import VisionDataset
 from .dataset_params import DatasetParams
 from torchtyping import TensorType # type: ignore
@@ -23,6 +23,10 @@ class DatasetName(str, Enum):
 class ActiveLearningDataset(ABC):
     @abstractmethod
     def get_train(self) -> DataLoader:
+        pass
+
+    @abstractmethod
+    def get_train_tensor(self) -> torch.Tensor:
         pass
 
     @abstractmethod
@@ -86,12 +90,17 @@ class DatasetWrapper(ActiveLearningDataset):
         self.mask = torch.zeros(self.pool_size)
 
     def get_train(self) -> DataLoader:
-        ts = Subset(self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask != 0).squeeze()))
+        ts = self.get_train_tensor()
+        weights = DatasetUtils.make_weights_for_balancing_classes(ts, 10)
+        weights = torch.DoubleTensor(weights)
         return DataLoader(
             ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, drop_last=False,
             pin_memory=True,
-            sampler=RandomFixedLengthSampler(ts, self.sampler_size)
+            sampler=WeightedRandomSampler(weights, self.sampler_size)
         )
+    
+    def get_train_tensor(self) -> Dataset:
+        return Subset(self.trainset, DatasetUtils.tensor_to_sequence(torch.nonzero(self.mask != 0).squeeze()))
 
     def get_test(self):
         return self.test_loader
@@ -152,3 +161,20 @@ class DatasetUtils:
     @staticmethod
     def tensor_to_sequence(input: torch.Tensor) -> Sequence[int]:
         return input.tolist()
+
+    # We can instead weight each datapoint by using nearest neightbour counts between the trainset and the pool
+    @staticmethod
+    def make_weights_for_balancing_classes(dataset: Dataset, num_classes: int) -> List[int]:                        
+        counts = [0] * num_classes
+        images = dataset                                                
+        for _, y in images:                                                         
+            counts[y] += 1                                                     
+        weight_per_class = [0.] * num_classes                                      
+        N = float(sum(counts))                                                   
+        for i in range(num_classes):                                                   
+            weight_per_class[i] = N/float(counts[i])    
+                                     
+        weight = [0] * len(images)                                              
+        for idx, val in enumerate(images):                                          
+            weight[idx] = weight_per_class[val[1]]                                  
+        return weight   
