@@ -99,7 +99,7 @@ class CombinedJointEntropyEstimator(MVNJointEntropyEstimator):
         return self.inner.compute_batch(candidates)
 
     def add_variable(self, new: Rank1Update) -> None:
-        if self.count >= 3:
+        if self.count == 3:
             self.inner = SampledJointEntropyEstimator(self.inner.get_current_batch(), self.likelhood, self.samples)
         self.count += 1
         return self.inner.add_variable(new)
@@ -114,18 +114,22 @@ class SampledJointEntropyEstimator(MVNJointEntropyEstimator):
         self.sum_samples = samples.sum_samples
         self.batch_samples = samples.batch_samples
         self.per_samples = samples.per_samples
+        self.create_samples()
         
-        if torch.cuda.is_available():
-            self.probs = torch.ones(self.batch_samples * self.sum_samples, self.batch_samples, device='cuda')
-        else:
-            self.probs = torch.ones(self.batch_samples * self.sum_samples, self.batch_samples)
-        self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
         super().__init__(batch, likelihood, samples)
 
 
     # We call this function to create the samples for the batch distribution
     # We use r2c and the current batch dist to create the samples and conditional distributions
     def create_samples(self) -> None:
+        if self.batch.num_points == 0:
+            if torch.cuda.is_available():
+                self.probs = torch.ones(self.batch_samples * self.sum_samples, self.batch_samples, device='cuda')
+            else:
+                self.probs = torch.ones(self.batch_samples * self.sum_samples, self.batch_samples)
+            self.likelihood_samples = torch.zeros(self.batch_samples, 0, batch.num_cat)
+            return
+
         distribution = self.batch.distribution
         likelihood = self.likelihood
         batch_samples = self.batch_samples
