@@ -22,7 +22,7 @@ from vduq.dkl import initial_values_for_GP
 from gpytorch.mlls import VariationalELBO
 from gpytorch.likelihoods import SoftmaxLikelihood
 from dataclasses import dataclass
-
+from ignite.metrics.confusion_matrix import ConfusionMatrix
 
 import gpytorch
 import torch
@@ -257,6 +257,7 @@ class vDUQ(UncertainModel):
 
     def get_test_log_hooks(self):
         return {
+            'confusion': ConfusionMatrix(10),
             'accuracy': self.get_output_transform(),
             'loss': lambda x: x
         }

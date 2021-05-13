@@ -7,6 +7,7 @@ from ignite.contrib.handlers.tensorboard_logger import global_step_from_engine, 
 from utils.config import IO, VariationalLoss
 from models.training import TrainingParams
 from ignite.handlers import ModelCheckpoint, Checkpoint
+from ignite.metrics.confusion_matrix import ConfusionMatrix
 
 from datasets.activelearningdataset import ActiveLearningDataset
 import time
@@ -39,7 +40,7 @@ class Driver:
 
         for stage, engine in engines.items():
             for name, transform in metrics[stage].items():
-                if stage == "validation" and (name == "loss" or name == "accuracy"):
+                if stage == "validation" and (name == "loss" or name == "accuracy" or name =="confusion"):
                     continue
                 metric = Average(output_transform=transform)
                 metric.attach(engine, name)
@@ -52,6 +53,9 @@ class Driver:
         loss_fn = model_wrapper.get_loss_fn()
         metric = VariationalLoss(loss_fn)
         metric.attach(evaluator, "loss")
+
+        metric = ConfusionMatrix(10, output_transform=output_transform)
+        metric.attach(evaluator, "confusion")
 
         test_loader = dataset.get_test()
         train_loader = dataset.get_train()
