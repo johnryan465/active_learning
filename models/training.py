@@ -18,4 +18,5 @@ class TrainingParams(ModelParams):
     batch_size: int
     patience: int
     progress_bar: bool
+    objective: str = "loss"
     profiler: bool = False

@@ -56,9 +56,11 @@ class Driver:
         test_loader = dataset.get_test()
         train_loader = dataset.get_train()
 
-        def score_fn(engine):
-            score = engine.state.metrics['accuracy']
-            return score
+        if training_params.objective == "accuracy":
+            score_fn = lambda engine: engine.state.metrics['accuracy']
+        else:
+            score_fn = lambda engine: -engine.state.metrics['loss']
+
 
         if training_params.patience > 0:
             es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
@@ -111,11 +113,11 @@ class Driver:
 
         trainer.run(train_loader, max_epochs=training_params.epochs)
         best_epoch = 0
-        best_accuracy = float('-inf')
+        best_score = float('-inf')
         for i in range(len(test_log_lines)):
-            if test_log_lines[i]['accuracy'] > best_accuracy:
+            if test_log_lines[i][training_params.objective] > best_score:
                 best_epoch = i
-                best_accuracy = test_log_lines[i]['accuracy']
+                best_score = test_log_lines[i]['accuracy']
         if training_params.epochs > 0:
             tune.report(iteration=iteration, mean_loss=test_log_lines[best_epoch]['loss'], accuracy=test_log_lines[best_epoch]['accuracy'])
             with torch.no_grad():  
