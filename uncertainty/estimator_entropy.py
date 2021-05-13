@@ -225,7 +225,7 @@ class ExactJointEntropyEstimator(MVNJointEntropyEstimator):
     def _compute(samples: TensorType) -> TensorType:
         D = samples.shape[2]
         t = string.ascii_lowercase[:D]
-        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'z' + t
+        s =  ','.join(['yz' + c for c in list(t)]) + '->' + 'yz' + t
         l: TensorType["N","S", "D", "C"] = samples
         j: List[TensorType["N", "S", "C"]] = list(torch.unbind(l, dim=-2))
         # This is where the stupid amount of memory happens
