@@ -72,7 +72,7 @@ def init_parser() -> argparse.ArgumentParser:
             q.add_argument('--coeff', default=9, type=float)
             q.add_argument('--n_inducing_points', default=10, type=int)
             if model == "vduq":
-                pass
+                q.add_argument('--ard', default=-1, type=int)
             elif model == "bnn":
                 pass
             elif model == "dnn":
