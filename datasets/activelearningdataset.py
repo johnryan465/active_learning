@@ -91,12 +91,10 @@ class DatasetWrapper(ActiveLearningDataset):
 
     def get_train(self) -> DataLoader:
         ts = self.get_train_tensor()
-        weights = DatasetUtils.make_weights_for_balancing_classes(ts, 10)
-        weights = torch.DoubleTensor(weights)
         return DataLoader(
             ts, batch_size=self.bs, num_workers=DatasetWrapper.num_workers, drop_last=False,
             pin_memory=True,
-            sampler=WeightedRandomSampler(weights, self.sampler_size)
+            sampler=RandomFixedLengthSampler(ts, self.sampler_size)
         )
     
     def get_train_tensor(self) -> Dataset:
@@ -157,7 +155,7 @@ class DatasetUtils:
                 break
         # print(indexes)
         # A fixed permutation
-        indexes = [51247, 29701, 37011, 27137, 18998, 55159, 30648, 35259, 56924, 46759, 25423, 54617, 29622, 58828, 56222, 48542, 59403, 12831, 23130, 40077]
+        # indexes = [51247, 29701, 37011, 27137, 18998, 55159, 30648, 35259, 56924, 46759, 25423, 54617, 29622, 58828, 56222, 48542, 59403, 12831, 23130, 40077]
         dataset.move(indexes)
     
     @staticmethod
