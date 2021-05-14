@@ -156,7 +156,7 @@ class Driver:
             img = Driver.plot_confusion_matrix(line["confusion"].numpy(), [str(i) for i in range(10)])
             tb_logger.writer.add_image("confusion", img, trainer.state.epoch)
             line['epoch'] = trainer.state.epoch
-            line['nloss'] = line['loss']
+            line['nloss'] = -line['loss']
             test_log_lines.append(line)
 
         if training_params.progress_bar:
