@@ -100,7 +100,7 @@ class vDUQ(UncertainModel):
 
             # eig = torch.symeig(delazify(self.model.gp.covar_module(self.model.gp.inducing_points))).eigenvalues
             # cond = eig.max() / eig.min()
-            return {'loss': elbo.item(), 'scale_norm': torch.mean(self.model.gp.covar_module.outputscale)}
+            return {'loss': elbo.item(), 'scale_norm': torch.mean(self.model.gp.covar_module.outputscale), 'mean': torch.mean(self.model.gp.mean_module.constant)}
         return step
 
     def get_output_transform(self):
@@ -250,7 +250,7 @@ class vDUQ(UncertainModel):
 
     def get_training_log_hooks(self):
         return {
-            #'cond': lambda x: x['cond'],
+            'mean': lambda x: x['mean'],
             'scale_norm': lambda x: x['scale_norm'],
             'loss': lambda x: x['loss']
         }
