@@ -95,7 +95,7 @@ class GP(ApproximateGP):
                 n_inducing_points, batch_shape=batch_shape
             )
         else:
-            variational_distribution = gpytorch.variational.TrilNaturalVariationalDistribution(
+            variational_distribution = gpytorch.variational.NaturalVariationalDistribution(
                 n_inducing_points, batch_shape=batch_shape
             )
 
