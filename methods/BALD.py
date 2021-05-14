@@ -31,6 +31,7 @@ class BALD(UncertainMethod):
             pool = model_wrapper.get_features(inputs)
 
             model_wrapper.model.eval()
+            model_wrapper.likelihood.eval()
 
             conditional_entropies_N = torch.empty(N, dtype=torch.double, pin_memory=torch.cuda.is_available())
             features_expanded: TensorType["datapoints", 1, "num_features"] = pool[:,None,:]

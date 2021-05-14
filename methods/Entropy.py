@@ -42,6 +42,7 @@ class Entropy(UncertainMethod):
             pool: TensorType["datapoints","num_features"] = model_wrapper.get_features(inputs)
 
             model_wrapper.model.eval()
+            model_wrapper.likelihood.eval()
 
             features_expanded: TensorType["N", 1, "num_features"] = pool[:,None,:]
             ind_dists: MultitaskMultivariateNormalType = model_wrapper.get_gp_output(features_expanded)

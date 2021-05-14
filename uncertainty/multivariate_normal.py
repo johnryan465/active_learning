@@ -13,6 +13,10 @@ class _MultitaskMultivariateNormalType(MultitaskMultivariateNormal):
     def __init__(self, mean, covariance_matrix, validate_args=False, interleaved=True):
         super().__init__(mean, covariance_matrix, validate_args=validate_args, interleaved=interleaved)
 
+    @staticmethod
+    def create_from_mvn(mvn: MultitaskMultivariateNormal):
+        return _MultitaskMultivariateNormalType(mvn.mean, mvn.lazy_covariance_matrix, mvn._validate_args, mvn._interleaved)
+
     def __eq__(self, other):
         if isinstance(other, _MultitaskMultivariateNormalType):
             mean_1 = self.mean
