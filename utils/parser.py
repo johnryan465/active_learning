@@ -113,7 +113,7 @@ def parse_dataset(args: argparse.Namespace) -> DatasetParams:
 def parse_method(args: argparse.Namespace) -> MethodParams:
     # Create the active learning method
     if args.model == ModelName.vduq:
-        sampling_config = Sampling(batch_samples=300, per_samples=10, sum_samples=20)
+        sampling_config = Sampling(batch_samples=400, per_samples=30, sum_samples=20)
     else:
         sampling_config = Sampling(batch_samples=30, per_samples=10, sum_samples=200)
 
