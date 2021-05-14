@@ -155,7 +155,9 @@ class DatasetUtils:
 
             if completed_classes == num_classes:
                 break
-        print(indexes)
+        # print(indexes)
+        # A fixed permutation
+        indexes = [51247, 29701, 37011, 27137, 18998, 55159, 30648, 35259, 56924, 46759, 25423, 54617, 29622, 58828, 56222, 48542, 59403, 12831, 23130, 40077]
         dataset.move(indexes)
     
     @staticmethod

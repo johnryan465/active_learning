@@ -174,7 +174,7 @@ As the variables are independent conditioned on the value of the function, the r
 The authors of the paper address this issue by using sampling to estimate the joint entropy for larger batch sizes. The BatchBALD paper uses Bayesian Neural networks (BNNs) as their model. They are then able to sample from the weight distribution once to obtain a function draw for all possible inputs. This is not an ability we have when using GPCs, which we will come back to later.
 
 
-\section{Entropy}
+\section{Joint Entropy}
 
 We can also simply use the joint entropy alone as the active learning objective
 
@@ -198,6 +198,15 @@ $$s_{Entropy} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n)$$
 \end{theorem}
 
 The fact that this objective is submodular enables us to use the same greedy $1 - \frac{1}{\epsilon}$ approximation algorithm as used above.
+
+A justification for the use of this objective can be seem as attempting to minimise the entropy over the remaining items in the pool given the batch which we select.
+
+
+$$\min_{B} H( \left(P \setminus B\right) | B) = \min_{B} H(P) - H(B) = \min_{B} - H(B) = \max_B H(B)$$
+
+If we assume that the samples in the poolset are samples from the true distribuiton, we can view this as attempting to minimise the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimise the entropy of the paramaters maximially fast.
+
+In the next chapter we will discuss some reasons while this may be preferable when using a Gaussian Process Classifer.
 
 \chapter{Gaussian Process Based Models}
 \label{Chap4}
@@ -260,6 +269,12 @@ Minimising this objective minimises the KL Divergence between the true output di
 
 \subsubsection{Random Fixed Features}
 
+(Todo)
+
+
+
+
+
 \section{Gaussian Process Classification}
 
 
@@ -281,6 +296,10 @@ The logit is the standard link function for the vast majority of GPC use cases. 
 $$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
 \subsubsection{Probit}
 
+
+\subsection{Minimising entropy over functions}
+
+When using a softmax link function
 
 
 \section{vDUQ / DUE}
