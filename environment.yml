@@ -8,7 +8,7 @@ dependencies:
   - gpytorch=1.4.1
   - pytorch=1.8.1
   - cudatoolkit=10.2
-  - torchvision
+  - torchvision=0.9.1
   - ray-tune
   - numpy
   - tensorboard
