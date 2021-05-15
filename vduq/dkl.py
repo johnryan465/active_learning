@@ -28,7 +28,7 @@ def initial_values_for_GP(train_dataset, feature_extractor, n_inducing_points):
 
     with torch.no_grad():
         for i in range(steps):
-            X_sample = torch.stack([train_dataset[j][0] for j in idx[i]])
+            X_sample = torch.stack([train_dataset[j] for j in idx[i]])
 
             if torch.cuda.is_available():
                 X_sample = X_sample.cuda()

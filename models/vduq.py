@@ -143,13 +143,10 @@ class vDUQ(UncertainModel):
         # This allows us to compare various completely different architectures in a controlled way
         feature_extractor = vDUQ.fe_config[training_params.dataset][params.model_index](fe_params)
 
-        dataset_list = list(iter(train_dataset))
-
-        x_ = torch.cat([x[0] for x in dataset_list])
-        y_ = torch.cat([x[1] for x in dataset_list])
+        x_ = torch.stack([x[0] for x in dataset.get_train_tensor()])
 
         init_inducing_points, init_lengthscale = initial_values_for_GP(
-            TensorDataset(x_, y_), feature_extractor,
+            x_, feature_extractor,
             gp_params.n_inducing_points
         )
 
