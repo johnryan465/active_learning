@@ -139,9 +139,9 @@ The most straightforward acquisition function is to randomly sample from the poo
 \section{BALD}
 Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is based on selecting datapoints which maximise the mutual information between the datapoints class output and the models parameters. The paper details how we can instead of computing this in the paramater space which would be computationally prohibative in many cases, we can compute the same objective in the output space.
 
-$${\arg\,\max}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
+$${\argmax}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
 
-$${\arg\,\max}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
+$${\argmax}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
 
 
 An issue which we run into when using BALD in the case where we want to select multiple datapoints to aquire at the same time is the fact that selecting the $n$ points with the greatest individual information content will not necessarily give you the $n$ points which jointly have the greatest information content. This can be made very obvious by considering the case when there is duplicates in the dataset. If the duplicated point is in the top n points as decieded by the BALD score, having both of the points in your aquired batch will give you no more information than just having one of them, you would be better served by selecting any other point instead of these points.
@@ -316,11 +316,14 @@ Using a straightforward Gaussian Process with no hyper parameters, for regressio
 
 \subsection{KL Divergence}
 
-\begin{definition}[KL Divergence (Entropy)]
-    For 2 discrete probability distributions $P, Q$ defined on the same probability space $\aleph$
+The KL Divergence is a measure of how different 2 probability distribuitons are, (it is not symmetric so it is not strictly a distance functions). It has many useful properties and unlike shannon entropy it has a sensible and natural extension to continous random variables.
+
+\begin{definition}[KL Divergence]
+    For 2 probability distributions $P, Q$ defined on the same probability space $\chi$
+    $$D_{KL} \left( P || Q \right) = E_{x \sim P(x)}  \log \left( \frac{P(x)}{Q(x)}\right)$$
 \end{definition}
 
-\subsection{ELBO}
+
 
 It is often quite difficult to compute the \textbf{KL Divergence}, as often we don't have direct access to one of the distribuitons which we are attempting to calculate it with.
 
@@ -427,7 +430,7 @@ While DUE is an extremely powerful model, some modifications were required to he
 
 \subsection{Natural Gradient Descent}
 
-Natural Gradient Descent is an optimization method which is designed for when we are attempting to optimise some objective of a distribution. The use of this method greatly improved the rate of convergence and overall performance.
+Natural Gradient Descent is an optimization method which is designed for when we are attempting to optimise some objective of a distribution. The use of this method greatly improved the rate of convergence and overall performance. \cite{NGD}
 
 
 \begin{definition}[Gradient Descent]
@@ -437,20 +440,97 @@ Natural Gradient Descent is an optimization method which is designed for when we
 
 With a well chosen hyperparameter $\alpha$ and a convex loss function $L$ we can obtain convergence guarentees. [cite]. Many machine learning problems which we use gradient descent for do not obey the constraints which we require for guarentees of convergence [], empircally however the performance achieved by gradient descent and its derivates is impressive even these problems in many cases.
 
-Instead of applying the gradient descent algorithm to the paramaters in the eucliedean geometry of the paramater space, instead we can use the geometry of the likelihood space paramaterised by our paramaters to enables superior optimization.
+Instead of applying the gradient descent algorithm to the paramaters in the eucliedean geometry of the paramater space, instead we can use the geometry of the likelihood space paramaterised by our chosen parameters to enable superior optimization. This makes the optimisation independent of the paramaterisaton of the distribuiton and only related to the distribuiton induced by the the parameters.
+ 
+To derive the update equations we will need to define some objectives and take some taylor expansions.
 
-To create this method we will be attempting to minimise the KL Divergence between the distribuiton which we are paramaterising, and some objective distribuiton. We for example could be using the ELBO as defined previously in [].
+The first thing we will define is out loss function. $q$ is the true distribuiton which we are attempting to approximate, $p_\theta$ is our parameterised distribution.
+
+$$L \left(\theta \right) = D_{KL} \left(p_\theta || q \right) $$
+
+We wish to choose a descent direction which will minimise our loss function, much like in standard gradient descent. Normally in gradient descent we bound the magnitude of the step of the gradient by the eucliedean length of the descent vector, we change the constraint in natural gradient descent to instead bound the $KL$ divergence between $p_\theta$ and $p_{\theta + \epsilon}$.
+
+\begin{align}
+    \epsilon^\prime &= \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k} L \left( \theta + \epsilon \right) \\
+\end{align}
+
+We can take the first order taylor expansion of $L\left(\theta + \epsilon\right)$ around $\theta$.
 
 
-We can take the taylor expansion of the objective below.
+\begin{align*}
+L\left(\theta + \epsilon\right) &\approx L\left( \theta \right) + J_L \left( \theta\right) \left( \left( \theta + \epsilon \right) - \theta \right)  \\
+&\approx L\left( \theta \right) +  J_L \left( \theta\right) \epsilon \\
+\end{align*}
 
-$$D_{KL} \left(p_\theta || p_{\theta+ \epsilon} \right) = $$
+Given the constraints above we have we can rewrite our objective using the method of lagrange mulitpliers as below.
+
+\begin{align}
+    \epsilon^\prime &= \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k} L \left( \theta + \epsilon \right) + \alpha \left( D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) - k\right) \\
+    &\approx \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k}  L\left( \theta \right) +  J_L \left( \theta\right) \epsilon  + \frac{1}{2} \left(\epsilon \right)^T H_L \left(\theta \right) \left( \epsilon\right) + \alpha \left( D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) - k\right) \\
+\end{align}
+
+Now we can apply a taylor expansion to $D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right)$ around $\theta$. $\theta^\prime = \theta + \epsilon$
 
 
+\begin{align}
+    D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) &\approx  D_{KL} \left(p_\theta || p_{\theta} \right) + \left(J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right) \right) \epsilon + \frac{1}{2} \epsilon^T \left( H_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right) \right) \epsilon
+\end{align}
+
+The KL Divergence between a distribtuion and it's self is $0$ so the first term disappears.
+
+
+Lets now deal with the second term. The KL Divergence is a positive function, and we know that as we mentioned above it is $0$ when the 2 distribuitons are equal. Then second term is the Jacobian of the KL Divergence between 2 paramaterised distributitons, \textit{equaluated when the parametrs are equal}. So we are taking the Jacobian of a function evaluated at a global minimum, which implies that $J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)  = 0$. This makes the second term disappear.
+
+
+\begin{align}
+    D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) &\approx  \frac{1}{2} \epsilon^T \left( H_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right) \right) \epsilon
+\end{align}
+
+
+We can expand out the matrix in the reamining quadratic term to obtain that it is equal to the negative fisher information matrix.
+
+\begin{align}
+    H_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)_{ij} &= J \left( J \left( E_{x \sim p_\theta(x)}  \log \left( \frac{p_\theta(x)}{p_{\theta^\prime}(x)}\right)\right)^T \right)_{ij} \left( \theta \right) \\
+    &= \frac{\partial}{\partial \theta^\prime_i} \frac{\partial}{\partial \theta^\prime_j} E_{x \sim p_\theta(x)}  \log \left( \frac{p_\theta(x)}{p_{\theta^\prime}(x)}\right) \left( \theta \right) \\
+    &= E_{x \sim p_\theta(x)} \frac{\partial}{\partial \theta^\prime_i} \frac{\partial}{\partial \theta^\prime_j}  \log \left( \frac{p_\theta(x)}{p_{\theta^\prime}(x)}\right) \left( \theta \right) \\
+    &= - E_{x \sim p_\theta(x)} \frac{\partial}{\partial \theta^\prime_i} \frac{\partial}{\partial \theta^\prime_j}  \log \left( p_{\theta}(x) \right)  \\
+    &= F \\
+\end{align}
+
+Where $F$ is the defintion of the Fisher information matrix.
+
+
+\begin{definition}[Fisher Information Matrix]
+    
+\end{definition}
+
+Returning to our objective from earlier.
+
+\begin{align}
+    \epsilon^\prime &\approx \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k}  L\left( \theta \right) +  J_L \left( \theta\right) \epsilon  + \alpha \left( \frac{1}{2} \epsilon^T F \epsilon - k\right) \\
+\end{align}
+
+To find the best value of $\epsilon$, we can take the derivate of the objective with respect to $\epsilon$ at set it to $0$.
+
+
+\begin{align}
+   \frac{\partial}{\partial \epsilon} \left( L\left( \theta \right) + J_L \left( \theta\right) \epsilon + \alpha \left( \frac{1}{2} \epsilon^T F \epsilon - k\right) \right) &=  \frac{\partial}{\partial \epsilon} \left( J_L \left( \theta\right) \epsilon + \frac{\alpha}{2} \epsilon^T F \epsilon  \right) = 0\\
+  0 &=  J_L \left( \theta\right)^T + \frac{\alpha}{2}  \left(F^T + F \right)\epsilon\\
+\end{align}
+
+Assuming some smoothness condictions we get that the order of the partial differentation doesn't impact the Hessian, and in turn the fisher information matrix. $F = F^T$
+
+\begin{align}
+   0 &=  J_L \left( \theta\right)^T + \alpha F \epsilon\\
+   - J_L \left( \theta\right)^T &=  \alpha F \epsilon\\
+  \epsilon &=  - \frac{1}{\alpha} F^{-1} J_L \left( \theta\right) ^T
+\end{align} 
+
+We have now arrived at the update equations which we can use as our optimisation method.
 
 
 \begin{definition}[Natural Gradient Descent]
-    
+    Natural Gradient Descent is similar to gradient descent expect inplace of the the gradient we use the natural gradient defined as $\nabla^{\prime} =  F^{-1} J_L \left( \theta \right)^T$
 \end{definition}
 
 
@@ -591,34 +671,146 @@ We can also take advantage of the fact that the output variables are conditional
 \chapter{Implementaion}
 \label{Chap6}
 
-All of the experiments referenced here can easily be replicated using the codebase for this project which is linked in the appendices.
+All of the experiments referenced here can easily be replicated using the codebase for this project which is linked and details in the appendices.
 
-The code for this project is written in Python and uses the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}.
+The code for this project is written in Python and makes significant use of the frameworks \cite[Pytorch]{NEURIPS2019_9015} and \cite[GPytorch]{gardner2018gpytorch}.
 
 
-\section{Conditional Distributions}
-To reduce the number of samples required and the complexity of computing those samples the framework implements the following system to sampling from the joint postior.
 
-\begin{itemize}
-    \item Generate $K$ samples from the current batch distribution
-    \item For each $N$ items in the pool set, we generate a condition distribuiton for each of the $K$ samples we have previously generated.
-    \item We can then sample from each of these conditional distributions $P$, these are combined with the corresponding orignal sample to create the samples we will use.
-\end{itemize}
 
-These conditional distributions are lazily generated as to enable very large amounts of sampling.
 
-\section{Rank 1 Updates}
-To be able to compute all of the candidate distributions at each stage in the acquisition, we require the mean the of the datapoints along with the convariance of each datapoint and the cross covariance between the datapoints and all of the datapoints in the current batch.
+\section{Complexity}
 
-Computing these new distributions at each stage naively will have atleast quadratic complexity (assuming that you are using an inducing point GP). However we are recomputing many of these quantities between aquisitions. We can instead at each aquisition only compute the covariances between the latest addition and the points in the pool.
+In this project we also endevour to minimise the computationally complexity of the operations which we need to perform to compute the quantities involved to make this project of practical use.
 
-Doing this prevents the complexity of generating the the required covariances from scaling with the batch size.
 
-For each of the candidate points we store its mean, and a covariance matrix between it and the current batch. Given we are using an independent output GP we can reduce the storage of the covariance even further to a tensor of size $C * 1 * D$. To create the conditional distributions, we only have matrix vector products. Which is of complexity $O(d^2)$ and isolates the cubic complexity issues to only the single matrix inversion required for the conputing of the conditional distributions and to the generation of the batch samples.
+\subsection{Sampling from an MVN}
 
-We can even remove these $O(d^3)$ operations by making the following changes, store the samples generated by the conditional distributions. When we add a new point, update the likelihood samples by selecting one of these at random for each conditional distribution. We can update the matrix inverse of the batch using a rank 1 update on the previous inverse.
 
-Importantly this leaves us with only $O(d^2)$ related to the pool size terms as our acquisition continous to grow in size.
+During the creation and sampling of the Multivariate distributions we are required to compute several quantities.
+
+We generate samples from MVNs by generating samples from the identity mvn, and then transforming these samples.
+
+\begin{algorithm}[H]
+    \SetAlgoLined
+    \SetKwFunction{CreateSamples}{CreateSamples}
+    \CreateSamples{$\mu, \Sigma$}{
+    \KwResult{Sample from $ N \left(\mu, \Sigma \right)$ }
+    $n = len(\mu)$\;
+    $v = array[n]$\;
+    $i = 0$\;
+    \While{$i < n$}{
+        $v[i] = mvnsasmple()$\;
+        $i++$\;
+    }
+    $L = cholesky(\Sigma)$\;
+    \KwRet $\mu + L v $\;
+    }
+    \caption{Sampling from a Multivariate Gaussian}
+\end{algorithm}
+
+To sample from a distribuiton of size $n$, if the cholesky distribution is already computed this requires $O(n^2)$ operations. If it is not it requires $O(n^3)$. This encourages us to attempt to minimise the number of distint times where we must compute the cholesky distribuiton.
+
+
+\subsection{Sampling over our candidate batchs}
+
+Computing samples for each possible candidate batch at each aquisition naively would lead to a complexity at each stage of $O\left(n k (d \times c)^3 \right)$ for sampling, where $k$ is the number of samples, $c$ is the number of categories, $n$ is the number of points in the pool and $d$ is the size of the current candiate batch.
+
+If we cache the cholesky distributions we can reduce the complexity to $O(n (d \times c)^3  + n k (d \times c)^2)$.
+
+\begin{algorithm}[H]
+    \SetAlgoLined
+    \SetKwFunction{CreatePoolSamples}{CreatePoolSamples}
+    \CreatePoolSamples{$\mu, \Sigma$}{
+    \KwResult{$K$ samples from each of the $N$ candiate batches}
+    $v = array[N][K][D][C]$\;
+    $i = 0$\;
+    \While{$i < N$}{
+        $j = 0$\;
+        \While{$j < K$}{
+            $v[i][j] = CreateSamples(\mu_{i}, \Sigma_{i})$\;
+            $j++$\;
+        }
+        $i++$\;
+    }
+    \Return{$v$}\;
+    }
+     \caption{Sampling from all possible batches}
+\end{algorithm}
+
+This level of complexity is unacceptable, however we can take advantage of the structure of our model to improve the efficency.
+
+As the Gaussian Process Model we are using is an \textit{independent multitask model}. This means that our covariance matrix is a block diagonal. We can take advantage of this to instead of working with covariance matrices of size $ cd \times cd $, we can work with a batch of matrices of size $c \times d \times d$ in our computaion.
+
+
+This reduces the complexity of the sampling to $O(n c (d)^3  + n k c (d)^2)$.
+
+\subsection{Conditional Distributions}
+
+We can reduce the amount of computation required by sharing computaion between datapoints.
+
+We can do this as follows first by sampling from the current batch, then sampling from the conditional distribuiton of each of the datapoints. The size of the current batch will increase as our aquisitions progress, the size of the consitional distribuitons will not.
+
+
+\begin{algorithm}[H]
+    \SetAlgoLined
+    \SetKwFunction{CreatePoolSamplesEfficent}{CreatePoolSamplesEfficent}
+    \CreatePoolSamplesEfficent{$\mu, \Sigma, \mu_{batch}, \Sigma_{batch}$}{
+    \KwResult{$K$ samples from each of the $N$ candiate batches}
+    $v = array[N][K][D][C]$\;
+    $samples = array[K][D][C]$\;
+    $a = 0$\;
+    \While{$a < K$}{
+        $samples[a] = CreateSamples(\mu_{batch}, \Sigma_{batch})$\;
+        $a++$\;
+    }
+    $i = 0$\;
+    \While{$i < N$}{
+        $j = 0$\;
+        \While{$j < K$}{
+            $\mu_{cond dist}, \Sigma_{cond dist} = CreateConditional(\mu_i, \Sigma_i, samples[j])$\;
+            $v[i][j] = CreateSamples(\mu_{cond dist}, \Sigma_{cond dist})$\;
+            $j++$\;
+        }
+        $i++$\;
+    }
+    \Return{$v$}\;
+    }
+     \caption{Sampling from all possible batches}
+\end{algorithm}
+
+$CreateConditional$ will require a $O(1)$ matrix vector products each with a complexity of $O(cd^2)$, and we will require the matrix inverse of the current batch covariance matrix. This will be the same over all function calls so we don't need to recompute this value.
+
+The complexity of this algorithm is $O\left(cd^3 + kcd^2 + nkcd^2 \right)$.
+
+The improvement here is to disconnnect the size of the poolset from the cubic $d^3$ term.
+
+The single cubic term can also be removed by performing a rank-1 update on the inverse of the previous batch. This can be done as follows.
+
+[Todo rank 1 update]
+
+
+This method gives us a complexity of  $O\left(nkcd^2 \right)$ for the entire sampling.
+
+
+We can once again reduce the amount of computaion required to take $K$ samples from each candidate by taking $S = K // M$ samples from the batch and taking $M$ samples from the conditional distribuitons.
+
+
+If we do this our complexity will become $O\left(scd^2 + nscd^2 + nsmc\right)$.
+
+\subsection{Creation of GP Outputs required}
+
+To be able to compute the samples as we have above, at each stage of the aquisition we require the covariance of each point in the candidate batch and the pool points. To compute this at each batch batch directly we end up requring $O(ncd^3)$ computation to evaluate the covariance matrices. However there is clearly wasted computation as all of the candidate batches will have an identical submatrix of size $d \times d$.
+
+The approach taken in this project is as follows. We at each stage compute the GP output of the most recently aquired datapoint with each of the datapoints in the pool. The complexity of this operation is $O(nc)$, as we are only computing covariances between pairs of points.
+
+We can then cache these computaions as the aquisitions progress, we can compute all of the possible rank-1 updates to the current batch in time $O(ncd)$, from these stored values. This once again eliminates the cubic term and replaces it with a linear one.
+
+
+Both the conditional distribuitons and the rank 1 updates are lazily generated to reduce the memory usage of the program, in addition to the computations are dynamically chunked to enable them to fit in memory and to be able to execute with limited RAM. This is essential to obtain good performance using CUDA operations on a GPU, as the amount of VRAM available limits the amount of parallel computaion one can take advantage of.
+
+\subsection{Entropy}
+
 
 
 \section{Replication}
