@@ -26,7 +26,6 @@ def create_training_function(path):
         num_aquisitions = config["num_aquisitions"]
         n_inducing_points = config["n_inducing_points"]
 
-
         # aquisition
         args = Namespace(
             data_path=path,
@@ -74,8 +73,8 @@ if __name__ == "__main__":
             "coeff": 9,
             "batch_size": 64,
             "starting_size": 2,
-            "num_aquisitions": 50,
-            "var_opt": 0.001,
+            "num_aquisitions": 30,
+            "var_opt": 0.1,
             "n_inducing_points": 10,
         })
     print(analysis)
