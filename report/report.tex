@@ -6,6 +6,7 @@
 
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[section]
+\newtheorem{proof}{Proof}[section]
 
 \newtheorem{theorem}{Theorem}
 
@@ -280,7 +281,7 @@ Minimising this objective minimises the KL Divergence between the true output di
 
 To use Gaussian Processes for classification we have several issues to overcome.
 
-The output of a Gaussian Process is a MVN, this is a continous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
+The output of a Gaussian Process is a Multivariate Normal, this is a continous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
 
 We can in theory use any link function to convert a sample from our MVN in $R^n$ to a sample over the simplex, different link functions have different properties computationally and statistically.
 
@@ -296,19 +297,54 @@ The logit is the standard link function for the vast majority of GPC use cases. 
 $$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
 \subsubsection{Probit}
 
+The probit is a different link function which is normally defined for the binary classification case as the inverse of the CDF of a Gaussian. We can generalise this link function as follows.
+
+$$p\left(y = k | f\right) = \mathbf{1}_{argmax_i(f_i) = k}$$
+
+
+The probit function is easier to work with analitically, and great use of this is made in the binary classification case []. However it is clear from the defintions that a single sample draw from a GPC using a probit will not give an accurate assement of the confidence of the model. The computaion of the marginalisation of this objective over $f$ is investigated in \hyperref[sec:Integration]{later}.
 
 \subsection{Minimising entropy over functions}
 
 When using a softmax link function
 
 
-\section{vDUQ / DUE}
+\section{Training}
+
+Using a straightforward Gaussian Process with no hyper parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribuiton at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribuiton so our objective should take this into account.
+
+
+\subsection{KL Divergence}
+
+\begin{definition}[KL Divergence (Entropy)]
+    For 2 discrete probability distributions $P, Q$ defined on the same probability space $\aleph$
+\end{definition}
+
+\subsection{ELBO}
+
+It is often quite difficult to compute the \textbf{KL Divergence}, as often we don't have direct access to one of the distribuitons which we are attempting to calculate it with.
+
+The Evidence Lower Bound is a tractable objective which it is much easier for us to compute than the KL divergence and maximising this objective is equivalent to maximising the KL Divergence.
+
+\begin{definition}[ELBO]
+    
+\end{definition}
+
+
+\begin{proof}[Maximisng the ELBO will minimise the KL Divergence]
+    \begin{align*}
+        D_{KL} \left( Q || P \left(L | X\right) \right) &= 
+    \end{align*}
+\end{proof}
+
+
+\chapter{vDUQ / DUE}
 
 vDUQ / DUE \cite{vanamersfoort2020uncertainty} is a recent model which deals with some of the issues with using deep kernel learning with GPCs. DUE uses an inducing point GP to enable it to scale to large amounts of data.
 
 This model is designed to have good uncertainty properties by enforcing sensitivity and bounding the amount by which any 2 inputs can diverge in the feature space. These properties are maintained by the additon of residual connections to the model and by performing spectral normalisation to bound the lipshitz constant of the layers in the feature extractor.
 
-\subsection{Spectral Normalisation}
+\section{Spectral Normalisation}
 
 \begin{definition}[Lipshitz Constant]
     Given a function $f: X \rightarrow Y$, where $(X, d_x)$ and $(Y, d_y)$ are metric spaces. A lipshitz constant of the function $f$ is a value of $k$ such that.
@@ -342,7 +378,7 @@ It turns out that the majority of activation functions which we use in our neura
 
 
 
-\subsubsection{Power Method}
+\subsection{Power Method}
 
 Directly computing the largest singular value via computing the Singular Value Decompoisition of each linear transform is quite computationally prohibative, however there is a way in which we can approximate this value quite cheaply and accurately.
 
@@ -380,9 +416,48 @@ To bound the lipschitz constant of a linear layer to a values, call this value $
 To maintain this during training we are required to compute this value during every forward pass. Due to the fact that given a sufficently small learning rate we expect that the change to linear layer will be small, if we use the previous forwards passes final vector(s) as our starting vector instead of randomly restarting we can greatly speed up the convergence of the recurrence relation. We find that empircally we can actually get very good performance with a single iteration of this method at each stage.
 
 
-\subsection{Residual Connections}
+\section{Residual Connections}
 
 Residual connections were introduced in by [cite]. One of their origianl 
+
+
+\section{Modifications}
+
+While DUE is an extremely powerful model, some modifications were required to help the performance and stability of the model when working with small amounts of data. 
+
+\subsection{Natural Gradient Descent}
+
+Natural Gradient Descent is an optimization method which is designed for when we are attempting to optimise some objective of a distribution. The use of this method greatly improved the rate of convergence and overall performance.
+
+
+\begin{definition}[Gradient Descent]
+    Gradient Descent is an iterative optimization algorithm where we modify the paramter in the direction which has the steepest gradient with respect to our objective function.
+    $$p_{k+1} = p_{k} -  \alpha \nabla L(p_k)$$
+\end{definition}
+
+With a well chosen hyperparameter $\alpha$ and a convex loss function $L$ we can obtain convergence guarentees. [cite]. Many machine learning problems which we use gradient descent for do not obey the constraints which we require for guarentees of convergence [], empircally however the performance achieved by gradient descent and its derivates is impressive even these problems in many cases.
+
+Instead of applying the gradient descent algorithm to the paramaters in the eucliedean geometry of the paramater space, instead we can use the geometry of the likelihood space paramaterised by our paramaters to enables superior optimization.
+
+To create this method we will be attempting to minimise the KL Divergence between the distribuiton which we are paramaterising, and some objective distribuiton. We for example could be using the ELBO as defined previously in [].
+
+
+We can take the taylor expansion of the objective below.
+
+$$D_{KL} \left(p_\theta || p_{\theta+ \epsilon} \right) = $$
+
+
+
+
+\begin{definition}[Natural Gradient Descent]
+    
+\end{definition}
+
+
+
+
+
+
 
 
 
@@ -390,6 +465,8 @@ Residual connections were introduced in by [cite]. One of their origianl
 \label{Chap5}
 
 \section{Investigation of Exact Computation}
+
+\label{sec:Integration}
 
 If we use Probit as our link function the joint entropy can be computed exactly (unlike in the general case), however the complexity of this exact computation is very high.
 
