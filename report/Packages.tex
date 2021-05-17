@@ -20,8 +20,6 @@
 \usepackage{esvect}
 \usepackage{parskip}
 \usepackage{placeins}
-\usepackage{subfigure}
-% \usepackage{subcaption}
 \usepackage{array}
 \usepackage{delarray}
 \usepackage{stmaryrd}
@@ -35,6 +33,8 @@
 \usepackage{smartdiagram}
 \usepackage{amsfonts}
 \usepackage{graphicx}
+\usepackage{thmtools}
+\usepackage[ruled,vlined]{algorithm2e}
 \graphicspath{ {./images/} }
 
 \usesmartdiagramlibrary{additions}
@@ -246,3 +246,5 @@ intersections
 	}
 \renewcommand{\listfigurename}{List of Figures}
 \renewcommand{\listtablename}{List of Tables}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}

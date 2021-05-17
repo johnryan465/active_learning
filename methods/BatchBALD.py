@@ -82,6 +82,7 @@ class BatchBALD(UncertainMethod):
         else:
             num_samples = self.params.samples.batch_samples
             samples = torch.zeros(N, num_samples, num_cat)
+            model_wrapper.model.eval()
             @toma.execute.chunked(inputs, N)
             def make_samples(chunk: TensorType, start: int, end: int):
                 if torch.cuda.is_available():
