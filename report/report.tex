@@ -7,13 +7,12 @@
 \theoremstyle{definition}
 \newtheorem{definition}{Definition}[section]
 \newtheorem{proof}{Proof}[section]
+\newtheorem{theorem}{Theorem}[section]
 
-\newtheorem{theorem}{Theorem}
-
-\hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = blue, urlcolor=blue, filecolor=green, linkcolor=red, plainpages=false}
+\hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = purple, urlcolor=blue, filecolor=green, linkcolor=blue, plainpages=false}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \pagestyle{fancy}
-\rhead{Christ Church}
+\rhead{Computer Science}
 \chead{}
 \lhead{University of Oxford}
 \lfoot{\date{}}
@@ -31,7 +30,7 @@
 
 \title{Active Learning}
 \author{\\ \Large{John Ryan}
-\\ Christ Church
+\\ Computer Science
 \\
 \\
 \\
@@ -66,6 +65,8 @@ Active Learning is an use
 \thispagestyle{plain}
 \listoffigures
 \listoftables
+\listofalgocfs
+\listoftheorems
 
 \chapter*{List of Abbreviations}
 \begin{abbreviations}
@@ -99,7 +100,7 @@ The aims of this report is to
 The remainder of this report is organised as follows:
 \begin{itemize}
     \item[] \textbf{Chapter} \hyperref[Chap2]{\textbf{2}} --- Defines active learning, and introduces the different active learning methods from the literature.
-    \item[] \textbf{Chapter} \hyperref[Chap4]{\textbf{4}} --- introduces Gaussian Process based models
+    \item[] \textbf{Chapter} \hyperref[Gaussian Processes]{\textbf{4}} --- introduces Gaussian Process based models
     \item[] \textbf{Chapter} \hyperref[Chap5]{\textbf{5}} --- Combines BatchBALD and GPC
 \end{itemize}
 >
@@ -181,7 +182,7 @@ We can also simply use the joint entropy alone as the active learning objective
 
 $$s_{Entropy} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n)$$
 
-\begin{theorem}[$s_{Entropy}$ is submodular]
+\begin{proof}[$s_{Entropy}$ is submodular]
     Proof.
     Let $A_x,B_x \subseteq D_{pool}, C_x = A_x \cap B_x$
     
@@ -196,7 +197,7 @@ $$s_{Entropy} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n)$$
         &= s_{Entropy} (A_x \cup B_x) + s_{Entropy} (A_x \cap B_x)
     \end{align*}
 
-\end{theorem}
+\end{proof}
 
 The fact that this objective is submodular enables us to use the same greedy $1 - \frac{1}{\epsilon}$ approximation algorithm as used above.
 
@@ -209,11 +210,23 @@ If we assume that the samples in the poolset are samples from the true distribui
 
 In the next chapter we will discuss some reasons while this may be preferable when using a Gaussian Process Classifer.
 
-\chapter{Gaussian Process Based Models}
-\label{Chap4}
+\chapter{Bayesian Machine Learning Models}
 
+Here we will detail some Bayesian Machine Learning models, in particular focusing on 2 types.
+
+\begin{itemize}
+    \item \hyperref[sec:GaussianProcesses]{Gaussian Processes}
+    \item \hyperref[sec:BNNs]{Bayesian Neural Networks}
+\end{itemize}
+
+\section{Bayesian Neural Networks}
+\label{sec:BNNs}
+
+
+Bayesian Neural Networks
 
 \section{Gaussian Processes}
+\label{sec:GaussianProcesses}
 
 
 \begin{definition}[Gaussian Process]
@@ -295,6 +308,11 @@ The logit is the standard link function for the vast majority of GPC use cases. 
 
 
 $$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
+
+
+The marginal distribuiton using this link function does not have.
+
+
 \subsubsection{Probit}
 
 The probit is a different link function which is normally defined for the binary classification case as the inverse of the CDF of a Gaussian. We can generalise this link function as follows.
@@ -302,7 +320,43 @@ The probit is a different link function which is normally defined for the binary
 $$p\left(y = k | f\right) = \mathbf{1}_{argmax_i(f_i) = k}$$
 
 
-The probit function is easier to work with analitically, and great use of this is made in the binary classification case []. However it is clear from the defintions that a single sample draw from a GPC using a probit will not give an accurate assement of the confidence of the model. The computaion of the marginalisation of this objective over $f$ is investigated in \hyperref[sec:Integration]{later}.
+The probit function is easier to work with anallytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the defintions that a single sample draw from a GPC using a probit will not give an accurate assement of the confidence of the model.
+
+
+\label{sec:Integration}
+
+If we use probit as our link function, we can take advantage of the fact that it is possible to exactly compute the marginal to get exact results.
+
+If we can compute $p(y=k)$, we can also compute the joint entropy exactly (unlike in the case with an arbitary link function), however the complexity of this exact computation is very high.
+
+
+
+To perform exact inference of a Probit GPC, we must perform integration of a Gaussian R.V. This is a well studied problem in the literature. [cite].
+
+
+We wish to find the probability that a certain element of a MVN is the largest element. This corresponds to integrating the Gaussian over the subset of the space where this coordinate is the largest.
+
+$$P(X_C > X_1 \land \ldots \land X_C > X_n) = \int_{x_c \in \{ -\infty, \infty \} } \ldots \int_{x_n \in \{ -\infty , x_c \}} p(x) dx$$
+
+This can be interpreted as integrating on one side of several hyperplanes.
+
+These planes are of the form $x_c = x_i$
+
+We can perform a linear transformation on this space to project it to a subspace of dimension $n-1$, and align each of the hyperplaces with an axis.
+
+$Z = TX$.
+
+$Z \sim N(T \mu, T \Sigma T^T)$
+
+
+If we are doing this over multiple datapoints, we can transform each of the subsets of variables via the method above.
+
+After performing this transformation we have a standard orthant integral which we can compute. Algorithms exist for computing this exactly in $O(p^2 2^p)$ using recursive integration and subspace projection. \cite{orthant}
+
+
+However the number of dimensions which we are performing this integration over is $O(dc)$. With the exponential complexity in the number of dimensions this is an infeasible method.
+
+
 
 \subsection{Minimising entropy over functions}
 
@@ -501,7 +555,7 @@ Where $F$ is the defintion of the Fisher information matrix.
 
 
 \begin{definition}[Fisher Information Matrix]
-    
+    $$\mathcal{I} \left( \theta\right)_{ij} = - E \left[ \frac{\partial^2}{\partial \theta_j  \partial \theta_i }  \log p \left(x  \right)\big| \theta \right]$$
 \end{definition}
 
 Returning to our objective from earlier.
@@ -538,42 +592,18 @@ We have now arrived at the update equations which we can use as our optimisation
 
 
 
-
-
-
-\chapter{Combination}
+\chapter{Investigations}
 \label{Chap5}
 
-\section{Investigation of Exact Computation}
-
-\label{sec:Integration}
-
-If we use Probit as our link function the joint entropy can be computed exactly (unlike in the general case), however the complexity of this exact computation is very high.
-
-To perform exact inference of the probit of a Gaussian Classifier we must perform integration of a Gaussian.
-
-We wish to find the probability that a certain element of a MVN is the largest element. This corresponds to integrating the Gaussian over the subset of the space where this coordinate is the largest.
-
-$$P(X_C > X_1 \land \ldots \land X_C > X_n) = \int_{x_c \in \{ -\infty, \infty \} } \ldots \int_{x_n \in \{ -\infty , x_c \}} p(x) dx$$
-
-This can be interpreted as integrating on one side of several hyperplanes.
-
-These planes are of the form $x_c = x_i$
-
-With the linear transformation of $T = I - e_c 1^T$ we get to transform this integral.
-
-$Z = TX$.
-
-$Z \sim N(T \mu, T \Sigma T^T)$
-
-We drop the original index (as we are marginalising over it) and it is degenerate. We could alternatively make T a projection into a c-1 dimensional subspace.
-
-If we are doing this over multiple datapoints, we can transform each of the subsets of variables via the method above.
-
-After performing this transformation we have a standard orthant integral which we can compute. Algorithms exist for computing this exactly in $O(p^2 2^p)$ using recursive integration and subspace projection. \cite{orthant}
 
 
-However the number of dimensions which we are performing this integration over is (number of variables) * (number of categories - 1). With the exponential complexity this an infeasible method of computation.
+\section{Comparision of BALD and Entropy for GPC}
+
+The motivation for the BALD objective in the original paper where it was introduced \cite{houlsby2011bayesian}, is to select the point which maximally reduce the uncertainty over the hypothesis space.
+
+
+For datapoints which are far from the datapoints which we have seen, the covariance decreases rapidly. 
+
 
 
 
@@ -666,10 +696,12 @@ We can also take advantage of the fact that the output variables are conditional
     \item This is a sample from $p(x)$
 \end{itemize}
 
+\chapter{Computation}
+\label{sec:Computation}
 
 
 \chapter{Implementaion}
-\label{Chap6}
+\label{sec:Implementaion}
 
 All of the experiments referenced here can easily be replicated using the codebase for this project which is linked and details in the appendices.
 
@@ -679,12 +711,12 @@ The code for this project is written in Python and makes significant use of the 
 
 
 
-\section{Complexity}
+\section{Computational Complexity}
 
 In this project we also endevour to minimise the computationally complexity of the operations which we need to perform to compute the quantities involved to make this project of practical use.
 
 
-\subsection{Sampling from an MVN}
+\subsection{Sampling from an Multivariate Distribution}
 
 
 During the creation and sampling of the Multivariate distributions we are required to compute several quantities.
@@ -785,9 +817,29 @@ The complexity of this algorithm is $O\left(cd^3 + kcd^2 + nkcd^2 \right)$.
 
 The improvement here is to disconnnect the size of the poolset from the cubic $d^3$ term.
 
-The single cubic term can also be removed by performing a rank-1 update on the inverse of the previous batch. This can be done as follows.
+The single cubic term can also be removed by performing a rank-1 update on the inverse of the previous batch. This can be performed by using a block matrix inversion identity.
 
-[Todo rank 1 update]
+$$\begin{bmatrix}
+    A & B \\
+    C & D \\
+\end{bmatrix}^{-1} = \begin{bmatrix}
+    A^{-1} + A^{-1} B \left(D - C A^{-1} B \right)^{-1} C A^{-1} & -A^{-1} B \left( D - C A^{-1}B\right)^{-1} \\
+    - \left(D - CA^{-1}B \right)^{-1} C A^{-1} & \left(D - C A^{-1} B\right)^{-1}
+\end{bmatrix} $$ 
+
+Substitutioning in our rank 1 format.
+
+\begin{align*}
+    \begin{bmatrix}
+        A & u \\
+        u^T & \alpha \\
+    \end{bmatrix}^{-1} &= \begin{bmatrix}
+        A^{-1} + A^{-1} u \left(\alpha - u^T A^{-1} u \right)^{-1} u^T  A^{-1} & -A^{-1} u \left( \alpha - u^T A^{-1}u\right)^{-1} \\
+        - \left(\alpha - u^T A^{-1}u \right)^{-1} u^T A^{-1} & \left(\alpha - u^T A^{-1} u\right)^{-1}
+    \end{bmatrix}
+\end{align*}
+
+If we compute the upper quadrant of the result in such an order that we compute matrix vector products until we are left with a outer product, this will give us a $O(d^2)$ matrix inverse update.
 
 
 This method gives us a complexity of  $O\left(nkcd^2 \right)$ for the entire sampling.
@@ -851,29 +903,53 @@ The random method should be impacted by how unbalanced the dataset is particuall
 
 \subsubsection{MNIST (DNN vs BNN vs DUE)}
 
-\includegraphics{todo.png}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=1]{todo.png}
+\caption{Random MNIST}
+\end{figure}
 
 \subsubsection{Unbalanced MNIST (DNN vs BNN vs DUE)}
 
-\includegraphics{todo.png}
-
+\begin{figure}[H]
+\centering
+\includegraphics[scale=1]{todo.png}
+\caption{Random Unbalanced MNIST}
+\end{figure}
 \subsubsection{Repeated MNIST (DNN vs BNN vs DUE)}
 
-\includegraphics{todo.png}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=1]{todo.png}
+\caption{Random Repeated MNIST}
+\end{figure}
 
 \subsection{BALD}
 
 \subsubsection{MNIST (BNN vs DUE)}
 
-\includegraphics{todo.png}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=1]{todo.png}
+\caption{BALD MNIST}
+\end{figure}
 
 \subsubsection{Unbalanced MNIST (BNN vs DUE)}
 
-\includegraphics{todo.png}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=1]{todo.png}
+\caption{BALD Unbalanced MNIST}
+\end{figure}
 
 \subsubsection{Repeated MNIST (BNN vs DUE)}
 
-\includegraphics{todo.png}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=1]{todo.png}
+\caption{BALD Repeated MNIST}
+\end{figure}
+    
 
 \subsection{BatchBALD}
 
