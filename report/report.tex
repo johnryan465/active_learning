@@ -122,33 +122,33 @@ Our machine learning models which we use to model a problem constrain the set of
 - There are hard constraints (eg clipping the output of the model), which even given an unlimited amount of data our model can not possibly "learn around"
 - There are softer constraints (priors over weights in a layer), which our model should be able to learn correctly given sufficient new data even if our prior is poor*.
 
-This paramaterisaton of our models is very important, this is an assumption we are making about our problem.
+This parameterization of our models is very important, this is an assumption we are making about our problem.
 
 An important observation is that the dataset we are using for training is (unless performing very simple active learning approaches eg random acquisition) not going to be the same as the true dataset which we are working with. 
 
 This violates a very common assumption that we assume for convergence in many ML methods, and is something worth keeping in mind. This statistical bias is looked at in the following paper \cite{farquhar2021statistical}.
 
-When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over paramatised to begin with become even more so, this can lead to training issues.
+When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over-parametrized to begin with become even more so, this can lead to training issues.
 
 \section{Random}
 
-The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random aquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparision between unweighted MNIST and weighted MNIST with random aquisition.
+The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random aquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparison between unweighted MNIST and weighted MNIST with random aquisition.
 
 \includegraphics{todo}
 
 
 \section{BALD}
-Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is based on selecting datapoints which maximise the mutual information between the datapoints class output and the models parameters. The paper details how we can instead of computing this in the paramater space which would be computationally prohibative in many cases, we can compute the same objective in the output space.
+Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is based on selecting datapoints which maximize the mutual information between the datapoints class output and the models parameters. The paper details how we can instead of computing this in the parameter space which would be computationally prohibitive in many cases, we can compute the same objective in the output space.
 
 $${\argmax}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
 
 $${\argmax}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
 
 
-An issue which we run into when using BALD in the case where we want to select multiple datapoints to aquire at the same time is the fact that selecting the $n$ points with the greatest individual information content will not necessarily give you the $n$ points which jointly have the greatest information content. This can be made very obvious by considering the case when there is duplicates in the dataset. If the duplicated point is in the top n points as decieded by the BALD score, having both of the points in your aquired batch will give you no more information than just having one of them, you would be better served by selecting any other point instead of these points.
+An issue which we run into when using BALD in the case where we want to select multiple datapoints to acquire at the same time is the fact that selecting the $n$ points with the greatest individual information content will not necessarily give you the $n$ points which jointly have the greatest information content. This can be made very obvious by considering the case when there is duplicates in the dataset. If the duplicated point is in the top n points as decieded by the BALD score, having both of the points in your aquired batch will give you no more information than just having one of them, you would be better served by selecting any other point instead of these points.
 
 \section{BatchBALD}
-BatchBALD \cite{kirsch2019batchbald}, is an extension of BALD designed especially to deal with the issues which we run into when using BALD to aquire batches of points.
+BatchBALD \cite{kirsch2019batchbald}, is an extension of BALD designed especially to deal with the issues which we run into when using BALD to acquire batches of points.
 
 To do this the objective function is modified, the original BALD objective is retained by setting $n = 1$ .
 
@@ -166,7 +166,7 @@ The BatchBALD score function is as follows.
     $$f(A) + f(B) \geq f\left( A \cup B \right) +  f\left(A \cap B \right) $$
 \end{definition}
 
-The authors of the paper prove that the objective function that they specify is \textit{submodular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimium batch.
+The authors of the paper prove that the objective function that they specify is \textit{submodular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimum batch.
 
 
 
@@ -237,23 +237,23 @@ Bayesian Neural Networks
 We can completely specify a Gaussian Process over a space $\chi$ by giving a mean function $m(\cdot), m : \chi \rightarrow R$, and covariance (kernel) function $k(\cdot, \cdot), k: \chi \times \chi \rightarrow R$.
 
 
-For $k$ to be a valid covariance funciton we need for any evaluation of the covariance matrix to be a symetric positive definite matrix (as all covariance matrices of random variables must be S.P.D).
+For $k$ to be a valid covariance function we need for any evaluation of the covariance matrix to be a symmetric positive definite matrix (as all covariance matrices of random variables must be S.P.D).
 
 \begin{definition}[Positive Definte Matrix]
-    A positive definite matrix is a matrix which has positive eiginvalues.
+    A positive definite matrix is a matrix which has positive eigenvalues.
 \end{definition}
 
 \subsection{As distributions over functions}
 
-We can view a Gaussian Processes as a distribution over functions. The space of functions which we can represent by a particular Gaussian Process is paramaterised by the kernel function which we are using.
+We can view a Gaussian Processes as a distribution over functions. The space of functions which we can represent by a particular Gaussian Process is parameterized by the kernel function which we are using.
 
-We can understand this by investigating the interpretation of kernels as Repreducing Kernel Hilbert Spaces.
-
-
+We can understand this by investigating the interpretation of kernels as Reproducing Kernel Hilbert Spaces.
 
 
 
-Gaussian Processes have a number of useful properties such as being closed under conditioning and marginalisation.
+
+
+Gaussian Processes have a number of useful properties such as being closed under conditioning and marginalization.
 
 For the covariance function to define a valid MVN for all inputs the covariance function must be positive definite.
 
@@ -269,7 +269,7 @@ This can be done as follows:
 
 \subsection{Scaling to large data}
 
-Unlike other methods we use often in machine learning, such as neural networks which have linear complexity in the size of the dataset we have superlinear complexity.
+Unlike other methods we use often in machine learning, such as neural networks which have linear complexity in the size of the dataset we have greater than linear complexity.
 
 \subsubsection{Inducing Points}
 
@@ -327,7 +327,7 @@ The probit function is easier to work with anallytically, and great use of this 
 
 If we use probit as our link function, we can take advantage of the fact that it is possible to exactly compute the marginal to get exact results.
 
-If we can compute $p(y=k)$, we can also compute the joint entropy exactly (unlike in the case with an arbitary link function), however the complexity of this exact computation is very high.
+If we can compute $p(y=k)$, we can also compute the joint entropy exactly (unlike in the case with an arbitrary link function), however the complexity of this exact computation is very high.
 
 
 
@@ -342,7 +342,7 @@ This can be interpreted as integrating on one side of several hyperplanes.
 
 These planes are of the form $x_c = x_i$
 
-We can perform a linear transformation on this space to project it to a subspace of dimension $n-1$, and align each of the hyperplaces with an axis.
+We can perform a linear transformation on this space to project it to a subspace of dimension $n-1$, and align each of the hyperplanes with an axis.
 
 $Z = TX$.
 
@@ -358,19 +358,19 @@ However the number of dimensions which we are performing this integration over i
 
 
 
-\subsection{Minimising entropy over functions}
+\subsection{Minimizing entropy over functions}
 
 When using a softmax link function
 
 
 \section{Training}
 
-Using a straightforward Gaussian Process with no hyper parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribuiton at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribuiton so our objective should take this into account.
+Using a straightforward Gaussian Process with no hyper parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribution at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribuiton so our objective should take this into account.
 
 
 \subsection{KL Divergence}
 
-The KL Divergence is a measure of how different 2 probability distribuitons are, (it is not symmetric so it is not strictly a distance functions). It has many useful properties and unlike shannon entropy it has a sensible and natural extension to continous random variables.
+The KL Divergence is a measure of how different 2 probability distributions are, (it is not symmetric so it is not strictly a distance functions). It has many useful properties and unlike shannon entropy it has a sensible and natural extension to continous random variables.
 
 \begin{definition}[KL Divergence]
     For 2 probability distributions $P, Q$ defined on the same probability space $\chi$
@@ -379,9 +379,9 @@ The KL Divergence is a measure of how different 2 probability distribuitons are,
 
 
 
-It is often quite difficult to compute the \textbf{KL Divergence}, as often we don't have direct access to one of the distribuitons which we are attempting to calculate it with.
+It is often quite difficult to compute the \textbf{KL Divergence}, as often we don't have direct access to one of the distributions which we are attempting to calculate it with.
 
-The Evidence Lower Bound is a tractable objective which it is much easier for us to compute than the KL divergence and maximising this objective is equivalent to maximising the KL Divergence.
+The Evidence Lower Bound is a tractable objective which it is much easier for us to compute than the KL divergence and maximizing this objective is equivalent to maximizing the KL Divergence.
 
 \begin{definition}[ELBO]
     
@@ -401,7 +401,7 @@ vDUQ / DUE \cite{vanamersfoort2020uncertainty} is a recent model which deals wit
 
 This model is designed to have good uncertainty properties by enforcing sensitivity and bounding the amount by which any 2 inputs can diverge in the feature space. These properties are maintained by the additon of residual connections to the model and by performing spectral normalisation to bound the lipshitz constant of the layers in the feature extractor.
 
-\section{Spectral Normalisation}
+\section{Spectral Normalization}
 
 \begin{definition}[Lipshitz Constant]
     Given a function $f: X \rightarrow Y$, where $(X, d_x)$ and $(Y, d_y)$ are metric spaces. A lipshitz constant of the function $f$ is a value of $k$ such that.
@@ -409,13 +409,13 @@ This model is designed to have good uncertainty properties by enforcing sensitiv
     $$\frac{d_y(f(x_1), f(x_2))}{d_x(x_1, x_2)} \leq K, \forall x_1, x_2 \in X $$
 \end{definition}
 
-Some times we refer to \textit{the lipshitz constant} of a function, this is normally taken to mean the smallest value $k$ which is a lipshitz constant.
+Some times we refer to \textit{the lipshitz constant} of a function, this is normally taken to mean the smallest value $k$ which is a lipchitz constant.
 
 In our particular problem we are dealing with spaces in $\mathbf{R}^n$. The metric on this space which we will be using is the $L_2$ norm, (also known as the euclidean distance).
 
-The lipschitz constant is a measure of how far apart 2 outputs to the function can be in terms of their inputs.
+The lipchitz constant is a measure of how far apart 2 outputs to the function can be in terms of their inputs.
 
-In the case where $f: R^n \rightarrow R^m$ and $f$ is a linear transformation we get a familar result.
+In the case where $f: R^n \rightarrow R^m$ and $f$ is a linear transformation we get a familiar result.
 
 \begin{align*}
     \min_k  \forall x_1,x_2 \in X \frac{d_y(f(x_1), f(x_2))}{d_x(x_1, x_2)} \leq K &= \min_k \forall x_1,x_2 \in X \frac{ L_2(Ax_1 - Ax_2)  }{ L_2(x_1, x_2)} \leq K \\
@@ -425,19 +425,19 @@ In the case where $f: R^n \rightarrow R^m$ and $f$ is a linear transformation we
 
 After the substitution we obtain an expression which from linear algebra we know is the matrix norm of $A$ induced by the vector norm which we have chosen, in this case the $L_2$ norm. The induced matrix norm by the $L_2$ vector norm has the nice property that it is the \textit{largest singular value} of the matrix which is also the square root of the largest eigenvalue.
 
-For all of the linear layers in our model we now know how we can compute the respective lipschitz constants.
+For all of the linear layers in our model we now know how we can compute the respective lipchitz constants.
 
 \begin{theorem}[Lipschitz constant of function compositions]
     If $lip(f) = a$ and $lip(g) = b$, then $lip(f \circ g) \leq a * b$
 \end{theorem}
 
-It turns out that the majority of activation functions which we use in our neural networks have a lipschitz constant of $\leq 1$, eg relu. This enables us to compute an upper bound of the lipschitz constant of our model by computing the lipschitz constant of all of the indiviudal layers and taking the product of those constants.
+It turns out that the majority of activation functions which we use in our neural networks have a lipchitz constant of $\leq 1$, eg relu. This enables us to compute an upper bound of the lipschitz constant of our model by computing the lipschitz constant of all of the indiviudal layers and taking the product of those constants.
 
 
 
 \subsection{Power Method}
 
-Directly computing the largest singular value via computing the Singular Value Decompoisition of each linear transform is quite computationally prohibative, however there is a way in which we can approximate this value quite cheaply and accurately.
+Directly computing the largest singular value via computing the Singular Value Decomposition of each linear transform is quite computationally prohibitive, however there is a way in which we can approximate this value quite cheaply and accurately.
 
 The \textbf{power method} is defined by a recurrence relation.
 
@@ -452,30 +452,32 @@ This recurrence relation will converge if 2 conditions are met.
     \item $v_0$ has a non zero component in the direction of the largest eigenvalue
 \end{itemize}
 
-We compute the eigenvalue from the rayleigh quotent from our approximate maximum eigenvector. $\frac{v_k^T A v_k}{v_k ^ T v_k}$
+We compute the eigenvalue from the rayleigh quotient from our approximate maximum eigenvector. $\frac{v_k^T A v_k}{v_k ^ T v_k}$
 
-If we chose a starting vector $v_0$ with uniform probability over all possible directions the second condition will be fullfilled with a probability of $1$.
+If we chose a starting vector $v_0$ with uniform probability over all possible directions the second condition will be fulfilled with a probability of $1$.
 
 The convergence ratio of this algorithm is $\frac{|\lambda_1|}{|\lambda_2|}$, so the convergence rate depends on the size of the second largest eigenvalue also.
 
 
 To extend this to work with non square matrices we can either compute $A^TA$ or $AA^T$, use the power method to calculate its maximum eigenvalue and this is the spectral norm of $A$.
-There is another approach which enables us to bypass this computation by instead of maintaining just 1 eignevector, we maintain a left and a right domainant eigenvector
+There is another approach which enables us to bypass this computation by instead of maintaining just 1 eigenvector, we maintain a left and a right dominant eigenvector
 
 \begin{definition}[Power Method(for non square matrices)]
     $$v_{k+1} = \frac{A^Tu_k}{||A^Tu_k||}, u_{k+1} = \frac{Av_k}{||Av_k||} $$
 \end{definition}
 
-Then with these appoximate eigenvectors we can approximate the singular value with $u^T A v$
+Then with these approximate eigenvectors we can approximate the singular value with $u^T A v$
 
-To bound the lipschitz constant of a linear layer to a values, call this value $\sigma$. We can calculate the spectral norm $\alpha$, check if $\alpha > \sigma$. If this is true, we muliply the linear layer by $\frac{\sigma}{\alpha}$.
+To bound the lipchitz constant of a linear layer to a values, call this value $\sigma$. We can calculate the spectral norm $\alpha$, check if $\alpha > \sigma$. If this is true, we muliply the linear layer by $\frac{\sigma}{\alpha}$.
 
-To maintain this during training we are required to compute this value during every forward pass. Due to the fact that given a sufficently small learning rate we expect that the change to linear layer will be small, if we use the previous forwards passes final vector(s) as our starting vector instead of randomly restarting we can greatly speed up the convergence of the recurrence relation. We find that empircally we can actually get very good performance with a single iteration of this method at each stage.
+To maintain this during training we are required to compute this value during every forward pass. Due to the fact that given a sufficiently small learning rate we expect that the change to linear layer will be small, if we use the previous forwards passes final vector(s) as our starting vector instead of randomly restarting we can greatly speed up the convergence of the recurrence relation. We find that empircally we can actually get very good performance with a single iteration of this method at each stage.
 
 
 \section{Residual Connections}
 
-Residual connections were introduced in by [cite]. One of their origianl 
+Residual connections were introduced in by [cite]. The indention of these connections in deep learning is to minimize the vanishing gradient problem. This is an issue that when we have particualy
+
+$$H(x) = F(x) + x$$
 
 
 \section{Modifications}
@@ -488,13 +490,13 @@ Natural Gradient Descent is an optimization method which is designed for when we
 
 
 \begin{definition}[Gradient Descent]
-    Gradient Descent is an iterative optimization algorithm where we modify the paramter in the direction which has the steepest gradient with respect to our objective function.
+    Gradient Descent is an iterative optimization algorithm where we modify the parameter in the direction which has the steepest gradient with respect to our objective function.
     $$p_{k+1} = p_{k} -  \alpha \nabla L(p_k)$$
 \end{definition}
 
-With a well chosen hyperparameter $\alpha$ and a convex loss function $L$ we can obtain convergence guarentees. [cite]. Many machine learning problems which we use gradient descent for do not obey the constraints which we require for guarentees of convergence [], empircally however the performance achieved by gradient descent and its derivates is impressive even these problems in many cases.
+With a well chosen hyperparameter $\alpha$ and a convex loss function $L$ we can obtain convergence guarantees. [cite]. Many machine learning problems which we use gradient descent for do not obey the constraints which we require for guarentees of convergence [], empircally however the performance achieved by gradient descent and its derivates is impressive even these problems in many cases.
 
-Instead of applying the gradient descent algorithm to the paramaters in the eucliedean geometry of the paramater space, instead we can use the geometry of the likelihood space paramaterised by our chosen parameters to enable superior optimization. This makes the optimisation independent of the paramaterisaton of the distribuiton and only related to the distribuiton induced by the the parameters.
+Instead of applying the gradient descent algorithm to the parameters in the euclidean geometry of the parameter space, instead we can use the geometry of the likelihood space paramaterised by our chosen parameters to enable superior optimization. This makes the optimisation independent of the paramaterisaton of the distribuiton and only related to the distribuiton induced by the the parameters.
  
 To derive the update equations we will need to define some objectives and take some taylor expansions.
 
@@ -592,7 +594,7 @@ We have now arrived at the update equations which we can use as our optimisation
 
 
 
-\chapter{Investigations}
+\chapter{Active Learning with DUE}
 \label{Chap5}
 
 
@@ -608,6 +610,8 @@ For datapoints which are far from the datapoints which we have seen, the covaria
 
 
 \section{Sampling}
+
+The active learning score functions which we have specified
 
 Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which rely on sampling.
 
