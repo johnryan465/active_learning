@@ -55,6 +55,7 @@ class Driver:
         buf = io.BytesIO()
         plt.savefig(buf, format='jpeg')
         buf.seek(0)
+        plt.close()
         
         image = PIL.Image.open(buf)
         image = ToTensor()(image)

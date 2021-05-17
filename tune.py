@@ -75,7 +75,7 @@ if __name__ == "__main__":
             "starting_size": 2,
             "num_aquisitions": 30,
             "var_opt": 0.1,
-            "n_inducing_points": 10,
+            "n_inducing_points": 20,
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
