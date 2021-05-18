@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 import torch
 from batchbald_redux.active_learning import RandomFixedLengthSampler
+from torch.tensor import Tensor
 from torch.utils.data import Dataset, ConcatDataset, DataLoader, Subset, WeightedRandomSampler
 from torchvision.datasets.vision import VisionDataset
 from .dataset_params import DatasetParams
@@ -57,6 +58,11 @@ class ActiveLearningDataset(ABC):
     def get_indexes(self, idxs: Indexes) -> List[torch.Tensor]:
         pass
 
+    @abstractmethod
+    def get_config(self) -> DatasetParams:
+        pass
+
+
 
 # This is a simple wrapper which can be used to make pytorch datasets easily correspond to the interface above
 
@@ -67,6 +73,8 @@ class DatasetWrapper(ActiveLearningDataset):
                  test_dataset: VisionDataset, config: DatasetParams) -> None:
         super().__init__()
         self.bs = config.batch_size
+        self.original_dataset = train_dataset
+        self.config = config
 
         if config.smoke_test:
             self.trainset = Subset(train_dataset, list(range(0,500)))
@@ -76,6 +84,9 @@ class DatasetWrapper(ActiveLearningDataset):
             self.trainset = train_dataset
             self.testset = test_dataset
             self.sampler_size = 40000
+        if len(config.class_weighting) > 0:
+            self.trainset = DatasetUtils.unbalanced_weighting(self.trainset, config.class_weighting)
+        
         if config.num_repetitions > 1:
             self.trainset = ConcatDataset([self.trainset] * config.num_repetitions)
 
@@ -121,6 +132,9 @@ class DatasetWrapper(ActiveLearningDataset):
     def get_pool_size(self):
         return self.pool_size
 
+    def get_config(self) -> DatasetParams:
+        return self.config
+
     def get_indexes(self, idxs: Indexes) -> List[torch.Tensor]:
         pool_idxs = torch.nonzero(self.mask == 0)
         res = []
@@ -131,7 +145,7 @@ class DatasetWrapper(ActiveLearningDataset):
 
 class DatasetUtils:
     @staticmethod
-    def balanced_init(dataset: ActiveLearningDataset, per_class: int):
+    def balanced_init(dataset: ActiveLearningDataset, per_class: int, smoke_test: bool):
         N = len(dataset.get_pool_tensor())
         # torch.manual_seed(42)
         perm = torch.randperm(N)
@@ -154,8 +168,9 @@ class DatasetUtils:
             if completed_classes == num_classes:
                 break
         # print(indexes)
-        # A fixed permutation
-        indexes = [51247, 29701, 37011, 27137, 18998, 55159, 30648, 35259, 56924, 46759, 25423, 54617, 29622, 58828, 56222, 48542, 59403, 12831, 23130, 40077]
+        # A fixed permutation, which was randomly generated, and kept constant between runs to reduce this as a variable.
+        if not smoke_test:
+            indexes = [51247, 29701, 37011, 27137, 18998, 55159, 30648, 35259, 56924, 46759, 25423, 54617, 29622, 58828, 56222, 48542, 59403, 12831, 23130, 40077]
         dataset.move(indexes)
     
     @staticmethod
@@ -177,4 +192,16 @@ class DatasetUtils:
         weight = [0] * len(images)                                              
         for idx, val in enumerate(images):                                          
             weight[idx] = weight_per_class[val[1]]                                  
-        return weight   
+        return weight
+
+    @staticmethod
+    def unbalanced_weighting(trainset, weights: Tuple) -> Subset:
+        N = len(trainset)
+        idxs = []
+        random_values = torch.rand(N)
+        for i in range(0,N):
+            _, y = trainset[i]
+            if random_values[i] < weights[y]:
+                idxs.append(i)
+
+        return Subset(trainset, idxs)

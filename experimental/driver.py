@@ -23,14 +23,6 @@ import itertools
 class Driver:
     @staticmethod
     def plot_confusion_matrix(cm, class_names):
-        """
-        Returns a matplotlib figure containing the plotted confusion matrix.
-        
-        Args:
-        cm (array, shape = [n, n]): a confusion matrix of integer classes
-        class_names (array, shape = [n]): String names of the integer classes
-        """
-        
         figure = plt.figure(figsize=(8, 8))
         plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
         plt.title("Confusion matrix")

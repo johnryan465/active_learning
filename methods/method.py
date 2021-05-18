@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+
+from torch.utils import data
 from utils.utils import get_pool
 
 from torchtyping.tensor_type import TensorType
@@ -54,7 +56,7 @@ class Method(ABC):
         return self.current_aquisition >= self.params.max_num_aquisitions
 
     def initialise(self, dataset: ActiveLearningDataset) -> None:
-        DatasetUtils.balanced_init(dataset, self.params.initial_size)
+        DatasetUtils.balanced_init(dataset, self.params.initial_size, dataset.get_config().smoke_test)
 
     @staticmethod
     def log_batch(images: List[torch.Tensor], tb_logger: TensorboardLogger, index: int) -> None:

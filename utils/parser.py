@@ -57,6 +57,8 @@ def init_parser() -> argparse.ArgumentParser:
         p.add_argument('--epochs', default=100, type=int, required=True)
         p.add_argument('--dataset', default=DatasetName.mnist, type=DatasetName)
         p.add_argument('--num_repetitions', default=1, type=int)
+        p.add_argument('--unbalanced', default=False, type=bool)
+
         
         p.set_defaults(method=method)
         nestedsubpraser = p.add_subparsers(dest='model')
@@ -93,19 +95,25 @@ This level of abstraction lets us keep the command line interface seperate from 
 
 def parse_dataset(args: argparse.Namespace) -> DatasetParams:
     # Setup the dataset config
-    if args.dataset == DatasetName.mnist:
+    if args.unbalanced:
+        weights = [1.0] + ([0.2] * 9)
+    else:
+        weights = None
+    if args.dataset == DatasetName.mnist:            
         dataset_params = DatasetParams(
             path=args.data_path,
             batch_size=args.batch_size,
             num_repetitions=args.num_repetitions,
-            smoke_test=args.smoke_test
+            smoke_test=args.smoke_test,
+            class_weighting=weights
         )
     else:
         dataset_params = DatasetParams(
             path=args.data_path,
             batch_size=args.batch_size,
             num_repetitions=args.num_repetitions,
-            smoke_test=args.smoke_test
+            smoke_test=args.smoke_test,
+            class_weighting=weights
         )
     return dataset_params
 
