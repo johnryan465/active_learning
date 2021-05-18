@@ -5,9 +5,14 @@
 
 
 \theoremstyle{definition}
-\newtheorem{definition}{Definition}[section]
-\newtheorem{proof}{Proof}[section]
 \newtheorem{theorem}{Theorem}[section]
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+
+\theoremstyle{definition}
+\newtheorem{nproof}{Proof}[section]
+
 
 \hypersetup{pdftitle = Project Report, pdfauthor = {First Last}, pdfstartview=FitH, pdfkeywords = essay, pdfpagemode=FullScreen, colorlinks, anchorcolor = red, citecolor = purple, urlcolor=blue, filecolor=green, linkcolor=blue, plainpages=false}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -67,7 +72,6 @@ Active Learning is an use
 \listoftables
 \listofalgocfs
 \listoftheorems
-
 \chapter*{List of Abbreviations}
 \begin{abbreviations}
     \item[GP] Gaussian Process
@@ -86,14 +90,14 @@ Bayesian ML models are the standard ways of building machine learning models whi
 
 \section{Motivation}
 
-Active Learning is an active area of Machine Learning where we are trying to select (unlabelled) data points in an attempt to maximise some objective.
+Active Learning is an active area of Machine Learning where we are trying to select (unlabelled) data points in an attempt to maximize some objective.
 \section{Aim and Objectives}
 
 The aims of this report is to
 
 \begin{itemize}
     \item Give an outline of the various methods for Active Learning which have been published
-    \item Compare these methods in a reproducible and standardised fashion
+    \item Compare these methods in a reproducible and standardized fashion
     \item Extend and combine some of these approaches with other ML research to improve Active Learning performance in certain situations.
 \end{itemize}
 \section{Project Report Outline}
@@ -132,15 +136,25 @@ When working with Active Learning we are also normally working with much smaller
 
 \section{Random}
 
-The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random aquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparison between unweighted MNIST and weighted MNIST with random aquisition.
+The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random acquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparison between unweighted MNIST and weighted MNIST with random aquisition.
 
 \includegraphics{todo}
 
 
 \section{BALD}
-Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is based on selecting datapoints which maximize the mutual information between the datapoints class output and the models parameters. The paper details how we can instead of computing this in the parameter space which would be computationally prohibitive in many cases, we can compute the same objective in the output space.
+Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is designed to select the datapoint which we expect would reduce the uncertainty of the posterior by the most.
+
 
 $${\argmax}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
+
+To compute this directly we would have to compute this objective in a very high dimensional space, however the authors of this paper observe that this objective can be rewritten as the conditional mutual information of the output variable and the parameters.
+
+$$I \left(y, \theta| D, x \right) = H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
+
+
+
+By taking advantage of this formulation they then rewrite the objective as follows, which requires the computation of the entropy over the output variable instead which is normally over a much smaller dimensional space.
+
 
 $${\argmax}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
 
@@ -166,7 +180,7 @@ The BatchBALD score function is as follows.
     $$f(A) + f(B) \geq f\left( A \cup B \right) +  f\left(A \cap B \right) $$
 \end{definition}
 
-The authors of the paper prove that the objective function that they specify is \textit{submodular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimum batch.
+The authors of the paper prove that the objective function that they specify is \textit{sub-modular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimum batch.
 
 
 
@@ -182,7 +196,7 @@ We can also simply use the joint entropy alone as the active learning objective
 
 $$s_{Entropy} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n)$$
 
-\begin{proof}[$s_{Entropy}$ is submodular]
+\begin{nproof}[$s_{Entropy}$ is submodular]
     Proof.
     Let $A_x,B_x \subseteq D_{pool}, C_x = A_x \cap B_x$
     
@@ -197,18 +211,18 @@ $$s_{Entropy} (x_1, \ldots, x_n) = H(y_1, \ldots, y_n)$$
         &= s_{Entropy} (A_x \cup B_x) + s_{Entropy} (A_x \cap B_x)
     \end{align*}
 
-\end{proof}
+\end{nproof}
 
-The fact that this objective is submodular enables us to use the same greedy $1 - \frac{1}{\epsilon}$ approximation algorithm as used above.
+The fact that this objective is sub-modular enables us to use the same greedy $1 - \frac{1}{\epsilon}$ approximation algorithm as used above.
 
-A justification for the use of this objective can be seem as attempting to minimise the entropy over the remaining items in the pool given the batch which we select.
+A justification for the use of this objective can be seem as attempting to minimize the entropy over the remaining items in the pool given the batch which we select.
 
 
 $$\min_{B} H( \left(P \setminus B\right) | B) = \min_{B} H(P) - H(B) = \min_{B} - H(B) = \max_B H(B)$$
 
-If we assume that the samples in the poolset are samples from the true distribuiton, we can view this as attempting to minimise the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimise the entropy of the paramaters maximially fast.
+If we assume that the samples in the poolset are samples from the true distribution, we can view this as attempting to minimize the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimise the entropy of the paramaters maximially fast.
 
-In the next chapter we will discuss some reasons while this may be preferable when using a Gaussian Process Classifer.
+In the next chapter we will discuss some reasons while this may be preferable when using a Gaussian Process Classifier.
 
 \chapter{Bayesian Machine Learning Models}
 
@@ -219,11 +233,62 @@ Here we will detail some Bayesian Machine Learning models, in particular focusin
     \item \hyperref[sec:BNNs]{Bayesian Neural Networks}
 \end{itemize}
 
+
+\section{Introduction}
+
+In machine learning we are often attempting to optimise the values of some function relative to some objective. This is often done by attempting to find a single set of parameters which give the best performance. We can interpret this as attempting to find the parameters which maximize a \textit{likelihood} function, a function which represents how good of a fit to the data this set of parameters are. This likelihood function is of the form $p(x | \theta)$.
+
+
+This is called \textbf{Maximum Likelihood Estimation}.
+
+\begin{definition}[Maximum Likelihood Estimation]
+    Given a likelihood function $l(x | \theta)$
+$$MLE_{\theta}(x) = \argmax_{\theta} l\left(x | \theta\right)$$
+\end{definition}
+
+For example Ordinary Least Squares regression will give you the Maximum Likelihood Estimate of a linear regression model.
+
+However if we have some belief/information about what the parameters of the model are, we can extend this approach.
+
+\begin{definition}[Bayes Theorem]
+    Let $A,B$ be events.
+$$P \left( A | B\right) = \frac{P \left( B | A\right) P \left(A\right)}{P \left(B \right)}$$
+\end{definition}
+
+
+Define the random variables $\theta$, which represent the distribution of our parameters, and $X$ which represents our data.
+
+$$P \left( \theta | X\right) = \frac{P \left( X | \theta \right) P \left( \theta\right)}{P \left( X  \right)}$$
+
+Given all of these quantities we could update our beliefs about our parameters in a principled fashion.
+
+
+\begin{definition}[Maximum a posteriori]
+    Given a likelihood function $l(x | \theta)$
+$$MAP_{\theta}(x) = \argmax_{\theta}  \frac{p \left( x | \theta \right) p \left( \theta\right)}{p \left( x  \right)}$$
+\end{definition}
+
+As $p(x)$ is going to be the same for all of the values of $\theta$ for a fixed $x$ we can ignore it in our maximization. We can view the MAP as selecting the value of $\theta$ which maximizes the likelihood of $x$, weighted by our prior belief about how likely that parameter was.
+
+
+Or alternatively we can view the MLE as when we have the MAP but have a uniform belief about what the parameters are as your prior.
+
+By selecting a single value from the parameter distribution we are discarding information, when using bayesian models we instead of simply selecting a value from this distribution we endeavour to maintain it.
+
+
 \section{Bayesian Neural Networks}
 \label{sec:BNNs}
 
 
-Bayesian Neural Networks
+Bayesian Neural Networks are a Bayesian Machine Learning model which are structured much like typical neural networks. Instead except instead of having a single output function specified by values of the parameters of the network, we maintain a distribution over the parameters of the model. This distribution and the structure of the BNN together induce a distribution over functions.
+
+Much of the time we do not have strong priors about what the initial distributions for the weights should be.
+
+Many of the integrals we need to perform for Bayesian inference are intractable, which unfortunately require us to perform approximation of these quantities to use these methods.
+
+The use of dropout, a regularization method where during train time we randomly with some probability $p$ set some of the outputs from a layer to 0 can be seen as an approximate method when using BNNs.
+
+BNNs however are limited in their expressive power via their structure, next we will look into Gaussian Processes which can approximate arbitrarily* complex function.
 
 \section{Gaussian Processes}
 \label{sec:GaussianProcesses}
@@ -237,35 +302,82 @@ Bayesian Neural Networks
 We can completely specify a Gaussian Process over a space $\chi$ by giving a mean function $m(\cdot), m : \chi \rightarrow R$, and covariance (kernel) function $k(\cdot, \cdot), k: \chi \times \chi \rightarrow R$.
 
 
-For $k$ to be a valid covariance function we need for any evaluation of the covariance matrix to be a symmetric positive definite matrix (as all covariance matrices of random variables must be S.P.D).
+The output distribution for any subset of points in $\chi$ can be easily found by evaluating the mean and covariance functions, and constructing a Gaussian Distribution with these values.
 
-\begin{definition}[Positive Definte Matrix]
+
+\subsection{Why Gaussian Processes?}
+
+The motivation for gaussian processes is not immediately obvious when they are first introduced, however they are an extremely powerful and useful method.
+
+We are immediately constraining ourselves to having Gaussian valued outputs, this is often an approximation which we choose when working with more general Bayesian Methods as we often do not have any particular reason to use a different noise output.
+
+The key reason is that Gaussian Processes can model arbitrarily* complex functions given enough data paired with a good covariance function.
+
+It also turns out that a Gaussian Process is the limit of an infinite width feedforward neural network when the weights of the network are initialized from a Gaussian distribution. [cite]
+
+We will return to these advantages after explaining more about how they function.
+
+\subsection{Kernel Functions}
+
+For $k$ to be a valid covariance (kernel) function we need for any evaluation of the covariance matrix to be a symmetric positive definite matrix (as all covariance matrices of random variables must be S.P.D).
+
+\begin{definition}[Positive Definite Matrix]
     A positive definite matrix is a matrix which has positive eigenvalues.
 \end{definition}
 
+The kernel function of a GP defines the space of functions over which it is going to be defined.
+
+\subsection{Gaussian Distributions}
+
+Gaussian Distributions have some very useful properties which make them great for this particular use case.
+
+
+
+\subsubsection{Marginalisation}
+
+As we have defined our Gaussian Process over a space, and we require that any finite subset of the values to have a Gaussian Distribution, it is important that if we generated the GP output for $n$ points and then marginalize over one of them, we should  get the same result as if we generated the distribution over the remaining $n-1$ directly.
+
+\begin{theorem}[Marginalisation of Gaussian Distributions]
+    
+\end{theorem}
+
+This means that we don't even need to compute the marginals whenever we wish to use them, we can simply drop the relevant index from the mean and covariance.
+ 
+
+\subsubsection{Conditioning}
+
+When we want to condition one Gaussian given another Gaussian distribution we have the following result.
+
+
+\begin{theorem}[Conditioning a Gaussian]
+
+\end{theorem}
+
+
+\subsection{Update Equations for Gaussian Processes}
+
+We can use the equations above for Gaussian Distributions and extend them to our Gaussian Processes.
+
+We can use Bayes rule to update the covariance and mean function from our prior, to the posterior given noisy of exact data. The complexity of doing this (given arbitary kernels) is bounded by matrix inversion and  multiplication of a matrix of size of the number of datapoints in which we are using. The complexity of which is sub cubic, however in general the matrix multiplication algorithms we use practically are of the cubic variety).
+
+This can be done as follows: 
+
+\subsection{Reproducing Kernels Hilbert Spaces}
+
+
+
 \subsection{As distributions over functions}
 
-We can view a Gaussian Processes as a distribution over functions. The space of functions which we can represent by a particular Gaussian Process is parameterized by the kernel function which we are using.
 
 We can understand this by investigating the interpretation of kernels as Reproducing Kernel Hilbert Spaces.
 
 
 
-
-
-Gaussian Processes have a number of useful properties such as being closed under conditioning and marginalization.
-
-For the covariance function to define a valid MVN for all inputs the covariance function must be positive definite.
-
 A positive definite kernel function can be represented by a feature space where the value of the kernel between 2 values can be computed by taking the inner product of the feature space of the 2 values.
 
 Certain kernel functions such as the radial basis kernel, is represented by an infinite dimensional feature space. This infinite dimensional feature space enables it to model arbitarily complex functions. Polynomial or linear kernels do not enable this level of expressibility.
 
-We can use Bayes rule to update the covariance and mean function from our prior, to the postior given noisy of exact data. The complexity of doing this (given arbitary kernels) is bounded by matrix inversion and  multiplication of a matrix of size of the number of datapoints in which we are using. The complexity of which is sub cubic, however in general the matrix multiplication algorithms we use practically are of the cubic variety).
 
-This can be done as follows: 
-
-(TODO) put update equations.
 
 \subsection{Scaling to large data}
 
@@ -273,19 +385,22 @@ Unlike other methods we use often in machine learning, such as neural networks w
 
 \subsubsection{Inducing Points}
 
-In inducing point models, we instead of using all of the datapoints in our model. We instead use a smaller number of datapoints as an approximation to the true model. Various approaches exist for selecting the points we keep in our approximation.
+In inducing point GPs, we instead of using all of the datapoints in our model. We instead use a smaller number of datapoints as an approximation to the true model. Various approaches exist for selecting the points we keep in our approximation.
 
-One of the most sucessful approaches is to treat these inducing points as model parameters which we attempt to learn by minimising some objective.
+One of the most successful approaches is to treat these inducing points as model parameters which we attempt to learn by minimizing some objective.
 
-Minimising the evidence lower bound (ELBO) is a common and principled object for this task.
+Minimizing the evidence lower bound (ELBO) is a common and principled object for this task.
 
-Minimising this objective minimises the KL Divergence between the true output distribution and the approximate distribution we are learning.
+Minimizing this objective minimizes the KL Divergence between the true output distribution and the approximate distribution we are learning.
 
 \subsubsection{Random Fixed Features}
 
-(Todo)
+In this approximation approach, we do not use the complete kernel matrix, but instead use a low rank approximation to the kernel bases on random fourier features. [cite]
 
 
+\subsubsection{Low Rank Approximations}
+
+Various other low rank approximation methods for the covariance have been proposed such as [], [], []
 
 
 
@@ -294,7 +409,7 @@ Minimising this objective minimises the KL Divergence between the true output di
 
 To use Gaussian Processes for classification we have several issues to overcome.
 
-The output of a Gaussian Process is a Multivariate Normal, this is a continous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
+The output of a Gaussian Process is a Multivariate Normal, this is a continuous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
 
 We can in theory use any link function to convert a sample from our MVN in $R^n$ to a sample over the simplex, different link functions have different properties computationally and statistically.
 
@@ -310,17 +425,17 @@ The logit is the standard link function for the vast majority of GPC use cases. 
 $$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
 
 
-The marginal distribuiton using this link function does not have.
+The marginal distribution using this link function does not have.
 
 
 \subsubsection{Probit}
 
-The probit is a different link function which is normally defined for the binary classification case as the inverse of the CDF of a Gaussian. We can generalise this link function as follows.
+The probit is a different link function which is normally defined for the binary classification case as the inverse of the CDF of a Gaussian. We can generalize this link function as follows.
 
 $$p\left(y = k | f\right) = \mathbf{1}_{argmax_i(f_i) = k}$$
 
 
-The probit function is easier to work with anallytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the defintions that a single sample draw from a GPC using a probit will not give an accurate assement of the confidence of the model.
+The probit function is easier to work with analytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the defintions that a single sample draw from a GPC using a probit will not give an accurate assement of the confidence of the model.
 
 
 \label{sec:Integration}
@@ -356,11 +471,6 @@ After performing this transformation we have a standard orthant integral which w
 
 However the number of dimensions which we are performing this integration over is $O(dc)$. With the exponential complexity in the number of dimensions this is an infeasible method.
 
-
-
-\subsection{Minimizing entropy over functions}
-
-When using a softmax link function
 
 
 \section{Training}
@@ -404,12 +514,12 @@ This model is designed to have good uncertainty properties by enforcing sensitiv
 \section{Spectral Normalization}
 
 \begin{definition}[Lipshitz Constant]
-    Given a function $f: X \rightarrow Y$, where $(X, d_x)$ and $(Y, d_y)$ are metric spaces. A lipshitz constant of the function $f$ is a value of $k$ such that.
+    Given a function $f: X \rightarrow Y$, where $(X, d_x)$ and $(Y, d_y)$ are metric spaces. A lipchitz constant of the function $f$ is a value of $k$ such that.
 
     $$\frac{d_y(f(x_1), f(x_2))}{d_x(x_1, x_2)} \leq K, \forall x_1, x_2 \in X $$
 \end{definition}
 
-Some times we refer to \textit{the lipshitz constant} of a function, this is normally taken to mean the smallest value $k$ which is a lipchitz constant.
+Some times we refer to \textit{the lipchitz constant} of a function, this is normally taken to mean the smallest value $k$ which is a lipchitz constant.
 
 In our particular problem we are dealing with spaces in $\mathbf{R}^n$. The metric on this space which we will be using is the $L_2$ norm, (also known as the euclidean distance).
 
@@ -500,11 +610,11 @@ Instead of applying the gradient descent algorithm to the parameters in the eucl
  
 To derive the update equations we will need to define some objectives and take some taylor expansions.
 
-The first thing we will define is out loss function. $q$ is the true distribuiton which we are attempting to approximate, $p_\theta$ is our parameterised distribution.
+The first thing we will define is out loss function. $q$ is the true distribuiton which we are attempting to approximate, $p_\theta$ is our parameterized distribution.
 
 $$L \left(\theta \right) = D_{KL} \left(p_\theta || q \right) $$
 
-We wish to choose a descent direction which will minimise our loss function, much like in standard gradient descent. Normally in gradient descent we bound the magnitude of the step of the gradient by the eucliedean length of the descent vector, we change the constraint in natural gradient descent to instead bound the $KL$ divergence between $p_\theta$ and $p_{\theta + \epsilon}$.
+We wish to choose a descent direction which will minimize our loss function, much like in standard gradient descent. Normally in gradient descent we bound the magnitude of the step of the gradient by the eucliedean length of the descent vector, we change the constraint in natural gradient descent to instead bound the $KL$ divergence between $p_\theta$ and $p_{\theta + \epsilon}$.
 
 \begin{align}
     \epsilon^\prime &= \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k} L \left( \theta + \epsilon \right) \\
@@ -532,10 +642,10 @@ Now we can apply a taylor expansion to $D_{KL} \left(p_\theta || p_{\theta + \ep
     D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) &\approx  D_{KL} \left(p_\theta || p_{\theta} \right) + \left(J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right) \right) \epsilon + \frac{1}{2} \epsilon^T \left( H_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right) \right) \epsilon
 \end{align}
 
-The KL Divergence between a distribtuion and it's self is $0$ so the first term disappears.
+The KL Divergence between a distribution and itself is $0$ so the first term disappears.
 
 
-Lets now deal with the second term. The KL Divergence is a positive function, and we know that as we mentioned above it is $0$ when the 2 distribuitons are equal. Then second term is the Jacobian of the KL Divergence between 2 paramaterised distributitons, \textit{equaluated when the parametrs are equal}. So we are taking the Jacobian of a function evaluated at a global minimum, which implies that $J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)  = 0$. This makes the second term disappear.
+Lets now deal with the second term. The KL Divergence is a positive function, and we know that as we mentioned above it is $0$ when the 2 distributions are equal. Then second term is the Jacobian of the KL Divergence between 2 paramaterised distributitons, \textit{equaluated when the parametrs are equal}. So we are taking the Jacobian of a function evaluated at a global minimum, which implies that $J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)  = 0$. This makes the second term disappear.
 
 
 \begin{align}
@@ -543,7 +653,7 @@ Lets now deal with the second term. The KL Divergence is a positive function, an
 \end{align}
 
 
-We can expand out the matrix in the reamining quadratic term to obtain that it is equal to the negative fisher information matrix.
+We can expand out the matrix in the remaining quadratic term to obtain that it is equal to the negative fisher information matrix.
 
 \begin{align}
     H_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)_{ij} &= J \left( J \left( E_{x \sim p_\theta(x)}  \log \left( \frac{p_\theta(x)}{p_{\theta^\prime}(x)}\right)\right)^T \right)_{ij} \left( \theta \right) \\
@@ -553,7 +663,7 @@ We can expand out the matrix in the reamining quadratic term to obtain that it i
     &= F \\
 \end{align}
 
-Where $F$ is the defintion of the Fisher information matrix.
+Where $F$ is the definition of the Fisher information matrix.
 
 
 \begin{definition}[Fisher Information Matrix]
@@ -574,7 +684,7 @@ To find the best value of $\epsilon$, we can take the derivate of the objective 
   0 &=  J_L \left( \theta\right)^T + \frac{\alpha}{2}  \left(F^T + F \right)\epsilon\\
 \end{align}
 
-Assuming some smoothness condictions we get that the order of the partial differentation doesn't impact the Hessian, and in turn the fisher information matrix. $F = F^T$
+Assuming some smoothness conditions we get that the order of the partial differentiation doesn't impact the Hessian, and in turn the fisher information matrix. $F = F^T$
 
 \begin{align}
    0 &=  J_L \left( \theta\right)^T + \alpha F \epsilon\\
@@ -582,11 +692,11 @@ Assuming some smoothness condictions we get that the order of the partial differ
   \epsilon &=  - \frac{1}{\alpha} F^{-1} J_L \left( \theta\right) ^T
 \end{align} 
 
-We have now arrived at the update equations which we can use as our optimisation method.
+We have now arrived at the update equations which we can use as our optimization method.
 
 
 \begin{definition}[Natural Gradient Descent]
-    Natural Gradient Descent is similar to gradient descent expect inplace of the the gradient we use the natural gradient defined as $\nabla^{\prime} =  F^{-1} J_L \left( \theta \right)^T$
+    Natural Gradient Descent is similar to gradient descent expect in place of the the gradient we use the natural gradient defined as $\nabla^{\prime} =  F^{-1} J_L \left( \theta \right)^T$
 \end{definition}
 
 
@@ -599,23 +709,65 @@ We have now arrived at the update equations which we can use as our optimisation
 
 
 
-\section{Comparision of BALD and Entropy for GPC}
+\section{Comparison of BALD and Entropy for DUE}
 
 The motivation for the BALD objective in the original paper where it was introduced \cite{houlsby2011bayesian}, is to select the point which maximally reduce the uncertainty over the hypothesis space.
 
 
-For datapoints which are far from the datapoints which we have seen, the covariance decreases rapidly. 
+Lets consider 2 types of points in which our model is unsure about.
+
+Category 1, strange, lets call the set of these points $S$. These are points which are far from the training dataset in the feature space.
+
+Category 2, confusing, lets call the set of these points $C$. These are points which are near the training dataset in the feature space but are near to multiple different categories in this space, the model does not have a clear idea of what class this datapoints is.
 
 
+
+\subsection{BatchBALD}
+For the points in $S$, the model will revert to the prior (as we are far from the dataset), the covariance between these points and most others will be quite small also.
+
+This small covariance will lead to the conditional entropy of the datapoint given the other previously selected points being quite similar to the entropy of the datapoint alone.
+
+While this datapoint is evidently strange, being far away from other points in the feature space. The BatchBald score for this datapoint will be quite small.
+
+For points in category $C$ this problem does not occur.
+
+This means that when we are using the BatchBALD as our objective, we will be first acquiring the most confusing points.
+
+
+This behavior is observed when training with the BatchBALD objective. We observe error oscillations, where we tend to select datapoints which are ambiguous between categories.
+
+\subsection{Joint Entropy}
+When using the joint entropy of the variables we get that the points in category $S$ will be close to uniform, (as all of our GP outputs have the same mean).
+
+This will give these points high entropy, this means that if we use this objective we would be sampling primarily from points in the set $S$ first, before points in the set $C$.
+
+This means that when we are using the joint entropy as our objective, we will be first acquiring the most diverse points and then we would begin to select the more confusing points as they would still have higher entropy than well represented points.
+
+
+\subsection{Why is this different?}
+
+This is not an issue which is observed in \cite{kirsch2019batchbald} where the BatchBALD objective is used or in \cite{houlsby2011bayesian} where the BALD objective is used with GPCs. 
+
+In \cite{kirsch2019batchbald}, the key reason is the use of BNNs. This property where the covariance between 2 points is related via some vaguely distance preserving function does not exist. This means that for points far away from the training data, the conditional entropy will not necessarily be uniform leading to the subtracted value being significantly smaller than in our case.
+
+But how do we reconcile this with the original paper \cite{houlsby2011bayesian}, where Gaussian Process Classification is used?
+
+
+The artificial datasets which are used in this paper are quite low dimensional, (3 of the experiments are in 2 dimensions), in contrast the size of the feature space we are working with is 1024 dimensional. The expected euclidean norm between random points in higher dimensional space increases quite quickly, which will lead to a lower covariance between datapoints.
+
+The kernel indicates how far to we should extrapolate. Additionally when we are applying a GPC to a fixed dataset, we can select the relevant hyperparameter quite well based on the scale of the data. However in DUE we are applying this to a learned feature space, for which these hyperparameters can not be easily determined in advance and the optimum value would constantly change throughout training.
+
+
+Given we have intentionally designed our model to not extrapolate too far beyond the dataset we have seen, it seems clear that to improve performance on the datapoints which are far from all of the training datapoints we will need to acquire some of these points and that simply selecting the points which enable the model to distinguish between ambiguous classes alone will not lead to the best active learning performance. Given MNIST has many examples which are quite difficult for even a human to distinguish, there is no shortage of datapoints in the $C$ class.
 
 
 \section{Sampling}
 
-The active learning score functions which we have specified
+The active learning score functions which we have specified earlier in this report require us to sample from the underlying distributions of our GPC.
 
 Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which rely on sampling.
 
-In comparision with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our postior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
+In comparison with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our postior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
 The complexity of performing this is cubic in the size of the pool, this complexity is unacceptably high as we are often working with quite large pool sizes.
 
 This means that we can not use the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to make some improvements in this aspect.
@@ -631,7 +783,7 @@ This means that we can not use the same computational tricks used previously to 
 
 We require the ability to compute the joint entropy of a large number of random variables to compute several of the score functions which we are evaluating.
 
-\subsection{Gaussian Process Classifer}
+\subsection{Gaussian Process Classifier}
 As we are using a Gaussian Process Classifier, the random variable of which we are trying to estimate the value of is of a known form.
 
 
@@ -639,7 +791,7 @@ $$ \mathbf{f} \sim N(\mu, \Sigma) $$
 $$ \mathbf{p} =  \sigma \left(f \right) $$
 $$ X_i \sim Cat(p_i) $$
 
-The distribution $p(x)$ does not have a closed formula. We can estimate $p(x)$ via estimating the intergral via monte carlo intergration.
+The distribution $p(x)$ does not have a closed formula. We can estimate $p(x)$ via estimating the integral via monte carlo integration.
 
 When we are considering larger and larger pool sizes the number of possible states of our random variable grows at an exponential rate.
 
@@ -783,7 +935,7 @@ This reduces the complexity of the sampling to $O(n c (d)^3  + n k c (d)^2)$.
 
 \subsection{Conditional Distributions}
 
-We can reduce the amount of computation required by sharing computaion between datapoints.
+We can reduce the amount of computation required by sharing computation between datapoints.
 
 We can do this as follows first by sampling from the current batch, then sampling from the conditional distribuiton of each of the datapoints. The size of the current batch will increase as our aquisitions progress, the size of the consitional distribuitons will not.
 
