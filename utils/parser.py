@@ -96,9 +96,9 @@ This level of abstraction lets us keep the command line interface seperate from 
 def parse_dataset(args: argparse.Namespace) -> DatasetParams:
     # Setup the dataset config
     if args.unbalanced:
-        weights = [1.0] + ([0.2] * 9)
+        weights = tuple([1.0] + ([0.2] * 9))
     else:
-        weights = None
+        weights = tuple([])
     if args.dataset == DatasetName.mnist:            
         dataset_params = DatasetParams(
             path=args.data_path,
