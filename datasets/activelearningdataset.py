@@ -145,7 +145,7 @@ class DatasetWrapper(ActiveLearningDataset):
 
 class DatasetUtils:
     @staticmethod
-    def balanced_init(dataset: ActiveLearningDataset, per_class: int, smoke_test: bool):
+    def balanced_init(dataset: ActiveLearningDataset, per_class: int):
         N = len(dataset.get_pool_tensor())
         # torch.manual_seed(42)
         perm = torch.randperm(N)
@@ -169,7 +169,8 @@ class DatasetUtils:
                 break
         # print(indexes)
         # A fixed permutation, which was randomly generated, and kept constant between runs to reduce this as a variable.
-        if not smoke_test:
+        config = dataset.get_config()
+        if not config.smoke_test and not (config.class_weighting == tuple([])):
             indexes = [51247, 29701, 37011, 27137, 18998, 55159, 30648, 35259, 56924, 46759, 25423, 54617, 29622, 58828, 56222, 48542, 59403, 12831, 23130, 40077]
         dataset.move(indexes)
     

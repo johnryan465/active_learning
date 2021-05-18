@@ -56,7 +56,7 @@ class Method(ABC):
         return self.current_aquisition >= self.params.max_num_aquisitions
 
     def initialise(self, dataset: ActiveLearningDataset) -> None:
-        DatasetUtils.balanced_init(dataset, self.params.initial_size, dataset.get_config().smoke_test)
+        DatasetUtils.balanced_init(dataset, self.params.initial_size)
 
     @staticmethod
     def log_batch(images: List[torch.Tensor], tb_logger: TensorboardLogger, index: int) -> None:
