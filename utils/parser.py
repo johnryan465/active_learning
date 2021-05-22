@@ -89,7 +89,7 @@ def init_parser() -> argparse.ArgumentParser:
 """
 These functions take an Argparser namespace and parse it into the internal configs we use
 
-This level of abstraction lets us keep the command line interface seperate from the configs
+This level of abstraction lets us keep the command line interface separate from the configs
 """
 
 
