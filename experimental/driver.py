@@ -109,7 +109,7 @@ class Driver:
             es_handler = EarlyStopping(patience=training_params.patience, score_function=score_fn, trainer=trainer)
             evaluator.add_event_handler(Events.COMPLETED, es_handler)
 
-        saving_handler = ModelCheckpoint(dataset.get_config().path + '/models', exp_name, n_saved=1, create_dir=True, score_function=score_fn, require_empty=False)
+        saving_handler = ModelCheckpoint(dataset.get_config().path + '/models-' + exp_name, exp_name, n_saved=1, create_dir=True, score_function=score_fn, require_empty=False)
         evaluator.add_event_handler(
             Events.COMPLETED,
             saving_handler,
