@@ -69,7 +69,7 @@ if __name__ == "__main__":
             "lr": 0.003,
             "dropout": 0.0,
             "method": tune.grid_search(["batchbald","entropy","random","bald"]),
-            "model": tune.grid_search(["vduq","bnn"]),
+            "model": tune.grid_search(["vduq"]),
             "coeff": 9,
             "batch_size": 64,
             "starting_size": 2,
