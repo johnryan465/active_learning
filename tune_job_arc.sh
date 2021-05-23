@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:8
 #SBATCH --job-name="active-learning-tuning"
 #SBATCH --partition=htc
 module load python/anaconda3/2020.11
