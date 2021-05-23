@@ -25,11 +25,14 @@ def create_training_function(path):
         starting_size = config["starting_size"]
         num_aquisitions = config["num_aquisitions"]
         n_inducing_points = config["n_inducing_points"]
+        acquisition_size = config["acquisition_size"]
+        num_aquisitions = int(300 / acquisition_size) + 1
 
-        # aquisition
+
+        # acquisition
         args = Namespace(
             data_path=path,
-            aquisition_size=10, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
+            aquisition_size=acquisition_size, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
             epochs=500, initial_per_class=starting_size, smoke_test=False, var_reduction=False, lr=lr, method=method, use_progress=False, model=model, model_index=0, var_opt=var_opt, n_inducing_points=n_inducing_points,
             num_repetitions=1, name='vduq_bb_tuning', num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff, unbalanced=True)
 
@@ -64,7 +67,7 @@ if __name__ == "__main__":
         create_training_function(args.data_path),
         metric="accuracy",
         mode="max",
-        num_samples= 5,
+        num_samples=1,
         resources_per_trial={'gpu': 1},
         config={
             "lr": 0.003,
@@ -77,6 +80,7 @@ if __name__ == "__main__":
             "num_aquisitions": 30,
             "var_opt": 0.1,
             "n_inducing_points": 20,
+            "acquisition_size":  tune.grid_search([1, 5, 40]),
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
