@@ -67,20 +67,20 @@ if __name__ == "__main__":
         create_training_function(args.data_path),
         metric="accuracy",
         mode="max",
-        num_samples=1,
+        num_samples=5,
         resources_per_trial={'gpu': 1},
         config={
-            "lr": 0.003,
+            "lr": 0.001,
             "dropout": 0.0,
             "method": tune.grid_search(["batchbald","entropy","random","bald"]),
-            "model": tune.grid_search(["vduq"]),
+            "model": tune.grid_search(["bnn"]),
             "coeff": 9,
             "batch_size": 64,
             "starting_size": 2,
             "num_aquisitions": 30,
             "var_opt": 0.1,
             "n_inducing_points": 20,
-            "acquisition_size":  tune.grid_search([1, 5, 40]),
+            "acquisition_size": tune.grid_search([10]),
         })
     print(analysis)
     print("Best config: ", analysis.get_best_config(
