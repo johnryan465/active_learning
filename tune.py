@@ -64,6 +64,7 @@ if __name__ == "__main__":
         create_training_function(args.data_path),
         metric="accuracy",
         mode="max",
+        num_samples= 5,
         resources_per_trial={'gpu': 1},
         config={
             "lr": 0.003,
