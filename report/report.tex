@@ -61,9 +61,9 @@ Trinity 2021
 \thispagestyle{empty}
 \begin{abstract}
 
-Active Learning is an use
 
-\keywords{Keyword1 - Keyword2 - Keyword3}
+
+\keywords{Active Learning - Gaussian Processes - Deep Kernel Learning}
 % \vspace{-10mm} %To remove added white space after
 \end{abstract}
 \tableofcontents
@@ -84,7 +84,7 @@ Active Learning is an use
 \chapter{Introduction}
 \pagenumbering{arabic}
 
-Active learning is an area of machine learning where we are attempting to select which unlabelled datapoints we believe would be best to learn the label of. It is important because in many important use cases (for example, medical data), it is often either quite costly or just simply impossible to collect an incredibly large dataset. However current approaches to do it suffer from issues related to quality of aquired datapoints, model requirements and computational issues.
+Active learning is an area of machine learning where we are attempting to select which unlabelled datapoints we believe would be best to learn the label of. It is important because in many important use cases (for example, medical data), it is often either quite costly or just simply impossible to collect an incredibly large dataset. However current approaches to do it suffer from issues related to quality of acquired datapoints, model requirements and computational issues.
 
 Bayesian ML models are the standard ways of building machine learning models which can calculate uncertainty well, however many of the standard approaches to doing so (MC Dropout) can give suboptimal performance, for example requiring a substantial amount of sampling. Gaussian Processes are a ML approach which give very good uncertainty performance, and new results in the field [DUE] have shown successful training of Variational Gaussian Processes with feature extractors and demonstrate that they maintain good uncertainty performance.
 
@@ -97,20 +97,23 @@ The aims of this report is to
 
 \begin{itemize}
     \item Give an outline of the various methods for Active Learning which have been published
-    \item Compare these methods in a reproducible and standardized fashion
-    \item Extend and combine some of these approaches with other ML research to improve Active Learning performance in certain situations.
+    \item Extend BathBald and related methods to Gaussian Process Classifiers with Deep Kernel Learning
+    \item Reduce the computation required to perform these calculations to make it of practical use.
 \end{itemize}
 \section{Project Report Outline}
-The remainder of this report is organised as follows:
+The remainder of this report is organized as follows:
 \begin{itemize}
-    \item[] \textbf{Chapter} \hyperref[Chap2]{\textbf{2}} --- Defines active learning, and introduces the different active learning methods from the literature.
-    \item[] \textbf{Chapter} \hyperref[Gaussian Processes]{\textbf{4}} --- introduces Gaussian Process based models
-    \item[] \textbf{Chapter} \hyperref[Chap5]{\textbf{5}} --- Combines BatchBALD and GPC
+    \item[] \textbf{Chapter} \hyperref[sec:ActiveLearning]{\textbf{2}} --- Defines active learning, and introduces the different active learning methods from the literature.
+    \item[] \textbf{Chapter} \hyperref[sec:Models]{\textbf{3}} --- Bayesian Machine Learning Models
+    \item[] \textbf{Chapter} \hyperref[sec:DUE]{\textbf{4}} --- introduces Gaussian Process based models
+    \item[] \textbf{Chapter} \hyperref[sec:ActiveLearningWithDUE]{\textbf{4}} --- introduces Gaussian Process based models 
+    \item[] \textbf{Chapter} \hyperref[sec:Implementation]{\textbf{5}} --- Combines BatchBALD and GPC
+    \item[] \textbf{Chapter} \hyperref[sec:Experiments]{\textbf{7}} --- Combines BatchBALD and GPC] 
 \end{itemize}
->
+
 
 \chapter{Active Learning Methods}
-\label{Chap2}
+\label{sec:ActiveLearning}
 
 In a common active learning formulation we have the following setup.
 
@@ -136,18 +139,18 @@ When working with Active Learning we are also normally working with much smaller
 
 \section{Random}
 
-The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random acquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparison between unweighted MNIST and weighted MNIST with random aquisition.
+The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random acquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparison between unweighted MNIST and weighted MNIST with random acquisitions.
 
 \includegraphics{todo}
 
 
 \section{BALD}
-Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is designed to select the datapoint which we expect would reduce the uncertainty of the posterior by the most.
+Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is designed to select the datapoint which we expect would reduce the uncertainty of the posterior by the greatest amount if the value of $y$ at that point was known.
 
 
 $${\argmax}_x H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
 
-To compute this directly we would have to compute this objective in a very high dimensional space, however the authors of this paper observe that this objective can be rewritten as the conditional mutual information of the output variable and the parameters.
+To try and compute this directly we would have to attempt to calculate the entropy in the parameter space, however this is can be a very high dimensional space, however the authors of this paper observe that this objective can be rewritten as the conditional mutual information of the output variable and the parameters.
 
 $$I \left(y, \theta| D, x \right) = H \left[ \theta | D \right] - \mathbf{E}_{y \sim p(y | x, D)} \left[ H\left[ \theta | y, x, D\right]\right]$$
 
@@ -159,7 +162,7 @@ By taking advantage of this formulation they then rewrite the objective as follo
 $${\argmax}_x H \left[ y | x, D \right] - \mathbf{E}_{\theta \sim p(\theta | D)} \left[ H\left[ y | x, \theta \right]\right]$$
 
 
-An issue which we run into when using BALD in the case where we want to select multiple datapoints to acquire at the same time is the fact that selecting the $n$ points with the greatest individual information content will not necessarily give you the $n$ points which jointly have the greatest information content. This can be made very obvious by considering the case when there is duplicates in the dataset. If the duplicated point is in the top n points as decieded by the BALD score, having both of the points in your aquired batch will give you no more information than just having one of them, you would be better served by selecting any other point instead of these points.
+An issue which we run into when using BALD in the case where we want to select multiple datapoints to acquire at the same time is the fact that selecting the $n$ points with the greatest individual information content will not necessarily give you the $n$ points which jointly have the greatest information content. This can be made very obvious by considering the case when there is duplicates in the dataset. If the duplicated point is in the top n points as decided by the BALD score, having both of the points in your acquired batch will give you no more information than just having one of them, you would be better served by selecting any other point instead of these points.
 
 \section{BatchBALD}
 BatchBALD \cite{kirsch2019batchbald}, is an extension of BALD designed especially to deal with the issues which we run into when using BALD to acquire batches of points.
@@ -220,11 +223,13 @@ A justification for the use of this objective can be seem as attempting to minim
 
 $$\min_{B} H( \left(P \setminus B\right) | B) = \min_{B} H(P) - H(B) = \min_{B} - H(B) = \max_B H(B)$$
 
-If we assume that the samples in the poolset are samples from the true distribution, we can view this as attempting to minimize the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimise the entropy of the paramaters maximially fast.
+If we assume that the samples in the poolset are samples from the true distribution, we can view this as attempting to minimize the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimize the entropy of the parameters maximally fast.
 
 In the next chapter we will discuss some reasons while this may be preferable when using a Gaussian Process Classifier.
 
 \chapter{Bayesian Machine Learning Models}
+\label{sec:Models}
+
 
 Here we will detail some Bayesian Machine Learning models, in particular focusing on 2 types.
 
@@ -358,11 +363,29 @@ When we want to condition one Gaussian given another Gaussian distribution we ha
 
 We can use the equations above for Gaussian Distributions and extend them to our Gaussian Processes.
 
-We can use Bayes rule to update the covariance and mean function from our prior, to the posterior given noisy of exact data. The complexity of doing this (given arbitary kernels) is bounded by matrix inversion and  multiplication of a matrix of size of the number of datapoints in which we are using. The complexity of which is sub cubic, however in general the matrix multiplication algorithms we use practically are of the cubic variety).
+We can use Bayes rule to update the covariance and mean function from our prior, to the posterior given noisy of exact data. The complexity of doing this (given arbitrary kernels) is bounded by matrix inversion and  multiplication of a matrix of size of the number of datapoints in which we are using. The complexity of which is sub cubic, however in general the matrix multiplication algorithms we use practically are of the cubic variety).
 
 This can be done as follows: 
 
 \subsection{Reproducing Kernels Hilbert Spaces}
+
+The interpretation of Gaussian Processes in the context of reproducing kernel hilbert spaces really makes it clear just how powerful of a method we are working with, and the importance of selecting a good kernel.
+
+
+\begin{definition}[Hilbert Space]
+    
+\end{definition}
+
+\begin{definition}[Reproducing Kernel Hilbert Space]
+    Let $X$ be a set over which define our functions and let $H$ be the Hilbert Space of real-valued functions 
+\end{definition}
+
+\begin{definition}[Mercers Theorem]
+    
+\end{definition}
+
+
+The sample function draws belong to $H$ with probability $1$. This construction shows that the set of functions over which our GP can represent is controlled entirely by the kernel. The use of the Radial Basis Kernel induces the constraint that our functions will be in $C^\infty$.
 
 
 
@@ -375,7 +398,7 @@ We can understand this by investigating the interpretation of kernels as Reprodu
 
 A positive definite kernel function can be represented by a feature space where the value of the kernel between 2 values can be computed by taking the inner product of the feature space of the 2 values.
 
-Certain kernel functions such as the radial basis kernel, is represented by an infinite dimensional feature space. This infinite dimensional feature space enables it to model arbitarily complex functions. Polynomial or linear kernels do not enable this level of expressibility.
+Certain kernel functions such as the radial basis kernel, is represented by an infinite dimensional feature space. This infinite dimensional feature space enables it to model arbitrarily complex functions. Polynomial or linear kernels do not enable this level of expressivity.
 
 
 
@@ -435,7 +458,7 @@ The probit is a different link function which is normally defined for the binary
 $$p\left(y = k | f\right) = \mathbf{1}_{argmax_i(f_i) = k}$$
 
 
-The probit function is easier to work with analytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the defintions that a single sample draw from a GPC using a probit will not give an accurate assement of the confidence of the model.
+The probit function is easier to work with analytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the definitions that a single sample draw from a GPC using a probit will not give an accurate assessment of the confidence of the model.
 
 
 \label{sec:Integration}
@@ -475,12 +498,12 @@ However the number of dimensions which we are performing this integration over i
 
 \section{Training}
 
-Using a straightforward Gaussian Process with no hyper parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribution at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribuiton so our objective should take this into account.
+Using a straightforward Gaussian Process with no hyper parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribution at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribution so our objective should take this into account.
 
 
 \subsection{KL Divergence}
 
-The KL Divergence is a measure of how different 2 probability distributions are, (it is not symmetric so it is not strictly a distance functions). It has many useful properties and unlike shannon entropy it has a sensible and natural extension to continous random variables.
+The KL Divergence is a measure of how different 2 probability distributions are, (it is not symmetric so it is not strictly a distance functions). It has many useful properties and unlike shannon entropy it has a sensible and natural extension to continuous random variables.
 
 \begin{definition}[KL Divergence]
     For 2 probability distributions $P, Q$ defined on the same probability space $\chi$
@@ -506,10 +529,11 @@ The Evidence Lower Bound is a tractable objective which it is much easier for us
 
 
 \chapter{vDUQ / DUE}
+\label{sec:DUE}
 
 vDUQ / DUE \cite{vanamersfoort2020uncertainty} is a recent model which deals with some of the issues with using deep kernel learning with GPCs. DUE uses an inducing point GP to enable it to scale to large amounts of data.
 
-This model is designed to have good uncertainty properties by enforcing sensitivity and bounding the amount by which any 2 inputs can diverge in the feature space. These properties are maintained by the additon of residual connections to the model and by performing spectral normalisation to bound the lipshitz constant of the layers in the feature extractor.
+This model is designed to have good uncertainty properties by enforcing sensitivity and bounding the amount by which any 2 inputs can diverge in the feature space. These properties are maintained by the addition of residual connections to the model and by performing spectral normalization to bound the lipchitz constant of the layers in the feature extractor.
 
 \section{Spectral Normalization}
 
@@ -541,7 +565,7 @@ For all of the linear layers in our model we now know how we can compute the res
     If $lip(f) = a$ and $lip(g) = b$, then $lip(f \circ g) \leq a * b$
 \end{theorem}
 
-It turns out that the majority of activation functions which we use in our neural networks have a lipchitz constant of $\leq 1$, eg relu. This enables us to compute an upper bound of the lipschitz constant of our model by computing the lipschitz constant of all of the indiviudal layers and taking the product of those constants.
+It turns out that the majority of activation functions which we use in our neural networks have a lipchitz constant of $\leq 1$, eg relu. This enables us to compute an upper bound of the lipchitz constant of our model by computing the lipchitz constant of all of the individual layers and taking the product of those constants.
 
 
 
@@ -578,14 +602,14 @@ There is another approach which enables us to bypass this computation by instead
 
 Then with these approximate eigenvectors we can approximate the singular value with $u^T A v$
 
-To bound the lipchitz constant of a linear layer to a values, call this value $\sigma$. We can calculate the spectral norm $\alpha$, check if $\alpha > \sigma$. If this is true, we muliply the linear layer by $\frac{\sigma}{\alpha}$.
+To bound the lipchitz constant of a linear layer to a values, call this value $\sigma$. We can calculate the spectral norm $\alpha$, check if $\alpha > \sigma$. If this is true, we multiply the linear layer by $\frac{\sigma}{\alpha}$.
 
-To maintain this during training we are required to compute this value during every forward pass. Due to the fact that given a sufficiently small learning rate we expect that the change to linear layer will be small, if we use the previous forwards passes final vector(s) as our starting vector instead of randomly restarting we can greatly speed up the convergence of the recurrence relation. We find that empircally we can actually get very good performance with a single iteration of this method at each stage.
+To maintain this during training we are required to compute this value during every forward pass. Due to the fact that given a sufficiently small learning rate we expect that the change to linear layer will be small, if we use the previous forwards passes final vector(s) as our starting vector instead of randomly restarting we can greatly speed up the convergence of the recurrence relation. We find that empirically we can actually get very good performance with a single iteration of this method at each stage.
 
 
 \section{Residual Connections}
 
-Residual connections were introduced in by [cite]. The indention of these connections in deep learning is to minimize the vanishing gradient problem. This is an issue that when we have particualy
+Residual connections were introduced in by [cite]. The indention of these connections in deep learning is to minimize the vanishing gradient problem. This is an issue that when we have particularly
 
 $$H(x) = F(x) + x$$
 
@@ -604,17 +628,17 @@ Natural Gradient Descent is an optimization method which is designed for when we
     $$p_{k+1} = p_{k} -  \alpha \nabla L(p_k)$$
 \end{definition}
 
-With a well chosen hyperparameter $\alpha$ and a convex loss function $L$ we can obtain convergence guarantees. [cite]. Many machine learning problems which we use gradient descent for do not obey the constraints which we require for guarentees of convergence [], empircally however the performance achieved by gradient descent and its derivates is impressive even these problems in many cases.
+With a well chosen hyperparameter $\alpha$ and a convex loss function $L$ we can obtain convergence guarantees. [cite]. Many machine learning problems which we use gradient descent for do not obey the constraints which we require for guarantees of convergence [], empirically however the performance achieved by gradient descent and its derivatives is impressive even these problems in many cases.
 
-Instead of applying the gradient descent algorithm to the parameters in the euclidean geometry of the parameter space, instead we can use the geometry of the likelihood space paramaterised by our chosen parameters to enable superior optimization. This makes the optimisation independent of the paramaterisaton of the distribuiton and only related to the distribuiton induced by the the parameters.
+Instead of applying the gradient descent algorithm to the parameters in the euclidean geometry of the parameter space, instead we can use the geometry of the likelihood space parameterized by our chosen parameters to enable superior optimization. This makes the optimization independent of the parameterization of the distribution and only related to the distribution induced by the the parameters.
  
 To derive the update equations we will need to define some objectives and take some taylor expansions.
 
-The first thing we will define is out loss function. $q$ is the true distribuiton which we are attempting to approximate, $p_\theta$ is our parameterized distribution.
+The first thing we will define is out loss function. $q$ is the true distribution which we are attempting to approximate, $p_\theta$ is our parameterized distribution.
 
 $$L \left(\theta \right) = D_{KL} \left(p_\theta || q \right) $$
 
-We wish to choose a descent direction which will minimize our loss function, much like in standard gradient descent. Normally in gradient descent we bound the magnitude of the step of the gradient by the eucliedean length of the descent vector, we change the constraint in natural gradient descent to instead bound the $KL$ divergence between $p_\theta$ and $p_{\theta + \epsilon}$.
+We wish to choose a descent direction which will minimize our loss function, much like in standard gradient descent. Normally in gradient descent we bound the magnitude of the step of the gradient by the euclidean length of the descent vector, we change the constraint in natural gradient descent to instead bound the $KL$ divergence between $p_\theta$ and $p_{\theta + \epsilon}$.
 
 \begin{align}
     \epsilon^\prime &= \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k} L \left( \theta + \epsilon \right) \\
@@ -628,7 +652,8 @@ L\left(\theta + \epsilon\right) &\approx L\left( \theta \right) + J_L \left( \th
 &\approx L\left( \theta \right) +  J_L \left( \theta\right) \epsilon \\
 \end{align*}
 
-Given the constraints above we have we can rewrite our objective using the method of lagrange mulitpliers as below.
+Given the constraints above we have we can rewrite our objective using the method of lagrange multipliers as below.
+
 
 \begin{align}
     \epsilon^\prime &= \argmin_{\epsilon \, s.t \, D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) \leq k} L \left( \theta + \epsilon \right) + \alpha \left( D_{KL} \left(p_\theta || p_{\theta + \epsilon} \right) - k\right) \\
@@ -645,7 +670,7 @@ Now we can apply a taylor expansion to $D_{KL} \left(p_\theta || p_{\theta + \ep
 The KL Divergence between a distribution and itself is $0$ so the first term disappears.
 
 
-Lets now deal with the second term. The KL Divergence is a positive function, and we know that as we mentioned above it is $0$ when the 2 distributions are equal. Then second term is the Jacobian of the KL Divergence between 2 paramaterised distributitons, \textit{equaluated when the parametrs are equal}. So we are taking the Jacobian of a function evaluated at a global minimum, which implies that $J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)  = 0$. This makes the second term disappear.
+Lets now deal with the second term. The KL Divergence is a positive function, and we know that as we mentioned above it is $0$ when the 2 distributions are equal. Then second term is the Jacobian of the KL Divergence between 2 parameterized distributions, \textit{evaluated when the parameters are equal}. So we are taking the Jacobian of a function evaluated at a global minimum, which implies that $J_{D_{KL} \left(p_\theta || p_{\theta^\prime} \right)}\left( \theta \right)  = 0$. This makes the second term disappear.
 
 
 \begin{align}
@@ -714,6 +739,30 @@ We have now arrived at the update equations which we can use as our optimization
 The motivation for the BALD objective in the original paper where it was introduced \cite{houlsby2011bayesian}, is to select the point which maximally reduce the uncertainty over the hypothesis space.
 
 
+\subsection{Conditional Entropy}
+
+The second part of the BALD object is the conditional entropy of the output variable conditioned on the function value. The output length scale of our model is a learned parameter of our model. When our GPs on the feature space reverts to the prior, the conditional entropy will become a function of the output scale of the GP.
+
+All of the covariance matrices will be scaled by this output length scale, and the value of the conditional entropy is very dependent on this value. Without a good prior the learned value of this parameter 
+
+The smaller the output scale the larger the value of the conditional entropy will be in this context.
+
+We can observe the difference in behavior by comparing the PCA of the feature space embeddings of the top 10 candidate points for BatchBALD (top 10 points by BALD score) and top 10 points by Entropy score.
+
+When we use PCA trained on our training datapoints feature embeddings, we get that the top 10 points in entropy are clustered in the centre in our plot. However the BALD points are widely dispersed along these axises.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=1]{PCA.png}
+    \caption{PCA of feature embeddings}
+\end{figure}
+        
+
+The use of joint entropy in place of Bald, selects points where there primarily differences are not along the primary axis where the majority of the variations of the trainset are.
+
+
+
 Lets consider 2 types of points in which our model is unsure about.
 
 Category 1, strange, lets call the set of these points $S$. These are points which are far from the training dataset in the feature space.
@@ -767,7 +816,7 @@ The active learning score functions which we have specified earlier in this repo
 
 Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which rely on sampling.
 
-In comparison with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our postior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
+In comparison with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our posterior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
 The complexity of performing this is cubic in the size of the pool, this complexity is unacceptably high as we are often working with quite large pool sizes.
 
 This means that we can not use the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to make some improvements in this aspect.
@@ -795,14 +844,14 @@ The distribution $p(x)$ does not have a closed formula. We can estimate $p(x)$ v
 
 When we are considering larger and larger pool sizes the number of possible states of our random variable grows at an exponential rate.
 
-With $C$ classes the entropy sumation will have $C^n$ terms in it. 
+With $C$ classes the entropy summation will have $C^n$ terms in it. 
 
 As we have that $ X_i \perp\!\!\!\perp X_j | f$, for a given likelihood sample we can store the exponential number of terms in a factored form. We for a sample $f$, we can compute $p(x_i = c | f)$ for each of the datapoints. To reconstruct the joint distribution for this function sample we take the product of the terms and relevant categories.
 
 
 $$ p(X) = p(x_1, \ldots, x_n) = \E_{l \sim p(l)}  p(x_1, \ldots, x_n | l) = \E_{l \sim p(l)} \prod_{i=1}^n  p(x_i| l)$$
 
-\subsection{Estimating the entroy}
+\subsection{Estimating the entropy}
 
 The are 2 different approaches we can use in the estimation.
 
@@ -831,7 +880,7 @@ $$ \frac{\sqrt{K}}{\sigma} \left(H - \hat{H}_k \right) \sim \mathbf{N} \left(0, 
 
 \subsubsection{LP Estimator}
 
-Using an \textit{LP Estimator} [cite] we can estimate the the entropy with far less samples in comparision to using a plugin estimator. The required number of samples from the distribution to estimate the entropy well is \textit{sublinear}, of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support. However the amount of values with support in our problem is going to be exponential as our final layer is a softmax, which means that $d = c^n$.
+Using an \textit{LP Estimator} [cite] we can estimate the the entropy with far less samples in comparison to using a plugin estimator. The required number of samples from the distribution to estimate the entropy well is \textit{sub-linear}, of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support. However the amount of values with support in our problem is going to be exponential as our final layer is a softmax, which means that $d = c^n$.
 
 
 \subsection{Sampling from the outer summation}
@@ -848,15 +897,12 @@ We can also take advantage of the fact that the output variables are conditional
 \begin{itemize}
     \item Sample from the likelihood distribution $p(l)$
     \item Put this sample though the softmax
-    \item As the outputs of the different variables are conditionally independent given $l$, we sample once from the categorical distribuiton for each variable.
+    \item As the outputs of the different variables are conditionally independent given $l$, we sample once from the categorical distribution for each variable.
     \item This is a sample from $p(x)$
 \end{itemize}
 
-\chapter{Computation}
-\label{sec:Computation}
 
-
-\chapter{Implementaion}
+\chapter{Implementation}
 \label{sec:Implementaion}
 
 All of the experiments referenced here can easily be replicated using the codebase for this project which is linked and details in the appendices.
@@ -868,16 +914,21 @@ The code for this project is written in Python and makes significant use of the 
 
 
 \section{Computational Complexity}
-
-In this project we also endevour to minimise the computationally complexity of the operations which we need to perform to compute the quantities involved to make this project of practical use.
+\label{sec:Computation}
+In this project we endeavour to minimize the computationally complexity of the operations which we need to perform to compute the quantities involved to make this project of practical use in real world active learning scenarios.
 
 
 \subsection{Sampling from an Multivariate Distribution}
 
-
 During the creation and sampling of the Multivariate distributions we are required to compute several quantities.
 
-We generate samples from MVNs by generating samples from the identity mvn, and then transforming these samples.
+\begin{definition}[Cholesky Decomposition]
+    The Cholesky Decomposition of a positive-definite matrix $B$ is a decomposition of the form $LL^*$, where $L$ is a lower triangular matrix.
+\end{definition}
+
+This can be computed using a modified version of Gaussian Elimination.
+
+We generate samples from MVNs by generating samples from the standard mvn $Z \sim N\left(0, 1\right)$, and then transforming these samples using the mean and the cholesky decomposition of the covariance matrix.
 
 \begin{algorithm}[H]
     \SetAlgoLined
@@ -897,12 +948,12 @@ We generate samples from MVNs by generating samples from the identity mvn, and t
     \caption{Sampling from a Multivariate Gaussian}
 \end{algorithm}
 
-To sample from a distribuiton of size $n$, if the cholesky distribution is already computed this requires $O(n^2)$ operations. If it is not it requires $O(n^3)$. This encourages us to attempt to minimise the number of distint times where we must compute the cholesky distribuiton.
+To sample from a distribution of size $n$, if the cholesky distribution is already computed this requires $O(n^2)$ operations due to the matrix-vector product. If it is not it requires $O(n^3)$. This encourages us to attempt to minimize the number of distinct times where we must compute the cholesky distribution.
 
 
-\subsection{Sampling over our candidate batchs}
+\subsection{Sampling over our candidate batches}
 
-Computing samples for each possible candidate batch at each aquisition naively would lead to a complexity at each stage of $O\left(n k (d \times c)^3 \right)$ for sampling, where $k$ is the number of samples, $c$ is the number of categories, $n$ is the number of points in the pool and $d$ is the size of the current candiate batch.
+Computing samples for each possible candidate batch at each acquisition naively would lead to a complexity at each stage of $O\left(n k (d \times c)^3 \right)$ for sampling, where $k$ is the number of samples, $c$ is the number of categories, $n$ is the number of points in the pool and $d$ is the size of the current candidate batch.
 
 If we cache the cholesky distributions we can reduce the complexity to $O(n (d \times c)^3  + n k (d \times c)^2)$.
 
@@ -926,9 +977,9 @@ If we cache the cholesky distributions we can reduce the complexity to $O(n (d \
      \caption{Sampling from all possible batches}
 \end{algorithm}
 
-This level of complexity is unacceptable, however we can take advantage of the structure of our model to improve the efficency.
+This level of complexity is unacceptable, however we can take advantage of the structure of our model to improve the efficiency.
 
-As the Gaussian Process Model we are using is an \textit{independent multitask model}. This means that our covariance matrix is a block diagonal. We can take advantage of this to instead of working with covariance matrices of size $ cd \times cd $, we can work with a batch of matrices of size $c \times d \times d$ in our computaion.
+As the Gaussian Process Model we are using is an \textit{independent multitask model}. This means that our covariance matrix is a block diagonal. We can take advantage of this to instead of working with covariance matrices of size $ cd \times cd $, we can work with a batch of matrices of size $c \times d \times d$ in our computation.
 
 
 This reduces the complexity of the sampling to $O(n c (d)^3  + n k c (d)^2)$.
@@ -937,7 +988,7 @@ This reduces the complexity of the sampling to $O(n c (d)^3  + n k c (d)^2)$.
 
 We can reduce the amount of computation required by sharing computation between datapoints.
 
-We can do this as follows first by sampling from the current batch, then sampling from the conditional distribuiton of each of the datapoints. The size of the current batch will increase as our aquisitions progress, the size of the consitional distribuitons will not.
+We can do this as follows first by sampling from the current batch, then sampling from the conditional distribution of each of the datapoints. The size of the current batch will increase as our acquisitions progress, the size of the conditional distributions will not.
 
 
 \begin{algorithm}[H]
@@ -971,7 +1022,7 @@ $CreateConditional$ will require a $O(1)$ matrix vector products each with a com
 
 The complexity of this algorithm is $O\left(cd^3 + kcd^2 + nkcd^2 \right)$.
 
-The improvement here is to disconnnect the size of the poolset from the cubic $d^3$ term.
+The improvement here is to disconnect the size of the poolset from the cubic $d^3$ term.
 
 The single cubic term can also be removed by performing a rank-1 update on the inverse of the previous batch. This can be performed by using a block matrix inversion identity.
 
@@ -983,7 +1034,7 @@ $$\begin{bmatrix}
     - \left(D - CA^{-1}B \right)^{-1} C A^{-1} & \left(D - C A^{-1} B\right)^{-1}
 \end{bmatrix} $$ 
 
-Substitutioning in our rank 1 format.
+Substituting in our rank 1 format.
 
 \begin{align*}
     \begin{bmatrix}
@@ -1001,21 +1052,21 @@ If we compute the upper quadrant of the result in such an order that we compute 
 This method gives us a complexity of  $O\left(nkcd^2 \right)$ for the entire sampling.
 
 
-We can once again reduce the amount of computaion required to take $K$ samples from each candidate by taking $S = K // M$ samples from the batch and taking $M$ samples from the conditional distribuitons.
+We can once again reduce the amount of computation required to take $K$ samples from each candidate by taking $S = K // M$ samples from the batch and taking $M$ samples from the conditional distributions.
 
 
 If we do this our complexity will become $O\left(scd^2 + nscd^2 + nsmc\right)$.
 
 \subsection{Creation of GP Outputs required}
 
-To be able to compute the samples as we have above, at each stage of the aquisition we require the covariance of each point in the candidate batch and the pool points. To compute this at each batch batch directly we end up requring $O(ncd^3)$ computation to evaluate the covariance matrices. However there is clearly wasted computation as all of the candidate batches will have an identical submatrix of size $d \times d$.
+To be able to compute the samples as we have above, at each stage of the acquisition we require the covariance of each point in the candidate batch and the pool points. To compute this at each batch batch directly we end up requiring $O(ncd^3)$ computation to evaluate the covariance matrices. However there is clearly wasted computation as all of the candidate batches will have an identical sub-matrix of size $d \times d$.
 
-The approach taken in this project is as follows. We at each stage compute the GP output of the most recently aquired datapoint with each of the datapoints in the pool. The complexity of this operation is $O(nc)$, as we are only computing covariances between pairs of points.
+The approach taken in this project is as follows. We at each stage compute the GP output of the most recently acquired datapoint with each of the datapoints in the pool. The complexity of this operation is $O(nc)$, as we are only computing covariances between pairs of points.
 
-We can then cache these computaions as the aquisitions progress, we can compute all of the possible rank-1 updates to the current batch in time $O(ncd)$, from these stored values. This once again eliminates the cubic term and replaces it with a linear one.
+We can then cache these computations as the acquisitions progress, we can compute all of the possible rank-1 updates to the current batch in time $O(ncd)$, from these stored values. This once again eliminates the cubic term and replaces it with a linear one.
 
 
-Both the conditional distribuitons and the rank 1 updates are lazily generated to reduce the memory usage of the program, in addition to the computations are dynamically chunked to enable them to fit in memory and to be able to execute with limited RAM. This is essential to obtain good performance using CUDA operations on a GPU, as the amount of VRAM available limits the amount of parallel computaion one can take advantage of.
+Both the conditional distributions and the rank 1 updates are lazily generated to reduce the memory usage of the program, in addition to the computations are dynamically chunked to enable them to fit in memory and to be able to execute with limited RAM. This is essential to obtain good performance using CUDA operations on a GPU, as the amount of VRAM available limits the amount of parallel computation one can take advantage of.
 
 \subsection{Entropy}
 
@@ -1023,7 +1074,7 @@ Both the conditional distribuitons and the rank 1 updates are lazily generated t
 
 \section{Replication}
 
-To begin with replication of some of the experiments in the BatchBALD to valididate the experimental framework and to have points of comparision to work with.
+To begin with replication of some of the experiments in the BatchBALD to validate the experimental framework and to have points of comparison to work with.
 
 
 
@@ -1035,7 +1086,7 @@ To begin with replication of some of the experiments in the BatchBALD to validid
 
 \subsubsection{Training issues}
 
-When training DUE/vDUQ based models on extremely small datasets, an issue which begins to become apparent is the issue of inducing point initialisation. As feature extractor is randomly initialised, the initial inducing points we get obtain by using standard initial inducing point initialisation procuedures can lead to poor training dynamics.
+When training DUE/vDUQ based models on extremely small datasets, an issue which begins to become apparent is the issue of inducing point initialization. As feature extractor is randomly initialized, the initial inducing points we get obtain by using standard initial inducing point initialization procedures can lead to poor training dynamics.
 
 
 
@@ -1043,15 +1094,16 @@ When training DUE/vDUQ based models on extremely small datasets, an issue which 
 
 \subsection{Sampling Functions}
 
-As mentioned earlier in the paper sampling a function over the entire pool is computationally prohibative, however we can take a small enough subset of the pool over which we can calculate the joint distribution and take sample function draws.
-We can then use these as a numerical test to valididate that the more computationally efficent methods we develop are giving correct results.
+As mentioned earlier in the paper sampling a function over the entire pool is computationally prohibitive, however we can take a small enough subset of the pool over which we can calculate the joint distribution and take sample function draws.
+We can then use these as a numerical test to validate that the more computationally efficient methods we develop are giving correct results.
 
 
 \chapter{Experiments}
+\label{sec:Experiments}
 
 We have set up some of these experiments to demonstrate the issues with some of the active learning methods detailed in this paper.
 
-The random method should be impacted by how unbalanced the dataset is particuallly.
+The random method should be impacted by how unbalanced the dataset is particularly.
 
 \section{Replication}
 
@@ -1061,7 +1113,7 @@ The random method should be impacted by how unbalanced the dataset is particuall
 
 \begin{figure}[H]
 \centering
-\includegraphics[scale=1]{todo.png}
+\includegraphics[scale=0.75]{random.png}
 \caption{Random MNIST}
 \end{figure}
 
@@ -1069,7 +1121,7 @@ The random method should be impacted by how unbalanced the dataset is particuall
 
 \begin{figure}[H]
 \centering
-\includegraphics[scale=1]{todo.png}
+\includegraphics[scale=1]{Unbalanced.png}
 \caption{Random Unbalanced MNIST}
 \end{figure}
 \subsubsection{Repeated MNIST (DNN vs BNN vs DUE)}
@@ -1138,14 +1190,14 @@ The random method should be impacted by how unbalanced the dataset is particuall
 
 \section{DUE}
 
-To attempt to keep the experiments as comparible as possible, the feature extractor architecture used for DUE for this problem was the same architecture as the BNN with minimal modifications to satify the constraints of DUE. This primarily consisted of the additon of residual connections to the models, and the removal of the dropout layers.
+To attempt to keep the experiments as comparable as possible, the feature extractor architecture used for DUE for this problem was the same architecture as the BNN with minimal modifications to satisfy the constraints of DUE. This primarily consisted of the addition of residual connections to the models, and the removal of the dropout layers.
 
 
 \subsection{Training on small datasets}
 
-Training a machine learning model on a small dataset can exaherbate many issues that we run into in machine learning. For example the models we have are even further over parameterised when we are operating in very small datasets.
+Training a machine learning model on a small dataset can exacerbate many issues that we run into in machine learning. For example the models we have are even further over parameterized when we are operating in very small datasets.
 
-While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantly, the performance of DUE on small subsets of MNIST was quite significatnly impacted.
+While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantly, the performance of DUE on small subsets of MNIST was quite significantly impacted.
 
 
 \subsection{BALD}
@@ -1165,6 +1217,9 @@ While DUE has no problems in learning MNIST with more expressive models, eg more
 
 \begin{appendices}
 \chapter{Appendix}
+
+\section{Derivation of Natural Gradient }
+
 
 \end{appendices}
 
