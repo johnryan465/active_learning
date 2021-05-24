@@ -34,7 +34,7 @@ def create_training_function(path):
             data_path=path,
             aquisition_size=acquisition_size, batch_size=batch_size, dataset=DatasetName.mnist, description='ray-vduq', dropout=dropout,
             epochs=500, initial_per_class=starting_size, smoke_test=False, var_reduction=False, lr=lr, method=method, use_progress=False, model=model, model_index=0, var_opt=var_opt, n_inducing_points=n_inducing_points,
-            num_repetitions=1 name='vduq_bb_tuning', num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff, unbalanced=False)
+            num_repetitions=1, name='vduq_bb_tuning', num_aquisitions=num_aquisitions, power_iter=1, spectral_norm=True, coeff=coeff, unbalanced=False)
 
         dataset_params = parse_dataset(args)
         method_params = parse_method(args)
