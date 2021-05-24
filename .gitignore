@@ -4,6 +4,5 @@ logs/*
 experiments/*
 __pycache__/
 *.py[cod]
-*.png
 *.synctex.gz
 *.pdf
