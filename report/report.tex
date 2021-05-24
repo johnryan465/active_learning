@@ -59,11 +59,16 @@ Trinity 2021
 
 
 \thispagestyle{empty}
+
+
 \begin{abstract}
 
 This project report details extensions of various Batch Active Learning methods to the context of Deep Kernel - Multiclass Gaussian Processes Classification. By doing this we achieve SOTA active learning performance on MNIST.
 
 We are also able to improve the computational cost of of each acquisition from being $O(n^3)$, related to the pool size if implemented directly to $O(n)$.
+
+
+The contribution of this project is in 2 parts.
 
 
 \keywords{Active Learning - Gaussian Processes - Deep Kernel Learning}
@@ -363,7 +368,7 @@ Gaussian Distributions have some very useful properties which make them very use
 
 \subsubsection{Marginalisation}
 
-As we have defined our Gaussian Process over a space, and we require that any finite subset of the values to have a Gaussian Distribution, it is important that if we generated the GP output for $n$ points and then marginalize over one of them, we should  get the same result as if we generated the distribution over the remaining $n-1$ directly.
+We have defined our Gaussian Process over a space, and require that any finite subset of the values to have a Gaussian Distribution. For this to be consistent it is important that if we generated the GP output for $n$ points and then marginalize over one of them, we should get the same result as if we generated the distribution over the remaining $n-1$ directly.
 
 \begin{theorem}[Marginalisation of Gaussian Distributions]
  $$ \begin{bmatrix}
@@ -377,7 +382,7 @@ As we have defined our Gaussian Process over a space, and we require that any fi
  \end{bmatrix} \right) \rightarrow X \sim N \left(\mu_X, \Sigma_{XX} \right)$$
 \end{theorem}
 
-This means that we don't even need to compute the marginals whenever we wish to use them, we can simply drop the relevant indices from the mean and covariance.
+This means that we don't need to compute the marginals when we wish to use them, we can instead drop the relevant indices from the mean and covariance.
  
 
 \subsubsection{Conditioning}
@@ -1068,6 +1073,7 @@ While DUE has no problems in learning MNIST with more expressive models, eg larg
 
 To account for this observed effect, for all of our models we use the feature extractor architecture from \cite{kirsch2019batchbald}, in their MNIST experiments, with minimal modifications. This has the added benefit of making the comparison of our models directly comparable to their experimental framework.
 
+For these experiments, we used an acquisition size of 10 and acquire up 300 points.
 
 \section{Model Outlines}
 
@@ -1139,91 +1145,41 @@ The BNN is the same design as from \cite{kirsch2019batchbald}, as detailed in th
 The DNN used in these experiments is the same as the feature extractor we use for DUE, with an additional linear layer to project the feature dimension to the number of classes $10$.
 
 
-\section{Replication}
 
-The first set of experiments which were done were to attempt to replicate the performance observed in the \cite{kirsch2019batchbald} for BatchBALD and BALD with a BNN.
-
-\subsection{Random}
-
-\subsubsection{MNIST (DNN vs BNN vs DUE)}
+\subsection{DUE}
 
 \begin{figure}[H]
 \centering
-\includegraphics[scale=0.75]{random.png}
+\includegraphics[scale=0.75]{due/mnist.png}
 \caption{Random MNIST}
 \end{figure}
 
-\subsubsection{Unbalanced MNIST (DNN vs BNN vs DUE)}
+On the standard MNIST dataset, we observe that the entropy objective performs the best. With the random acquisition performing very strongly.
+
+In \cite{kirsch2019batchbald}, there is no direct comparison of the performance of BatchBALD and random on standard MNIST. Here we perform that comparison and emphasis how strong the random baseline is.
+
 
 \begin{figure}[H]
 \centering
-\includegraphics[scale=1]{Unbalanced.png}
+\includegraphics[scale=1]{due/repeated.png}
 \caption{Random Unbalanced MNIST}
 \end{figure}
-\subsubsection{Repeated MNIST (DNN vs BNN vs DUE)}
 
 \begin{figure}[H]
 \centering
-\includegraphics[scale=1]{todo.png}
+\includegraphics[scale=1]{due/repeated.png}
 \caption{Random Repeated MNIST}
 \end{figure}
 
-\subsection{BALD}
+\subsection{BNN}
 
-\subsubsection{MNIST (BNN vs DUE)}
 
+\subsection{Entropy}
 \begin{figure}[H]
-\centering
-\includegraphics[scale=1]{todo.png}
-\caption{BALD MNIST}
+    \centering
+    \includegraphics[scale=1]{entropy/single_run.png}
+    \caption{Entropy MNIST}
 \end{figure}
-
-\subsubsection{Unbalanced MNIST (BNN vs DUE)}
-
-\begin{figure}[H]
-\centering
-\includegraphics[scale=1]{todo.png}
-\caption{BALD Unbalanced MNIST}
-\end{figure}
-
-\subsubsection{Repeated MNIST (BNN vs DUE)}
-
-\begin{figure}[H]
-\centering
-\includegraphics[scale=1]{todo.png}
-\caption{BALD Repeated MNIST}
-\end{figure}
-    
-
-\subsection{BatchBALD}
-
-\subsubsection{MNIST (BNN vs DUE)}
-
-\includegraphics{todo.png}
-
-\subsubsection{Unbalanced MNIST (BNN vs DUE)}
-
-\includegraphics{todo.png}
-
-\subsubsection{Repeated MNIST (BNN vs DUE)}
-
-\includegraphics{todo.png}
-
-
-\subsection{Joint Entropy}
-
-\subsubsection{MNIST (BNN vs DUE)}
-
-\includegraphics{todo.png}
-
-\subsubsection{Unbalanced MNIST (BNN vs DUE)}
-
-\includegraphics{todo.png}
-
-\subsubsection{Repeated MNIST (BNN vs DUE)}
-
-\includegraphics{todo.png}
-
 
 
 
@@ -1267,7 +1223,7 @@ The randomly selected datapoints are not very useful to observe but are included
     \end{subfigure}
 \end{figure}
 
-We can qualitatively observe that the points which the entropy method selects are diverse, as are the points selected by BatchBALD. BatchBALD selects points which are similar but the model believes could be of distinct classes. The 3 and 8 selected look similar but are of 2 different classes.
+We can qualitatively observe that the points which the entropy method selects are diverse, as are the points selected by BatchBALD. BatchBALD selects points which are similar but the model believes could be of distinct classes. The 3 and 8 selected look similar but are of 2 different classes. The points selected by the entropy method only is 
 
 
 \subsection{Entropy vs BatchBALD for DUE}
@@ -1301,6 +1257,9 @@ When the value of sigma is very low, we will get that the conditional entropy $\
 
 These 3 different output scales and their corresponding density plots, could motivate augmenting DUE with an additional form of regularization on the output scale to avoid both of those failure modes when in DUE.
 
+\subsection{Training variance}
+
+In from the experiments that we have run it appears that DUE has higher variance in run to run training in comparison to training with a BNN. While attempts were made to improve the stability of training of DUE by increasing the number of inducing points and the use of NGD, the difference in this is still noticeable.
 
 \section{Future Extensions}
 
@@ -1351,7 +1310,6 @@ These are examples of the first 6 batches acquired by the various active learnin
 
 \section{Training Curves}
 
-\section{Derivation of Natural Gradient Descent}
 
 \end{appendices}
 

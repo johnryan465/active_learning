@@ -72,8 +72,8 @@ if __name__ == "__main__":
         config={
             "lr": 0.001,
             "dropout": 0.0,
-            "method": tune.grid_search(["batchbald","entropy","random","bald"]),
-            "model": tune.grid_search(["bnn"]),
+            "method": tune.grid_search(["random"]),
+            "model": tune.grid_search(["dnn"]),
             "coeff": 9,
             "batch_size": 64,
             "starting_size": 2,
