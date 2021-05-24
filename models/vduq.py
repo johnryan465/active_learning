@@ -197,11 +197,9 @@ class vDUQ(UncertainModel):
                 }
             )
 
-        self.optimizer = torch.optim.SGD(
+        self.optimizer = torch.optim.Adam(
             self.model_parameters,
-            lr=training_params.optimizers.optimizer,
-            momentum=0.9,
-            weight_decay=fe_params.weight_decay
+            lr=training_params.optimizers.optimizer
         )
 
         if num_data < 40:

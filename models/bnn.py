@@ -134,9 +134,8 @@ class BNN(UncertainModel):
             "lr": self.training_params.optimizers.optimizer}]
 
         milestones = [60, 120, 160]
-        self.optimizer = torch.optim.SGD(
-            self.parameters, lr=self.training_params.optimizers.optimizer,
-            momentum=0.9, weight_decay=self.nn_params.weight_decay
+        self.optimizer = torch.optim.Adam(
+            self.parameters, lr=self.training_params.optimizers.optimizer
         )
         if self.training_params.cuda:
             self.model = self.model.cuda()
