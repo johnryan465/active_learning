@@ -176,7 +176,7 @@ class vDUQ(UncertainModel):
             self.likelihood = self.likelihood.cuda()
             init_inducing_points = init_inducing_points.cuda()
 
-        model_parameters = [
+        self.model_parameters = [
             {"params": self.model.feature_extractor.parameters(),
                 "lr": training_params.optimizers.optimizer},
             {"params": self.likelihood.parameters(
@@ -191,14 +191,14 @@ class vDUQ(UncertainModel):
             self.variational_ngd_optimizer = gpytorch.optim.NGD(self.ngd_parameters, num_data=num_data)
 
         else:
-            model_parameters.append({
+            self.model_parameters.append({
                     "params": self.model.gp.parameters(),
                     "lr": training_params.optimizers.optimizer
                 }
             )
 
         self.optimizer = torch.optim.SGD(
-            model_parameters,
+            self.model_parameters,
             lr=training_params.optimizers.optimizer,
             momentum=0.9,
             weight_decay=fe_params.weight_decay

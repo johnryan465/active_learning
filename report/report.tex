@@ -33,8 +33,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \date{}
 
-\title{Active Learning}
-\author{\\ \Large{John Ryan}
+\title{Batch Active Learning using Deep Kernel Gaussian Process Classifiers}
+\author{\\ \Large{Candidate Number: 1032626}
 \\ Computer Science
 \\
 \\
@@ -61,6 +61,9 @@ Trinity 2021
 \thispagestyle{empty}
 \begin{abstract}
 
+This project report details extensions of various Batch Active Learning methods to the context of Deep Kernel - Multiclass Gaussian Processes Classification. By doing this we achieve SOTA active learning performance on MNIST.
+
+We are also able to improve the computational cost of of each acquisition from being $O(n^3)$, related to the pool size if implemented directly to $O(n)$.
 
 
 \keywords{Active Learning - Gaussian Processes - Deep Kernel Learning}
@@ -79,6 +82,13 @@ Trinity 2021
     \item[BALD] Bayesian Active Learning by Disagreement
     \item[ELBO] Evidence Lower Bound
     \item[ML] Machine Learning
+    \item[MNIST] Modified National Institute of Standards and Technology (A standard handwritten digit dataset)
+    \item[BALD] Bayesian Active Learning by Disagreement
+    \item[vDUQ] Variational Deterministic Uncertainty Quantification
+    \item[DUE]   Deterministic Uncertainty Estimation
+    \item[CUDA] Compute Unified Device Architecture
+    \item[VRAM] Video Random Access Memory  
+    \item[CIFAR10] A standard academic image classification dataset 
 \end{abbreviations}
 
 \chapter{Introduction}
@@ -96,9 +106,10 @@ Active Learning is an active area of Machine Learning where we are trying to sel
 The aims of this report is to
 
 \begin{itemize}
-    \item Give an outline of the various methods for Active Learning which have been published
+    \item Give an outline of the various methods for Active Learning in the literature which we will be investigating
     \item Extend BathBald and related methods to Gaussian Process Classifiers with Deep Kernel Learning
     \item Reduce the computation required to perform these calculations to make it of practical use.
+    \item Perform experiments to validate the performance of our created methods methods.
 \end{itemize}
 \section{Project Report Outline}
 The remainder of this report is organized as follows:
@@ -135,7 +146,9 @@ An important observation is that the dataset we are using for training is (unles
 
 This violates a very common assumption that we assume for convergence in many ML methods, and is something worth keeping in mind. This statistical bias is looked at in the following paper \cite{farquhar2021statistical}.
 
-When working with Active Learning we are also normally working with much smaller datasets than is standard in ML, our models which are normally over-parametrized to begin with become even more so, this can lead to training issues.
+When working with Active Learning we are normally working with much smaller datasets than is standard in ML, our models which are normally over-parametrized to begin with become even more so, this can lead to training issues.
+
+Next we will describe the active learning methods which we will be investigating in this report.
 
 \section{Random}
 
@@ -183,7 +196,7 @@ The BatchBALD score function is as follows.
     $$f(A) + f(B) \geq f\left( A \cup B \right) +  f\left(A \cap B \right) $$
 \end{definition}
 
-The authors of the paper prove that the objective function that they specify is \textit{sub-modular}, which enables a greedy $1 - \epsilon$ approximation algorithm for selecting the optimum batch.
+The authors of the paper prove that the objective function that they specify is \textit{sub-modular}, which enables a greedy $1 - \frac{1}{\epsilon}$ approximation algorithm for selecting the optimum batch.
 
 
 
@@ -225,7 +238,10 @@ $$\min_{B} H( \left(P \setminus B\right) | B) = \min_{B} H(P) - H(B) = \min_{B} 
 
 If we assume that the samples in the poolset are samples from the true distribution, we can view this as attempting to minimize the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimize the entropy of the parameters maximally fast.
 
-In the next chapter we will discuss some reasons while this may be preferable when using a Gaussian Process Classifier.
+\subsection{Predictive Entropy vs Joint Entropy}
+
+The predictive entropy of a machine learning classification model is the entropy of the categorical random variable which it has output. It is important for us to distinguish between this quantity and the joint entropy for clarity. This expected value of this quantity is the second term in the BatchBALD objective. The joint entropy term is a representation of how unsure we are about the probabilities which we have used in our categorical variables, where the predictive entropy is a measure of how uncertain we are about the quantity itself.
+
 
 \chapter{Bayesian Machine Learning Models}
 \label{sec:Models}
@@ -291,7 +307,7 @@ Much of the time we do not have strong priors about what the initial distributio
 
 Many of the integrals we need to perform for Bayesian inference are intractable, which unfortunately require us to perform approximation of these quantities to use these methods.
 
-The use of dropout, a regularization method where during train time we randomly with some probability $p$ set some of the outputs from a layer to 0 can be seen as an approximate method when using BNNs.
+The use of dropout, a regularization method where during train time we randomly with some probability $p$ set some of the outputs from a layer to 0 can be seen as an approximate method when using BNNs. \cite{gal2016dropout}
 
 BNNs however are limited in their expressive power via their structure, next we will look into Gaussian Processes which can approximate arbitrarily* complex function.
 
@@ -300,7 +316,7 @@ BNNs however are limited in their expressive power via their structure, next we 
 
 
 \begin{definition}[Gaussian Process]
-    A Gaussian processes is a collection of random variables, any finite number of which have a joint Gaussian distribution. \cite[]{rasmussen2003gaussian}
+    A Gaussian processes is a collection of random variables, any finite number of which have a joint Gaussian distribution. \cite{rasmussen2003gaussian}
 \end{definition}
 
 
@@ -312,13 +328,13 @@ The output distribution for any subset of points in $\chi$ can be easily found b
 
 \subsection{Why Gaussian Processes?}
 
-The motivation for gaussian processes is not immediately obvious when they are first introduced, however they are an extremely powerful and useful method.
+The motivation for Gaussian Processes is not immediately obvious when they are first introduced, however they are an extremely powerful and useful Bayesian ML model.
 
-We are immediately constraining ourselves to having Gaussian valued outputs, this is often an approximation which we choose when working with more general Bayesian Methods as we often do not have any particular reason to use a different noise output.
+We are immediately constraining ourselves to having Gaussian distributed outputs, this is often an approximation which we choose when working with more general Bayesian Methods as we often do not have any particular reason to use a different noise output.
 
-The key reason is that Gaussian Processes can model arbitrarily* complex functions given enough data paired with a good covariance function.
+A key reason is that Gaussian Processes can model arbitrarily* complex functions given enough data paired with a good covariance function.
 
-It also turns out that a Gaussian Process is the limit of an infinite width feedforward neural network when the weights of the network are initialized from a Gaussian distribution. [cite]
+It also turns out that a Gaussian Process is the limit of an infinite width feedforward neural network when the weights of the network are initialized from a Gaussian distribution. \cite{GPInfinite}
 
 We will return to these advantages after explaining more about how they function.
 
@@ -327,7 +343,7 @@ We will return to these advantages after explaining more about how they function
 For $k$ to be a valid covariance (kernel) function we need for any evaluation of the covariance matrix to be a symmetric positive definite matrix (as all covariance matrices of random variables must be S.P.D).
 
 \begin{definition}[Positive Definite Matrix]
-    A positive definite matrix is a matrix which has positive eigenvalues.
+    A positive definite matrix is a matrix which has all positive eigenvalues.
 \end{definition}
 
 The kernel function of a GP defines the space of functions over which it is going to be defined.
@@ -367,38 +383,10 @@ We can use Bayes rule to update the covariance and mean function from our prior,
 
 This can be done as follows: 
 
-\subsection{Reproducing Kernels Hilbert Spaces}
+\subsection{Space of functions which can be represented}
 
-The interpretation of Gaussian Processes in the context of reproducing kernel hilbert spaces really makes it clear just how powerful of a method we are working with, and the importance of selecting a good kernel.
+While the technical details of the exact space of functions from which our GP is a distribution over is beyond the scope of this report, we will however give some details about how the kernel effects this space.
 
-
-\begin{definition}[Hilbert Space]
-    
-\end{definition}
-
-\begin{definition}[Reproducing Kernel Hilbert Space]
-    Let $X$ be a set over which define our functions and let $H$ be the Hilbert Space of real-valued functions 
-\end{definition}
-
-\begin{definition}[Mercers Theorem]
-    
-\end{definition}
-
-
-The sample function draws belong to $H$ with probability $1$. This construction shows that the set of functions over which our GP can represent is controlled entirely by the kernel. The use of the Radial Basis Kernel induces the constraint that our functions will be in $C^\infty$.
-
-
-
-\subsection{As distributions over functions}
-
-
-We can understand this by investigating the interpretation of kernels as Reproducing Kernel Hilbert Spaces.
-
-
-
-A positive definite kernel function can be represented by a feature space where the value of the kernel between 2 values can be computed by taking the inner product of the feature space of the 2 values.
-
-Certain kernel functions such as the radial basis kernel, is represented by an infinite dimensional feature space. This infinite dimensional feature space enables it to model arbitrarily complex functions. Polynomial or linear kernels do not enable this level of expressivity.
 
 
 
@@ -414,91 +402,22 @@ One of the most successful approaches is to treat these inducing points as model
 
 Minimizing the evidence lower bound (ELBO) is a common and principled object for this task.
 
-Minimizing this objective minimizes the KL Divergence between the true output distribution and the approximate distribution we are learning.
+Minimizing this objective minimizes the KL Divergence between the true output distribution and the approximate distribution we are learning, leading to us learning the closest conjigate distribution to the true distribution.
 
-\subsubsection{Random Fixed Features}
+\subsubsection{Random Fourier Features}
 
-In this approximation approach, we do not use the complete kernel matrix, but instead use a low rank approximation to the kernel bases on random fourier features. [cite]
-
-
-\subsubsection{Low Rank Approximations}
-
-Various other low rank approximation methods for the covariance have been proposed such as [], [], []
+In this approximation approach, we approximate the kernel function using finite basis function expansion. \cite{RFF}. 
 
 
+\subsubsection{Other approximation}
 
-\section{Gaussian Process Classification}
-
-
-To use Gaussian Processes for classification we have several issues to overcome.
-
-The output of a Gaussian Process is a Multivariate Normal, this is a continuous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
-
-We can in theory use any link function to convert a sample from our MVN in $R^n$ to a sample over the simplex, different link functions have different properties computationally and statistically.
-
-\subsection{Link Functions}
-
-The link function between the latent function (our GP) and the output of our classifier is again another parameter of the model.
-
-\subsubsection{Logit}
-
-The logit is the standard link function for the vast majority of GPC use cases. The use of the logit implicitly makes our GPC model obey the independence of irrelevant alternatives axiom from decision theory. 
-
-
-$$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
-
-
-The marginal distribution using this link function does not have.
-
-
-\subsubsection{Probit}
-
-The probit is a different link function which is normally defined for the binary classification case as the inverse of the CDF of a Gaussian. We can generalize this link function as follows.
-
-$$p\left(y = k | f\right) = \mathbf{1}_{argmax_i(f_i) = k}$$
-
-
-The probit function is easier to work with analytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the definitions that a single sample draw from a GPC using a probit will not give an accurate assessment of the confidence of the model.
-
-
-\label{sec:Integration}
-
-If we use probit as our link function, we can take advantage of the fact that it is possible to exactly compute the marginal to get exact results.
-
-If we can compute $p(y=k)$, we can also compute the joint entropy exactly (unlike in the case with an arbitrary link function), however the complexity of this exact computation is very high.
-
-
-
-To perform exact inference of a Probit GPC, we must perform integration of a Gaussian R.V. This is a well studied problem in the literature. [cite].
-
-
-We wish to find the probability that a certain element of a MVN is the largest element. This corresponds to integrating the Gaussian over the subset of the space where this coordinate is the largest.
-
-$$P(X_C > X_1 \land \ldots \land X_C > X_n) = \int_{x_c \in \{ -\infty, \infty \} } \ldots \int_{x_n \in \{ -\infty , x_c \}} p(x) dx$$
-
-This can be interpreted as integrating on one side of several hyperplanes.
-
-These planes are of the form $x_c = x_i$
-
-We can perform a linear transformation on this space to project it to a subspace of dimension $n-1$, and align each of the hyperplanes with an axis.
-
-$Z = TX$.
-
-$Z \sim N(T \mu, T \Sigma T^T)$
-
-
-If we are doing this over multiple datapoints, we can transform each of the subsets of variables via the method above.
-
-After performing this transformation we have a standard orthant integral which we can compute. Algorithms exist for computing this exactly in $O(p^2 2^p)$ using recursive integration and subspace projection. \cite{orthant}
-
-
-However the number of dimensions which we are performing this integration over is $O(dc)$. With the exponential complexity in the number of dimensions this is an infeasible method.
+Various other low rank approximation methods for the covariance have been proposed such as [, [], []
 
 
 
 \section{Training}
 
-Using a straightforward Gaussian Process with no hyper parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribution at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribution so our objective should take this into account.
+Using a straightforward Gaussian Process with no hyper-parameters, for regression there is nothing to train. We simply have the exact equations to compute the posterior distribution at any possible input. In contrast to many optimization problems our output for any particular value is not a point estimate, it is a distribution so our objective should take this into account.
 
 
 \subsection{KL Divergence}
@@ -526,6 +445,74 @@ The Evidence Lower Bound is a tractable objective which it is much easier for us
         D_{KL} \left( Q || P \left(L | X\right) \right) &= 
     \end{align*}
 \end{proof}
+
+
+\section{Gaussian Process Classification}
+
+To use Gaussian Processes for classification we have several issues to overcome.
+
+The output of a Gaussian Process is a Multivariate Normal, this is a continuous distribution over the real space, however in the classification setting we wish to have a categorical output. Which means we need to have a distribution over the the simplex.
+
+We can in theory use any link function to convert a sample from our MVN in $R^n$ to a sample over the simplex, different link functions have different properties computationally and statistically.
+
+\subsection{Link Functions}
+
+The link function between the latent function (our GP) and the output of our classifier is again another parameter of the model.
+
+\subsubsection{Logit}
+
+The logit is the standard link function for the vast majority of GPC use cases. The use of the logit implicitly makes our GPC model obey the independence of irrelevant alternatives axiom from decision theory \cite{resnet}.
+
+
+$$p\left( y = k | f\right) = \frac{e^{f^T w_k}}{\sum_{i=1}^{K} e^{f^T w_i}}$$
+
+
+The marginal distribution using this link function does not have a closed form.
+
+
+\subsubsection{Probit}
+
+The probit is a different link function which is normally defined for the binary classification case as the inverse of the CDF of a Gaussian. We can generalize this link function as follows.
+
+$$p\left(y = k | f\right) = \mathbf{1}_{argmax_i(f_i) = k}$$
+
+
+The probit function is easier to work with analytically, and great use of this is made in the binary classification case \cite{houlsby2011bayesian}. However it is clear from the definitions that a single sample draw from a GPC using a probit will not give an accurate assessment of the confidence of the model.
+
+
+\label{sec:Integration}
+
+If we use probit as our link function, we can take advantage of the fact that it is possible to exactly compute the marginal to get exact results.
+
+If we can compute $p(y=k)$, we can also compute the joint entropy exactly (unlike in the case with an arbitrary link function where we are generally restricted to using MC integration), however the complexity of this exact computation is very high.
+
+
+To perform exact inference of a Probit GPC, we must perform integration of a Gaussian R.V. This is a well studied problem in the literature. \cite{orthant1}.
+
+
+We wish to find the probability that a certain element of a MVN is the largest element. This corresponds to integrating the Gaussian over the subset of the space where this coordinate is the largest.
+
+$$P(X_C > X_1 \land \ldots \land X_C > X_n) = \int_{x_c \in \{ -\infty, \infty \} } \ldots \int_{x_n \in \{ -\infty , x_c \}} p(x) dx$$
+
+This can be interpreted as integrating on one side of several hyperplanes.
+
+These planes are of the form $x_c = x_i$
+
+We can perform a linear transformation on this space to project it to a subspace of dimension $n-1$, and align each of the hyperplanes with an axis.
+
+$Z = TX$.
+
+$Z \sim N(T \mu, T \Sigma T^T)$
+
+
+If we are doing this over multiple datapoints, we can transform each of the subsets of variables via the method above.
+
+After performing this transformation we have a standard orthant integral which we can compute. Algorithms exist for computing this exactly in $O(p^2 2^p)$ using recursive integration and subspace projection. \cite{orthant}
+
+
+However the number of dimensions which we are performing this integration over is $O(dc)$. With the exponential complexity in the number of dimensions this is an infeasible method.
+
+
 
 
 \chapter{vDUQ / DUE}
@@ -609,7 +596,7 @@ To maintain this during training we are required to compute this value during ev
 
 \section{Residual Connections}
 
-Residual connections were introduced in by [cite]. The indention of these connections in deep learning is to minimize the vanishing gradient problem. This is an issue that when we have particularly
+Residual connections are a type of Neural Network structure, where the input of one layer can be passed directly to the input of the next layer. The intention of these connections in deep learning is to alleviate the vanishing gradient problem \cite{resnet}. This is an issue that when we have particularly
 
 $$H(x) = F(x) + x$$
 
@@ -726,103 +713,38 @@ We have now arrived at the update equations which we can use as our optimization
 
 
 
+\subsection{Inducing Points}
+
+In \cite{vanamersfoort2020uncertainty}, it is demonstrated that the excellent uncertainty which DUE can achieve can be reached when using very few inducing points. In the paper they demonstrate using 10 inducing points with CIFAR10. When working with small amounts of data, it was observed that when using 10 inducing points only, that training would often become quite unstable. These issues however resolved when increasing the number of inducing points from 10 to 20.
 
 
 
-\chapter{Active Learning with DUE}
+
+
+\chapter{GPC specific considerations}
 \label{Chap5}
 
 
 
-\section{Comparison of BALD and Entropy for DUE}
+\section{Sampling from the function posterior}
 
-The motivation for the BALD objective in the original paper where it was introduced \cite{houlsby2011bayesian}, is to select the point which maximally reduce the uncertainty over the hypothesis space.
+The active learning score functions which we have specified earlier in this report, if implemented directly would require us to be able to take function samples from the underlying Gaussian Process.
 
+In comparison with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output.
 
-\subsection{Conditional Entropy}
+Taking a function sample from a BNN can be done by sampling the weights, these weights along with the structure of the BNN define a function over the entire space where the BNN itself is defined.
 
-The second part of the BALD object is the conditional entropy of the output variable conditioned on the function value. The output length scale of our model is a learned parameter of our model. When our GPs on the feature space reverts to the prior, the conditional entropy will become a function of the output scale of the GP.
+Samples from a Gaussian Process are not taken in a similar fashion, they are taken as samples from the MVN defined over a set of \textbf{particular} inputs. Without knowing all of the points where you wish to evaluate the GP you can't create a function sample, (in general). 
 
-All of the covariance matrices will be scaled by this output length scale, and the value of the conditional entropy is very dependent on this value. Without a good prior the learned value of this parameter 
+If we wished to take a function draw over our poolset. This would have $O(n^3)$ complexity, which given our poolset can be quite large, is unacceptably costly. 
 
-The smaller the output scale the larger the value of the conditional entropy will be in this context.
+We can however instead of attempting to take a sample over all possible inputs, we can incrementally create function samples. This can be done by repeatedly creating conditional distributions, sampling from that conditional distribution and using this sample to create a new distribution to repeat the process. We exploit this fact later on in this report for computational speed ups.
 
-We can observe the difference in behavior by comparing the PCA of the feature space embeddings of the top 10 candidate points for BatchBALD (top 10 points by BALD score) and top 10 points by Entropy score.
-
-When we use PCA trained on our training datapoints feature embeddings, we get that the top 10 points in entropy are clustered in the centre in our plot. However the BALD points are widely dispersed along these axises.
-
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[scale=1]{PCA.png}
-    \caption{PCA of feature embeddings}
-\end{figure}
-        
-
-The use of joint entropy in place of Bald, selects points where there primarily differences are not along the primary axis where the majority of the variations of the trainset are.
+These issues mean that we can not easily use many of the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to improve computational performance in other ways.
 
 
 
-Lets consider 2 types of points in which our model is unsure about.
-
-Category 1, strange, lets call the set of these points $S$. These are points which are far from the training dataset in the feature space.
-
-Category 2, confusing, lets call the set of these points $C$. These are points which are near the training dataset in the feature space but are near to multiple different categories in this space, the model does not have a clear idea of what class this datapoints is.
-
-
-
-\subsection{BatchBALD}
-For the points in $S$, the model will revert to the prior (as we are far from the dataset), the covariance between these points and most others will be quite small also.
-
-This small covariance will lead to the conditional entropy of the datapoint given the other previously selected points being quite similar to the entropy of the datapoint alone.
-
-While this datapoint is evidently strange, being far away from other points in the feature space. The BatchBald score for this datapoint will be quite small.
-
-For points in category $C$ this problem does not occur.
-
-This means that when we are using the BatchBALD as our objective, we will be first acquiring the most confusing points.
-
-
-This behavior is observed when training with the BatchBALD objective. We observe error oscillations, where we tend to select datapoints which are ambiguous between categories.
-
-\subsection{Joint Entropy}
-When using the joint entropy of the variables we get that the points in category $S$ will be close to uniform, (as all of our GP outputs have the same mean).
-
-This will give these points high entropy, this means that if we use this objective we would be sampling primarily from points in the set $S$ first, before points in the set $C$.
-
-This means that when we are using the joint entropy as our objective, we will be first acquiring the most diverse points and then we would begin to select the more confusing points as they would still have higher entropy than well represented points.
-
-
-\subsection{Why is this different?}
-
-This is not an issue which is observed in \cite{kirsch2019batchbald} where the BatchBALD objective is used or in \cite{houlsby2011bayesian} where the BALD objective is used with GPCs. 
-
-In \cite{kirsch2019batchbald}, the key reason is the use of BNNs. This property where the covariance between 2 points is related via some vaguely distance preserving function does not exist. This means that for points far away from the training data, the conditional entropy will not necessarily be uniform leading to the subtracted value being significantly smaller than in our case.
-
-But how do we reconcile this with the original paper \cite{houlsby2011bayesian}, where Gaussian Process Classification is used?
-
-
-The artificial datasets which are used in this paper are quite low dimensional, (3 of the experiments are in 2 dimensions), in contrast the size of the feature space we are working with is 1024 dimensional. The expected euclidean norm between random points in higher dimensional space increases quite quickly, which will lead to a lower covariance between datapoints.
-
-The kernel indicates how far to we should extrapolate. Additionally when we are applying a GPC to a fixed dataset, we can select the relevant hyperparameter quite well based on the scale of the data. However in DUE we are applying this to a learned feature space, for which these hyperparameters can not be easily determined in advance and the optimum value would constantly change throughout training.
-
-
-Given we have intentionally designed our model to not extrapolate too far beyond the dataset we have seen, it seems clear that to improve performance on the datapoints which are far from all of the training datapoints we will need to acquire some of these points and that simply selecting the points which enable the model to distinguish between ambiguous classes alone will not lead to the best active learning performance. Given MNIST has many examples which are quite difficult for even a human to distinguish, there is no shortage of datapoints in the $C$ class.
-
-
-\section{Sampling}
-
-The active learning score functions which we have specified earlier in this report require us to sample from the underlying distributions of our GPC.
-
-Given the difficultly of performing exact computation of the quantities required for the BatchBALD objective, the general approach is to use methods which rely on sampling.
-
-In comparison with the approach performed in the BatchBALD paper where sampling is done over the weights of the Bayesian Neural Network, when we have a Gaussian Process as our output. It is not as straightforward to take a sample function from our posterior. If we are to take a sample function output over a set out points, we would need to compute the joint distribution of these points and then take a sample from this distribution and pass this through our link function.
-The complexity of performing this is cubic in the size of the pool, this complexity is unacceptably high as we are often working with quite large pool sizes.
-
-This means that we can not use the same computational tricks used previously to speed up these calculations, however we can take advantage of other properties of Gaussian Processes to make some improvements in this aspect.
-
-
-\section{Entropy}
+\section{Calculating Entropy}
 \label{sec:Entropy}
 
 \begin{definition}[Entropy]
@@ -830,7 +752,12 @@ This means that we can not use the same computational tricks used previously to 
 \end{definition}
 
 
-We require the ability to compute the joint entropy of a large number of random variables to compute several of the score functions which we are evaluating.
+We require the ability to compute the entropy of random variables with a large state space. (When considering the joint entropy of random variables, the size of the state space is exponential in the number of random variables).
+
+When we are considering larger and larger pool sizes the number of possible states of our random variable grows at an exponential rate.
+
+With $C$ classes the entropy summation will have $C^n$ terms in it. 
+
 
 \subsection{Gaussian Process Classifier}
 As we are using a Gaussian Process Classifier, the random variable of which we are trying to estimate the value of is of a known form.
@@ -840,11 +767,9 @@ $$ \mathbf{f} \sim N(\mu, \Sigma) $$
 $$ \mathbf{p} =  \sigma \left(f \right) $$
 $$ X_i \sim Cat(p_i) $$
 
-The distribution $p(x)$ does not have a closed formula. We can estimate $p(x)$ via estimating the integral via monte carlo integration.
+The distribution $p(x)$ does not have a closed formula (in general). We can estimate $p(x)$ via estimating the integral via monte carlo integration.
 
-When we are considering larger and larger pool sizes the number of possible states of our random variable grows at an exponential rate.
 
-With $C$ classes the entropy summation will have $C^n$ terms in it. 
 
 As we have that $ X_i \perp\!\!\!\perp X_j | f$, for a given likelihood sample we can store the exponential number of terms in a factored form. We for a sample $f$, we can compute $p(x_i = c | f)$ for each of the datapoints. To reconstruct the joint distribution for this function sample we take the product of the terms and relevant categories.
 
@@ -853,16 +778,22 @@ $$ p(X) = p(x_1, \ldots, x_n) = \E_{l \sim p(l)}  p(x_1, \ldots, x_n | l) = \E_{
 
 \subsection{Estimating the entropy}
 
-The are 2 different approaches we can use in the estimation.
+The are 2 different approaches we can use in the estimation of entropy.
+
+\begin{itemize}
+    \item Estimating by taking samples from the distributions
+    \item Estimating given independent conditional variables
+\end{itemize}
+
+
 
 \subsection{Taking samples from the distribution}
 
 We can take samples from the distribution, and then use these samples to estimate the entropy.
 
 
-
 \subsubsection{Plugin Estimator}
-The most straightforward approach is to use the \textit{plugin estimator}. This approach is to take $k$ samples from the distribution of interest, calculate the observed probability of each class and compute the entropy.
+The most straightforward approach is to use the \textit{plugin estimator} \cite{van2000asymptotic}. This approach is to take $k$ samples from the distribution of interest, calculate the observed probability of each class and compute the entropy.
 
 As we define the term in the entropy summation as $0$, when the probability is $0$. Using this approach bounds the number of terms in the summation by $k$.
 
@@ -880,22 +811,22 @@ $$ \frac{\sqrt{K}}{\sigma} \left(H - \hat{H}_k \right) \sim \mathbf{N} \left(0, 
 
 \subsubsection{LP Estimator}
 
-Using an \textit{LP Estimator} [cite] we can estimate the the entropy with far less samples in comparison to using a plugin estimator. The required number of samples from the distribution to estimate the entropy well is \textit{sub-linear}, of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support. However the amount of values with support in our problem is going to be exponential as our final layer is a softmax, which means that $d = c^n$.
+Using an \textit{LP Estimator} \cite{} we can estimate the the entropy with far less samples, when comparing to using a plugin estimator. The required number of samples from the distribution to estimate the entropy well is \textit{sub-linear}, of the order $O \left( \frac{d}{\log{d}}\right)$, where $d$ is the number of values in the domain which have positive support. However the amount of values with support will be the entire state space, so in our problem this is going to be exponential due to our final layer being a softmax, which means that $d = c^n$.
 
 
-\subsection{Sampling from the outer summation}
+\subsection{Estimating given independent conditional variables}
 
-As we can actually compute the values $p(x)$ without sampling from the final categorical distribution, we can take advantage of this fact to improve the performance of our estimator. We can directly obtain the probabilities after the softmax. This enables us to perform the estimation in 2 steps.
+As we can actually compute the values $p(x)$ without sampling from the final categorical distribution, and we can take advantage of this fact to improve the performance of our estimator. We can directly obtain the probabilities after the softmax. This enables us to perform the estimation in 2 steps.
 
 \begin{itemize}
-    \item Sample from the outer summation to see which values of $p(x)$ we are required to compute.
-    \item Estimate $p(x)$ directly from the output of the softmax.
+    \item Repeatedly sample from $p(x)$, these samples are the values of $x$ for which we will be using to compute the expectation.
+    \item For this fixed value $x$, estimate $p(x)$ directly from the function samples which we have computed.
 \end{itemize}
 
 We can also take advantage of the fact that the output variables are conditionally independent given a function sample. This enables us to sample from $p(x)$ without requiring an exponential amount of computation by sampling from the distribution in the following the following sequence of steps.
 
 \begin{itemize}
-    \item Sample from the likelihood distribution $p(l)$
+    \item Sample from the likelihood distribution $p(f)$
     \item Put this sample though the softmax
     \item As the outputs of the different variables are conditionally independent given $l$, we sample once from the categorical distribution for each variable.
     \item This is a sample from $p(x)$
@@ -1055,7 +986,22 @@ This method gives us a complexity of  $O\left(nkcd^2 \right)$ for the entire sam
 We can once again reduce the amount of computation required to take $K$ samples from each candidate by taking $S = K // M$ samples from the batch and taking $M$ samples from the conditional distributions.
 
 
-If we do this our complexity will become $O\left(scd^2 + nscd^2 + nsmc\right)$.
+If we do this our complexity will become $O\left(scd^2 + nscd^2 + nsmc\right) = O\left(nscd^2 + nsmc\right) $.
+
+Here we have been analyzing the complexity for a single step acquisition step. The total cost of this for the acquisition of a complete batch will be of the order of $O\left(nscd^3 + dnsmc\right)$.
+
+
+Performing this naively as drawing a function sample over the entire pool set would give a complexity of $O\left(k d \left(c \times n \right)^3\right)$.
+
+Performing the same analysis without using the additional proposed computational speed ups would give us a complexity of $O\left(nk \left(c \times d \right)^4 \right)$
+
+
+To summarize, our algorithm for computing the required samples does the following:
+
+\begin{itemize}
+    \item Reduces the $O(n^3)$ at each stage and replaces it with $O(n d^3)$
+    \item Reduces the $O(d^3)$ for each acquisition step, to $O(d^2)$.
+\end{itemize}
 
 \subsection{Creation of GP Outputs required}
 
@@ -1068,44 +1014,107 @@ We can then cache these computations as the acquisitions progress, we can comput
 
 Both the conditional distributions and the rank 1 updates are lazily generated to reduce the memory usage of the program, in addition to the computations are dynamically chunked to enable them to fit in memory and to be able to execute with limited RAM. This is essential to obtain good performance using CUDA operations on a GPU, as the amount of VRAM available limits the amount of parallel computation one can take advantage of.
 
-\subsection{Entropy}
 
 
-
-\section{Replication}
-
-To begin with replication of some of the experiments in the BatchBALD to validate the experimental framework and to have points of comparison to work with.
-
-
-
-
-\section{DUE}
-
-\subsection{Model Outline}
-
-
-\subsubsection{Training issues}
-
-When training DUE/vDUQ based models on extremely small datasets, an issue which begins to become apparent is the issue of inducing point initialization. As feature extractor is randomly initialized, the initial inducing points we get obtain by using standard initial inducing point initialization procedures can lead to poor training dynamics.
-
-
-
-
-
-\subsection{Sampling Functions}
-
-As mentioned earlier in the paper sampling a function over the entire pool is computationally prohibitive, however we can take a small enough subset of the pool over which we can calculate the joint distribution and take sample function draws.
-We can then use these as a numerical test to validate that the more computationally efficient methods we develop are giving correct results.
-
-
-\chapter{Experiments}
+\chapter{Experiments and Results}
 \label{sec:Experiments}
 
 We have set up some of these experiments to demonstrate the issues with some of the active learning methods detailed in this paper.
 
-The random method should be impacted by how unbalanced the dataset is particularly.
+The general outline of our hypothesis of some of our experiments are quite similar to \cite{kirsch2019batchbald}.
+
+\begin{itemize}
+    \item In MNIST with unbalanced pool data, (where we have significantly more training data of a particular class compared to the test set), we would expect that the performance of random acquisition would deteriorate.
+    \item In MNIST with repeated datapoints, (where the poolset consists of the repeated datapoints with some noise added), we would expect that BALD would deteriorate.
+\end{itemize}
+
+
+\begin{itemize}
+    \item In using DUE, compared to a BNN we would hope for superior uncertainty performance which we would hope would enable us to achieve superior active learning performance with our objectives.
+\end{itemize}
+
+
+An observation which was made when creating the experimental framework which we are using here is that the architecture in the feature extractor is very important to the performance of these models on low amounts of data, and seemingly small changes to the model will impact the performance.
+
+While DUE has no problems in learning MNIST with more expressive models, eg larger and standard resents ResNets \cite{resnet9}. When using these the performance on very small datasets (eg small subsets of MNIST), the performance was reduced significantly.
+
+
+To account for this observed effect, for all of our models we use the feature extractor architecture from \cite{kirsch2019batchbald}, in their MNIST experiments, with minimal modifications. This has the added benefit of making the comparison of our models directly comparable to their experimental framework.
+
+
+\section{Model Outlines}
+
+
+\subsection{Base Architecture}
+
+This is the BNN from \cite{kirsch2019batchbald}, which we are basing our models on.
+
+
+\begin{itemize}
+    \item 2d CNN layer with a kernel size of 5, and 32 output channels
+    \item 2d MC dropout layer
+    \item 2D max pooling layer
+    \item relu
+    \item 2d CNN layer with a kernel size of 5, and 32 output channels
+    \item 2d Mc dropout layer
+    \item 2D max pooling layer
+    \item relu
+    \item Fully connected layer
+    \item MC dropout layer
+    \item relu
+    \item Fully connected layer
+    \item softmax
+\end{itemize}
+\subsection{DUE}
+
+
+
+
+
+\subsubsection{Changes}
+The changes which we make to this architecture for the DUE feature extractor is below.
+\begin{itemize}
+    \item We remove the MC Dropout Layers.
+    \item We add residual connections between the layers to satisfy the constraints on DUE. For layers which do not have exactly matching sizes we follow the approach from \cite{vanamersfoort2020uncertainty} and use CNN layers to bridge this discrepancy.
+    \item We apply spectral normalization to all of the layers in the model. 
+    \item We remove the final projection layer for the feature space dimension to the output dimension.
+\end{itemize}
+
+
+
+
+\begin{itemize}
+    \item We uee 20 inducing points
+    \item We use an RBF kernel
+    \subitem With a learnable output scale
+    \subitem With a learnable length scale
+    \item The GP is an independent multitask GP
+\end{itemize}
+
+We initialize the inducing points using the method from \cite{}
+
+To train the model we train the parameters using 2 different optimizers simultaneously.
+
+\begin{itemize}
+    \item We train the parameters of the GP using a variational optimizer which takes advantage of the NGD method described earlier to improve the rate of convergence.
+    \item We use ADAM to train the parameters of the feature extractor. This is done instead of using NGD for both as the observed performance of the model did not significantly differ when using NGD vs ADAM on the feature extractor, however the time complexity of using NGD is greater than ADAM so we reverted to ADAM for these parameters.
+\end{itemize}
+
+
+The learning rate of the variational optimizer was $0.1$, and the learning rate of ADAM was $0.003$.
+
+\subsection{BNN}
+
+The BNN is the same design as from \cite{kirsch2019batchbald}, as detailed in the base model section. The MC Dropout parameter used is $0.5$ in each of the layers.
+
+\subsection{DNN}
+
+The DNN used in these experiments is the same as the feature extractor we use for DUE, with an additional linear layer to project the feature dimension to the number of classes $10$.
+
 
 \section{Replication}
+
+The first set of experiments which were done were to attempt to replicate the performance observed in the \cite{kirsch2019batchbald} for BatchBALD and BALD with a BNN.
 
 \subsection{Random}
 
@@ -1174,7 +1183,7 @@ The random method should be impacted by how unbalanced the dataset is particular
 \includegraphics{todo.png}
 
 
-\subsection{Predictive Entropy}
+\subsection{Joint Entropy}
 
 \subsubsection{MNIST (BNN vs DUE)}
 
@@ -1188,24 +1197,74 @@ The random method should be impacted by how unbalanced the dataset is particular
 
 \includegraphics{todo.png}
 
-\section{DUE}
-
-To attempt to keep the experiments as comparable as possible, the feature extractor architecture used for DUE for this problem was the same architecture as the BNN with minimal modifications to satisfy the constraints of DUE. This primarily consisted of the addition of residual connections to the models, and the removal of the dropout layers.
 
 
-\subsection{Training on small datasets}
 
-Training a machine learning model on a small dataset can exacerbate many issues that we run into in machine learning. For example the models we have are even further over parameterized when we are operating in very small datasets.
+\section{Interpretation of results}
 
-While DUE has no problems in learning MNIST with more expressive models, eg more traditional ResNets. When using these the performance on very small datasets was reduced significantly, the performance of DUE on small subsets of MNIST was quite significantly impacted.
+The outline of the results from these experiments as as follows.
+
+\begin{itemize}
+    \item The specific failure modes of BALD and Random which we tested for occur when using DUE, much like when using a BNN
+    \item The performance of simply using the joint entropy of the output variables leads to superior performance than the use of the BatchBALD objective when working with DUE. This is not observed when using BNNs.
+\end{itemize}
 
 
-\subsection{BALD}
+\subsection{Qualatative results at the acquired Batches}
 
-\subsection{BatchBALD}
+See \hyperref[sec:Batches]{appendices} for a wider selection of acquired batches for the various active learning method.
 
-\subsection{Predictive Entropy}
+We can view the batches and the sorts of datapoints which they select. As we would expect from the BALD acquisition function we get points which are quite similar all selected in the same batch.
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.75]{bald/3.png}
+    \caption{BALD selected batch}
+\end{figure}
+
+
+The randomly selected datapoints are not very useful to observe but are included in the appendices for completeness.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{0.3\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{entropy/3.png}
+        \caption{Entropy selected batch}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.3\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{batchbald/3.png}
+        \caption{BatchBALD selected batch}
+    \end{subfigure}
+\end{figure}
+
+We can qualitatively observe that the points which the entropy method selects are diverse, as are the points selected by BatchBALD. BatchBALD selects points which are similar but the model believes could be of distinct classes. The 3 and 8 selected look similar but are of 2 different classes.
+
+
+\subsection{Entropy vs BatchBALD for DUE}
+
+
+From our experiments we can observe that using the joint entropy alone performs better than the BatchBALD objective. Here we will explore one reason why this maybe the case.
+
+The difference between the 2 objectives is that with the BatchBALD objective we are subtracting the conditional entropy from the 
+
+The motivation for the BALD objective in the original paper where it was introduced \cite{houlsby2011bayesian}, is to select the point which maximally reduce the uncertainty over the hypothesis space.
+
+\subsubsection{Conditional Entropy}
+
+The second part of the BALD object is the conditional entropy of the output variable conditioned on the function value. The output length scale of our model is a learned parameter of our model. When our GPs on the feature space reverts to the prior, the conditional entropy will become a function of the output scale of the GP.
+
+All of the covariance matrices will be scaled by this output length scale, and the value of the conditional entropy is very dependent on this value.
+
+We can demonstrate the possible issue with this, with the following example where we have a uniform belief about the output of the random variable but we change the length scale of our model.
+
+
+
+\section{Future Extensions}
+
+In this project report we have created a working framework for Batch active learning with Deep Kernel Gaussian Processes Classifiers. We have reduced the computational complexity of these methods so they are computational feasible. We have also verified that this approach is SOTA.
 
 
 
@@ -1218,8 +1277,41 @@ While DUE has no problems in learning MNIST with more expressive models, eg more
 \begin{appendices}
 \chapter{Appendix}
 
-\section{Derivation of Natural Gradient }
+\section{Examples of selected batches}
+\label{sec:Batches}
 
+These are examples of the first 6 batches acquired by the various active learning methods on a particular run.
+
+\subsection{DUE}
+
+\subsubsection{Entropy}
+\includegraphics{entropy/1.png}
+\includegraphics{entropy/2.png}
+\includegraphics{entropy/3.png}
+\includegraphics{entropy/4.png}
+\includegraphics{entropy/5.png}
+\includegraphics{entropy/6.png}
+
+
+\subsubsection{BALD}
+\includegraphics{bald/1.png}
+\includegraphics{bald/2.png}
+\includegraphics{bald/3.png}
+\includegraphics{bald/4.png}
+\includegraphics{bald/5.png}
+\includegraphics{bald/6.png}
+
+\subsubsection{BatchBALD}
+\includegraphics{batchbald/1.png}
+\includegraphics{batchbald/2.png}
+\includegraphics{batchbald/3.png}
+\includegraphics{batchbald/4.png}
+\includegraphics{batchbald/5.png}
+\includegraphics{batchbald/6.png}
+
+\section{Training Curves}
+
+\section{Derivation of Natural Gradient Descent}
 
 \end{appendices}
 

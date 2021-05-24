@@ -7,11 +7,12 @@ from gpytorch.lazy.non_lazy_tensor import lazify
 import torch
 from utils.typing import TensorType
 from torch.tensor import Tensor
-
+import random
 
 class _MultitaskMultivariateNormalType(MultitaskMultivariateNormal):
     def __init__(self, mean, covariance_matrix, validate_args=False, interleaved=True):
         super().__init__(mean, covariance_matrix, validate_args=validate_args, interleaved=interleaved)
+        self.hash = random.randint(1, 100)
 
     @staticmethod
     def create_from_mvn(mvn: MultitaskMultivariateNormal):
@@ -25,6 +26,12 @@ class _MultitaskMultivariateNormalType(MultitaskMultivariateNormal):
             covar_2 = other.lazy_covariance_matrix.evaluate()
             return (mean_1.shape == mean_2.shape) and (covar_1.shape == covar_2.shape) and torch.allclose(mean_1, mean_2) and torch.allclose(covar_1, covar_2)
         return False
+
+    def __hash__(self):
+        return self.hash
+
+    def size(self):
+        return self.mean.shape
 
     @staticmethod
     def combine_mtmvns(mvns: List) -> "_MultitaskMultivariateNormalType":
