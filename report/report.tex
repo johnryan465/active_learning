@@ -126,36 +126,43 @@ The remainder of this report is organized as follows:
 \chapter{Active Learning Methods}
 \label{sec:ActiveLearning}
 
-In a common active learning formulation we have the following setup.
+In a common active learning formulation we have the following setup:
 
 \begin{itemize}
-    \item $X_{pool}$ this is the distribution of the dataset which we have to work with in our data pool.
-    \item $X_{true}$ this is the true real world distribution.
+    \item $X_{pool}$  is the distribution of the pool of points.
+    \item $X_{true}$  is the true real world distribution.
 \end{itemize}
 
 A common (and sensible) assumption is to assume that these distributions are the same.
 
-Our machine learning models which we use to model a problem constrain the set of possible functions which we can represent and learn, this is how we imbue the problem with our prior beliefs about the nature of the problem.
+Our machine learning models, which we use to model a problem constrain the set of possible functions which we can represent and learn. This is how we imbue the problem with our prior beliefs about the nature of the problem.
 
-- There are hard constraints (eg clipping the output of the model), which even given an unlimited amount of data our model can not possibly "learn around"
-- There are softer constraints (priors over weights in a layer), which our model should be able to learn correctly given sufficient new data even if our prior is poor*.
+\begin{itemize}
+    \item There are hard constraints (eg. clipping the output of the model), which even given an unlimited amount of data our model can not possibly "learn around".
+    \item There are softer constraints (eg. priors over weights in a layer), which our model can learn correctly given sufficient amounts of data even if our prior is poor*.
+\end{itemize}
 
-This parameterization of our models is very important, this is an assumption we are making about our problem.
+This parameterization of our models is very important, as this is an assumption we are making about our problem.
 
-An important observation is that the dataset we are using for training is (unless performing very simple active learning approaches eg random acquisition) not going to be the same as the true dataset which we are working with. 
+An important observation is that the dataset we are using for training is, unless we are performing very simple active learning approaches (eg. random acquisition) is not going to be the same as the true dataset which we are working with.
 
-This violates a very common assumption that we assume for convergence in many ML methods, and is something worth keeping in mind. This statistical bias is looked at in the following paper \cite{farquhar2021statistical}.
+This violates a very common assumption that we assume for convergence in many ML methods. This statistical bias is looked at in the following paper \cite{farquhar2021statistical}.
 
-When working with Active Learning we are normally working with much smaller datasets than is standard in ML, our models which are normally over-parametrized to begin with become even more so, this can lead to training issues.
+When working with active learning, we are normally training our models on much smaller datasets than is standard in machine learning. Given our models are often over parameterized to begin with \cite{}, the smaller dataset will make this even more so, this can lead to training issues.
 
-Next we will describe the active learning methods which we will be investigating in this report.
+In the next sections we will describe the active learning methods which we will be investigating in this report.
 
 \section{Random}
 
-The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. For example with an unbalanced dataset random acquisition can fall behind as it will on average select points in the same proportion as which they occur in the pool. Here we have a comparison between unweighted MNIST and weighted MNIST with random acquisitions.
+The most straightforward acquisition function is to randomly sample from the poolset. This is a surprisingly strong baseline for for many datasets. However random acquisition can have some failure modes in comparison to some other methods. 
 
-\includegraphics{todo}
+An example of this failure can occur when only a small subset of the poolset contain useful new information. Datasets such as this can exist when the poolset is unbalanced, relative to the test set. The number of datapoints of a particular class which will be selected from the poolset will approximately in proportion.
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[scale=0.75]{random.png}
+    \caption{Random MNIST vs Unbalanced MNIST}
+\end{figure}
 
 \section{BALD}
 Bayesian Active Learning by Disagreement (BALD) \cite{houlsby2011bayesian} is an active learning method which is designed to select the datapoint which we expect would reduce the uncertainty of the posterior by the greatest amount if the value of $y$ at that point was known.
@@ -238,9 +245,13 @@ $$\min_{B} H( \left(P \setminus B\right) | B) = \min_{B} H(P) - H(B) = \min_{B} 
 
 If we assume that the samples in the poolset are samples from the true distribution, we can view this as attempting to minimize the entropy of the output variables maximally fast, this is in contrast with the BALD objective which attempts to minimize the entropy of the parameters maximally fast.
 
-\subsection{Predictive Entropy vs Joint Entropy}
+\subsection{Distinction between Joint Entropy and Predictive Entropy}
 
-The predictive entropy of a machine learning classification model is the entropy of the categorical random variable which it has output. It is important for us to distinguish between this quantity and the joint entropy for clarity. This expected value of this quantity is the second term in the BatchBALD objective. The joint entropy term is a representation of how unsure we are about the probabilities which we have used in our categorical variables, where the predictive entropy is a measure of how uncertain we are about the quantity itself.
+The predictive entropy of a machine learning classification model is the entropy of the categorical random variable which it has output. If the model is probabilistic in nature and can output different outputs with various probabilities, we take the predictive entropy to be the expected value of this quantity.
+
+This represents how unsure the model is about this particular datapoint. They key point here is that our model can be sure that it is unsure, this is the behavior which we would want in the case that the output truly is ambiguous. In this case we would not gain much by selecting this datapoint to learn from. 
+
+It is important for us to make this distinction clear for clarity of explanation. This expected value of this quantity is the second term in the BatchBALD objective.
 
 
 \chapter{Bayesian Machine Learning Models}
@@ -309,7 +320,7 @@ Many of the integrals we need to perform for Bayesian inference are intractable,
 
 The use of dropout, a regularization method where during train time we randomly with some probability $p$ set some of the outputs from a layer to 0 can be seen as an approximate method when using BNNs. \cite{gal2016dropout}
 
-BNNs however are limited in their expressive power via their structure, next we will look into Gaussian Processes which can approximate arbitrarily* complex function.
+BNNs however are limited in their expressive power via their structure, next we will look into Gaussian Processes which can approximate arbitrarily \cite{} complex function.
 
 \section{Gaussian Processes}
 \label{sec:GaussianProcesses}
@@ -1210,7 +1221,7 @@ The outline of the results from these experiments as as follows.
 \end{itemize}
 
 
-\subsection{Qualatative results at the acquired Batches}
+\subsection{Qualitative results at the acquired batches}
 
 See \hyperref[sec:Batches]{appendices} for a wider selection of acquired batches for the various active learning method.
 
